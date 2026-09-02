@@ -25,6 +25,7 @@ DEFAULT_SETTINGS = {
     "xp_max": metric.XP_MAX_DEFAULT,
     "density": "compact",       # "compact" | "minimal" | "full" | "sprite"
     "columns": 0,               # right-align sprite mode to this width, 0 = flush left
+    "sprite_height": 5,         # 5 rows, or 3 to keep the footer closer
     "unicode": True,
 }
 

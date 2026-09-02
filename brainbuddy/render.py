@@ -138,7 +138,8 @@ def compose(st, left, xp=None, counts=None):
     idx, _ = metric.stage_for(level)
     tint = RARITY_COLOR.get(full["rarity"], "")
 
-    art = sprites.sprite(full["species"], idx, full["shiny"])
+    short = settings.get("sprite_height", 5) <= 3
+    art = sprites.sprite(full["species"], idx, full["shiny"], short=short)
     while art and not art[-1].strip():
         art.pop()
     art.append("%s Lv%d%s" % (full["name"], level, full["rarity_mark"]))
@@ -155,8 +156,11 @@ def compose(st, left, xp=None, counts=None):
         if i >= len(art):
             rows.append(l)
             continue
-        body = paint(art[i], tint if i < len(art) - 1 else DIM)
-        gap = max(1, cols - visible_len(l) - width)
+        # rstrip the art row first. centring pads it on both sides, and the
+        # trailing half counts toward the width, which gets the row ellipsized.
+        cell = art[i].rstrip()
+        body = paint(cell, tint if i < len(art) - 1 else DIM)
+        gap = max(1, cols - visible_len(l) - len(cell))
         rows.append((l if l else NOTRIM) + " " * gap + body)
     return "\n".join(rows)
 
@@ -168,7 +172,7 @@ def sprite_block(full, level, stage_index, tint, settings):
     the real terminal width. There's no field for it on stdin and /dev/tty
     isn't attached, so the width has to be declared rather than measured.
     """
-    art = sprites.sprite(full["species"], stage_index, full["shiny"])
+    art = sprites.sprite(full["species"], stage_index, full["shiny"], short=settings.get("sprite_height", 5) <= 3)
     while art and not art[-1].strip():
         art.pop()
     label = "%s Lv%d%s" % (full["name"], level, full["rarity_mark"])

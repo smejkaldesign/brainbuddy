@@ -105,14 +105,16 @@ Level keeps climbing past 100. Evolution stops at Ascendant.
 | `full` | `<><> Drain Lv35 +` | adds name and rarity mark |
 | `sprite` | the 5-row creature | its own rows, gains detail each evolution |
 
+`sprite_height 3` cuts the creature to three rows. Same evolution beats, and it stops the statusline pushing Claude Code's footer badges down the screen.
+
 `sprite` right-aligns to `columns`, which you have to set yourself:
 
 ```bash
 brainbuddy config density sprite
-brainbuddy config columns 110
+brainbuddy config columns 76
 ```
 
-It has to be declared rather than measured. A statusline script gets no terminal width on stdin and has no tty attached, so there is nothing to read it from. Set it to roughly your window width; too small just sits further left, too large wraps.
+It has to be declared rather than measured. A statusline script gets no terminal width on stdin and has no tty attached, so there is nothing to read it from. Set it to roughly your window width. Too small just sits further left. **Too large is the one that bites**: Claude Code ellipsizes an over-wide row, so the creature disappears into a trailing `...`. If you see that, lower it.
 
 In `sprite` mode put the call at the **end** of your statusline script, since it emits its own rows.
 
