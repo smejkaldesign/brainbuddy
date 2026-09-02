@@ -130,11 +130,16 @@ brainbuddy focus <name>      choose who banks new xp
 brainbuddy list              the roster
 brainbuddy rename <old> <new>
 brainbuddy retire <name>
-brainbuddy config [key val]  provider, vault_root, xp_max, density, columns, unicode
+brainbuddy hide              drop it from the statusline, keeps banking xp
+brainbuddy show              put it back
+brainbuddy config [key val]  provider, vault_root, xp_max, density, columns, unicode, hidden
 brainbuddy simulate <xp>     preview any level without touching real state
 brainbuddy doctor            what can it see, and why is it zero
 brainbuddy render            the statusline segment
+brainbuddy compose "<text>"  your statusline text, creature as a left column
 ```
+
+`/brainbuddy-hide` and `/brainbuddy-show` are also their own slash commands, so "hide my brainbuddy" reaches them without going through `/brainbuddy`.
 
 ## Provenance
 

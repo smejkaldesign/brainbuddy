@@ -197,6 +197,10 @@ def test_state_roundtrip():
         back = state_mod.load(path)
         check(back["creatures"][0]["name"] == "Delta", "roster survives a save/load")
         check(back["settings"]["xp_max"] == 5000, "settings default correctly")
+        check(back["settings"]["hidden"] is False, "the creature is visible out of the box")
+        back["settings"]["hidden"] = True
+        state_mod.save(back, path, own_settings=True)
+        check(state_mod.load(path)["settings"]["hidden"] is True, "hiding survives a save/load")
         check(state_mod.load(os.path.join(d, "nope.json"))["creatures"] == [], "missing state file degrades to empty")
         with open(path, "w") as f:
             f.write("{not json")

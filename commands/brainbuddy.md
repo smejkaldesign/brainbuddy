@@ -1,6 +1,6 @@
 ---
 name: brainbuddy
-description: "Show and manage your brainbuddy — the statusline creature that evolves as your memory system grows. Hatch, focus, rename, retire, and configure."
+description: "Show and manage your brainbuddy, the statusline creature that evolves as your memory system grows. Hatch, focus, rename, retire, hide, show, and configure."
 user_invocable: true
 ---
 
@@ -35,12 +35,16 @@ Map the request onto a subcommand. Run it, then show the result.
 | "list", "roster", "show all" | `list` |
 | "rename X to Y" | `rename X Y` |
 | "retire X" | `retire X` |
+| "hide it", "hide my brainbuddy", "get it off my statusline" | `hide` |
+| "show it", "bring it back", "unhide" | `show` |
 | "settings", "config" | `config` |
 | set an option | `config <key> <value>` |
 | "what can it see", "why is it 0" | `doctor` |
 | "what would level N look like" | `simulate <xp>` |
 
-Settable keys: `provider` (`claude` or `vault`), `vault_root`, `xp_max`, `density` (`compact`, `minimal`, `full`), `unicode`.
+Settable keys: `provider` (`claude` or `vault`), `vault_root`, `xp_max`, `density` (`compact`, `minimal`, `full`), `unicode`, `hidden`.
+
+`hide` and `show` are also their own commands, `/brainbuddy-hide` and `/brainbuddy-show`, so a bare "hide my brainbuddy" reaches them without going through this one.
 
 ## Naming a new creature
 

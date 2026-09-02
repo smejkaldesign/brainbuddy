@@ -23,7 +23,8 @@ USAGE = """brainbuddy - a terminal pet that evolves with your memory
   rename <old> <new>
   retire <name>
   config              show settings
-  config <key> <val>  set one (provider, vault_root, xp_max, density, columns, sprite_height, unicode)
+  config <key> <val>  set one (provider, vault_root, xp_max, density, columns, sprite_height, unicode, hidden)
+  hide / show         drop the creature from the statusline, or bring it back
   simulate <xp>       preview any level without touching your real state
   refresh             recompute the xp cache (run in the background by render)
   doctor              check what brainbuddy can see
@@ -37,6 +38,8 @@ def _load():
 def cmd_render(args):
     try:
         st = _load()
+        if st["settings"].get("hidden"):
+            return 0
         xp, counts = render.current_xp(st, allow_blocking=False)
         if xp:
             event = state_mod.sync(st, xp)
@@ -55,6 +58,10 @@ def cmd_compose(args):
     try:
         left = args[0] if args else sys.stdin.read().rstrip("\n")
         st = _load()
+        # hidden means the caller's bar passes through untouched, xp still banks on the next visible run
+        if st["settings"].get("hidden"):
+            sys.stdout.write(left)
+            return 0
         xp, counts = render.current_xp(st, allow_blocking=False)
         if xp:
             event = state_mod.sync(st, xp)
@@ -198,7 +205,7 @@ def cmd_config(args):
         if value < 1:
             print("xp_max must be positive")
             return 1
-    elif key == "unicode":
+    elif key in ("unicode", "hidden"):
         value = raw.lower() in ("1", "true", "yes", "on")
     elif key == "density":
         if raw not in ("compact", "minimal", "full", "sprite", "ruler"):
@@ -254,11 +261,33 @@ def cmd_doctor(args):
     return 0
 
 
+def _set_hidden(hidden):
+    st = _load()
+    st["settings"]["hidden"] = hidden
+    state_mod.save(st, own_settings=True)
+    name = None
+    c = state_mod.focused(st)
+    if c is not None:
+        name = c["name"]
+    who = name or "the creature"
+    print("%s is %s the statusline" % (who, "hidden from" if hidden else "back in"))
+    return 0
+
+
+def cmd_hide(args):
+    return _set_hidden(True)
+
+
+def cmd_show(args):
+    return _set_hidden(False)
+
+
 COMMANDS = {
     "render": cmd_render, "compose": cmd_compose, "refresh": cmd_refresh, "card": cmd_card,
     "hatch": cmd_hatch, "focus": cmd_focus, "list": cmd_list,
     "rename": cmd_rename, "retire": cmd_retire, "config": cmd_config,
     "simulate": cmd_simulate, "doctor": cmd_doctor,
+    "hide": cmd_hide, "show": cmd_show,
 }
 
 

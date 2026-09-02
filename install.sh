@@ -84,9 +84,11 @@ echo "installing brainbuddy"
 mkdir -p "$LIB" "$CMDS" "$HOME/.claude/brainbuddy"
 rm -rf "$LIB/brainbuddy"
 cp -R "$SRC/brainbuddy" "$LIB/brainbuddy"
-[ -f "$SRC/commands/brainbuddy.md" ] && cp "$SRC/commands/brainbuddy.md" "$CMDS/brainbuddy.md"
+for cmd in brainbuddy brainbuddy-hide brainbuddy-show; do
+  [ -f "$SRC/commands/$cmd.md" ] && cp "$SRC/commands/$cmd.md" "$CMDS/$cmd.md"
+done
 echo "  library  -> $LIB"
-echo "  command  -> $CMDS/brainbuddy.md  (/brainbuddy)"
+echo "  commands -> $CMDS  (/brainbuddy, /brainbuddy-hide, /brainbuddy-show)"
 
 cat > "$SHIM" <<'EOF'
 #!/bin/bash
