@@ -107,11 +107,9 @@ Level keeps climbing past 100. Evolution stops at Ascendant.
 
 `sprite_height 3` cuts the creature to three rows. It keeps the evolution beats but **drops detail**: the head-top and the feet come off, so the Fledgling loses its `___` and `^   ^`. Use it when vertical space matters more than the full silhouette.
 
-`sprite` right-aligns to the live terminal width and follows window resizes.
+`sprite` right-aligns to the `columns` setting, which has to be declared rather than measured. A statusline script is handed nothing that is a terminal: stdin is the JSON pipe, stdout is captured, stderr isn't a tty either, and `/dev/tty` isn't attached. To find the number, `density ruler` prints a column ruler as the statusline, so read the last digit you can see and pass it to `config columns <n>`.
 
-Getting that width takes a detour. A statusline script is handed nothing that is a terminal: stdin is the JSON pipe, stdout is captured, stderr isn't a tty either, and `/dev/tty` isn't attached. The owning `claude` process still has one, so brainbuddy walks up the process tree to find it, caches the path per terminal pane, and reads the size with an ioctl on every render. Detection costs ~30ms once; the ioctl is ~0.1ms.
-
-If detection fails it falls back to whatever `--cols` the statusline passed, then to the `columns` setting. To find a number by hand, `density ruler` prints a column ruler as the statusline: read the last digit you can see.
+`compose "<text>"` is the other way in, and the one the statusline shim uses. It merges your own statusline text with the creature as a **left column**, sharing row one with your first row so it reads as a column starting at the top. Left rather than right on purpose: a fixed-width column needs no measurement at all, so the host's box can be any width and the art still lands whole.
 
 In `sprite` mode put the call at the **end** of your statusline script, since it emits its own rows.
 

@@ -15,7 +15,7 @@ from . import state as state_mod
 USAGE = """brainbuddy - a terminal pet that evolves with your memory
 
   render              one-line statusline segment (what the statusline calls)
-  compose [--cols N] "<text>"   your statusline text with the creature at right
+  compose "<text>"    your statusline text with the creature as a left column
   card                full creature card
   hatch [name]        hatch a new egg, starts at level 0 and takes focus
   focus <name>        choose which creature banks new xp
@@ -51,19 +51,10 @@ def cmd_render(args):
 
 
 def cmd_compose(args):
-    """Merge caller-supplied statusline text with the creature as a right column."""
+    """Merge caller-supplied statusline text with the creature as a left column."""
     try:
-        cols = None
-        if "--cols" in args:
-            i = args.index("--cols")
-            cols = int(args[i + 1])
-            args = args[:i] + args[i + 2:]
         left = args[0] if args else sys.stdin.read().rstrip("\n")
         st = _load()
-        if cols:
-            # width comes from the statusline script, not state.json. it's a
-            # property of the terminal, and state.json has concurrent writers.
-            st["settings"]["columns"] = cols
         xp, counts = render.current_xp(st, allow_blocking=False)
         if xp:
             event = state_mod.sync(st, xp)

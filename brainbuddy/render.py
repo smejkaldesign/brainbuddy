@@ -7,7 +7,6 @@ own even though R2 means we never opened them.
 
 import os
 import sys
-import time
 
 from . import creature as creature_mod
 from . import metric, sprites, state as state_mod
@@ -106,101 +105,6 @@ def segment(st, xp=None, counts=None):
     return "%s %s" % (paint(f + shiny + mark, tint), paint("Lv%d" % level, DIM))
 
 
-ANSI_RE = None
-# Claude Code trims leading whitespace off each row, so padding collapses. a
-# zero-width joiner first means the row doesn't start with whitespace.
-NOTRIM = "⁠"
-
-
-def visible_len(text):
-    global ANSI_RE
-    if ANSI_RE is None:
-        import re
-        ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-    return len(ANSI_RE.sub("", text))
-
-
-def _tty_cache():
-    key = os.environ.get("TERM_SESSION_ID") or os.environ.get("ITERM_SESSION_ID") or "default"
-    safe = "".join(ch if ch.isalnum() else "-" for ch in key)[-48:]
-    return os.path.join(state_mod.STATE_DIR, "tty-%s" % safe)
-
-
-def _find_tty():
-    """Walk up to the first ancestor with a real tty.
-
-    Nothing handed to a statusline script is a terminal: stdin is the JSON
-    pipe, stdout is captured, stderr isn't a tty either, and /dev/tty isn't
-    attached. The owning `claude` process still has one, so ask ps for it.
-    Costs ~30ms, which is why the answer gets cached.
-    """
-    import subprocess
-
-    pid = os.getpid()
-    for _ in range(8):
-        try:
-            out = subprocess.run(["ps", "-o", "ppid=,tty=", "-p", str(pid)],
-                                 capture_output=True, text=True, timeout=2).stdout.split()
-        except Exception:
-            return ""
-        if not out:
-            return ""
-        tt = out[1] if len(out) > 1 else "??"
-        if tt not in ("??", "-"):
-            return "/dev/" + tt
-        try:
-            pid = int(out[0])
-        except ValueError:
-            return ""
-        if pid <= 1:
-            return ""
-    return ""
-
-
-def terminal_width(fallback=0):
-    """Live terminal width, or fallback. The ioctl is ~0.1ms once the tty path
-    is known, so this stays on the hot path and picks up window resizes.
-    """
-    import fcntl
-    import struct
-    import termios
-
-    cache = _tty_cache()
-    path = None
-    try:
-        with open(cache, "r") as f:
-            path = f.read().strip()
-        if not path:
-            if time.time() - os.stat(cache).st_mtime < 60:
-                return fallback
-            path = None
-    except OSError:
-        pass
-
-    if path is None:
-        path = _find_tty()
-        try:
-            os.makedirs(state_mod.STATE_DIR, exist_ok=True)
-            with open(cache, "w") as f:
-                f.write(path)
-        except OSError:
-            pass
-        if not path:
-            return fallback
-
-    try:
-        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
-        try:
-            cols = struct.unpack("hhhh", fcntl.ioctl(fd, termios.TIOCGWINSZ, b"\0" * 8))[1]
-        finally:
-            os.close(fd)
-    except OSError:
-        try:
-            os.remove(cache)
-        except OSError:
-            pass
-        return fallback
-    return cols or fallback
 
 
 def ruler(width=200):
@@ -219,11 +123,18 @@ def ruler(width=200):
     return "".join(out)
 
 
+# the old 2 sat on top of whatever side padding the sprite happened to carry, so
+# the real gap was ~5. now that the art is trimmed this is the whole gap
+GUTTER = 3
+
+
 def compose(st, left, xp=None, counts=None):
-    """Merge a caller's statusline text with the creature as a right column.
+    """Merge a caller's statusline text with the creature as a left column.
 
     The creature's first row shares row one with the bar, so it reads as a
-    column starting at the top rather than a block hanging underneath.
+    column starting at the top rather than a block hanging underneath. Left
+    rather than right because a fixed-width column needs no measurement: the
+    host's box can be any width and the art still lands whole.
     """
     settings = st["settings"]
     if settings.get("density") == "ruler":
@@ -237,41 +148,42 @@ def compose(st, left, xp=None, counts=None):
 
     full = creature_mod.hydrate(c)
     level = metric.level_for(c["xp_banked"], settings["xp_max"])
-    idx, _ = metric.stage_for(level)
+    idx, stage = metric.stage_for(level)
     tint = RARITY_COLOR.get(full["rarity"], "")
 
     short = settings.get("sprite_height", 5) <= 3
     art = sprites.sprite(full["species"], idx, full["shiny"], short=short)
+    # trim both ends: a blank row at the top reads as a gap between the creature
+    # and whatever the host draws above it
     while art and not art[-1].strip():
         art.pop()
+    while art and not art[0].strip():
+        art.pop(0)
 
     banked = c["xp_banked"]
     lo = metric.xp_for_level(level, settings["xp_max"])
     hi = metric.xp_for_level(level + 1, settings["xp_max"])
     frac = (banked - lo) / float(hi - lo) if hi > lo else 0.0
-    art.append("Lv%d %s" % (level, sprites.bar(frac, 6, uni)))
+    # the caption is a statusline row, not part of the sprite block, so it lines up
+    # under the caller's own rows instead of hanging off the bottom of the art
+    caption = "%s · %s · Lv%d %s" % (full["name"], stage, level, sprites.bar(frac, 6, uni))
 
-    width = max(len(r) for r in art)
-    art = [r.center(width) for r in art]
-    # align on the widest row's last visible character, not the padded width,
-    # or the block stops short of the right edge by however much centring added
-    width = max(len(r.rstrip()) for r in art)
-    cols = terminal_width(settings.get("columns") or 0)
+    # the sprites carry side padding, which held the column off the left edge
+    indent = min(len(r) - len(r.lstrip()) for r in art if r.strip())
+    art = [r[indent:].rstrip() for r in art]
+    block = max(len(r) for r in art)
+    art = [r.ljust(block) for r in art]
 
-    # left may itself be several rows. the creature runs down the right of them
+    # fixed-width column, so nothing here needs the terminal width
     left_lines = left.split("\n") if left else []
+    left_lines.append(paint(caption, DIM))
+
     rows = []
     for i in range(max(len(left_lines), len(art))):
         l = left_lines[i] if i < len(left_lines) else ""
-        if i >= len(art):
-            rows.append(l)
-            continue
-        # gap is measured off the block width, not the trimmed row, so the art
-        # stays centred inside the block instead of every row ending flush right
-        cell = art[i].rstrip()
-        body = paint(cell, tint if i < len(art) - 1 else DIM)
-        gap = max(1, cols - visible_len(l) - width)
-        rows.append((l if l else NOTRIM) + " " * gap + body)
+        cell = art[i] if i < len(art) else " " * block
+        body = paint(cell, tint) if i < len(art) else cell
+        rows.append((body + " " * GUTTER + l).rstrip())
     return "\n".join(rows)
 
 
