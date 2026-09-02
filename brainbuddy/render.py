@@ -144,17 +144,20 @@ def compose(st, left, xp=None, counts=None):
     art.append("%s Lv%d%s" % (full["name"], level, full["rarity_mark"]))
 
     width = max(len(r) for r in art)
-    art = [r.center(width) for r in art[:-1]] + [art[-1].center(width)]
+    art = [r.center(width) for r in art]
     cols = settings.get("columns") or 0
 
+    # left may itself be several rows. the creature runs down the right of them
+    left_lines = left.split("\n") if left else []
     rows = []
-    for i, row in enumerate(art):
-        body = paint(row, tint if i < len(art) - 1 else DIM)
-        if i == 0:
-            gap = max(1, cols - visible_len(left) - width)
-            rows.append(left + " " * gap + body)
-        else:
-            rows.append(NOTRIM + " " * max(0, cols - width) + body)
+    for i in range(max(len(left_lines), len(art))):
+        l = left_lines[i] if i < len(left_lines) else ""
+        if i >= len(art):
+            rows.append(l)
+            continue
+        body = paint(art[i], tint if i < len(art) - 1 else DIM)
+        gap = max(1, cols - visible_len(l) - width)
+        rows.append((l if l else NOTRIM) + " " * gap + body)
     return "\n".join(rows)
 
 
