@@ -1,0 +1,118 @@
+# brainbuddy
+
+A terminal creature that lives in your Claude Code statusline, hatches from an egg, and evolves through five forms as your memory system grows.
+
+```
+◔+ Lv35
+```
+
+```
+    ___        Rura  Wisp Uncommon
+
+  ( - - )      Level 35   Fledgling   ▪▪▪▫▫▫
+  <|~~~|>      █████░░░░░  632 / 648 xp
+   /   \       Next form at level 40 (801 xp)
+   ^   ^
+               Recall 70  Depth 65  Drive 52  Streak 70  Ferment 40
+```
+
+## It never opens your memories
+
+This is the important bit, so it goes first.
+
+brainbuddy sizes your memory system by **counting files**. It uses `glob` and `stat`, and that's all. It never calls `open()`, never reads a byte of content, never parses frontmatter, never counts words.
+
+That isn't a promise about what it does with your data. It's a statement that it never has your data. Memory directories hold notes about work, clients, and employers, and the safest way to handle that is to never load it. The guarantee is enforced two ways in the test suite: a runtime trap that patches every file-reading builtin and asserts none fire during a measurement, and a static pass that tokenizes `metric.py` and fails if a reader appears anywhere in the code.
+
+It also makes no network calls of any kind. There is no telemetry, no update check, no analytics.
+
+One consequence worth knowing: brainbuddy never prints a path it matched, in any mode including `doctor`. Filenames alone leak more than people expect.
+
+## Install
+
+```bash
+git clone <this repo> && cd brainbuddy
+./install.sh
+```
+
+The installer composes with an existing statusline rather than replacing it. If `statusLine.command` already points at a script, it appends a fenced block and keeps a `.pre-brainbuddy.bak`. If nothing is configured, it writes one. `./install.sh --uninstall` strips the block back out.
+
+Using a vault layout instead of stock Claude Code memory:
+
+```bash
+./install.sh --vault ~/dev/my-brain/MyBrain
+```
+
+Then hatch:
+
+```bash
+/brainbuddy
+```
+
+## How levelling works
+
+XP is a weighted count of memory artifacts:
+
+| Source | Weight |
+|---|---|
+| durable memories | ×3 |
+| knowledge notes | ×2 |
+| projects | ×2 |
+| session logs | ×1 |
+| decision records | ×2 |
+
+Durable facts are worth more than session logs because they cost more to produce.
+
+```
+level = floor(100 * sqrt(xp / 5000))
+```
+
+A square root curve, so early memories move the needle and later ones don't. Level 100 sits at 5,000 XP.
+
+| Level | Form |
+|---|---|
+| 0 | Egg |
+| 1-19 | Hatchling |
+| 20-39 | Fledgling |
+| 40-59 | Adept |
+| 60-79 | Sage |
+| 80+ | Ascendant |
+
+Level keeps climbing past 100. Evolution stops at Ascendant.
+
+## The roster
+
+At level 100 you can hatch another egg. New creatures **start at 0**, always.
+
+That works because XP banks per creature rather than deriving from your total memory size. Only the **focused** creature gains XP; the others hold their level and wait. So focus is a real choice about who you're building, and a second egg doesn't inherit the hundred levels the first one earned.
+
+Deleting memories never de-levels anyone. The high-water mark only rises, because tidying up shouldn't be punished.
+
+## Commands
+
+```
+brainbuddy card              the full creature card
+brainbuddy hatch [name]      new egg, starts at 0, takes focus
+brainbuddy focus <name>      choose who banks new xp
+brainbuddy list              the roster
+brainbuddy rename <old> <new>
+brainbuddy retire <name>
+brainbuddy config [key val]  provider, vault_root, xp_max, density, unicode
+brainbuddy simulate <xp>     preview any level without touching real state
+brainbuddy doctor            what can it see, and why is it zero
+brainbuddy render            the statusline segment
+```
+
+## Provenance
+
+Anthropic shipped a terminal pet in Claude Code (`/buddy`, April 2026). It's a nice idea with no progression: species and stats are recomputed from your user ID every session and never change. brainbuddy is a clean-room rebuild of the *concept* with the missing half added, growth you actually earn.
+
+No code, species names, sprite art, stat names, or hashing details were taken from it. The species list, the five stats, the sprites, and the levelling system here are original. Not affiliated with or endorsed by Anthropic.
+
+## Tests
+
+```bash
+python3 tests/test_brainbuddy.py
+```
+
+Fixtures are synthetic and generated into a temp directory. No real memory directory is touched.
