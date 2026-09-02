@@ -84,11 +84,11 @@ echo "installing brainbuddy"
 mkdir -p "$LIB" "$CMDS" "$HOME/.claude/brainbuddy"
 rm -rf "$LIB/brainbuddy"
 cp -R "$SRC/brainbuddy" "$LIB/brainbuddy"
-for cmd in brainbuddy brainbuddy-hide brainbuddy-show; do
+for cmd in brainbuddy brainbuddy-hide brainbuddy-show brainbuddy-new brainbuddy-hatch; do
   [ -f "$SRC/commands/$cmd.md" ] && cp "$SRC/commands/$cmd.md" "$CMDS/$cmd.md"
 done
 echo "  library  -> $LIB"
-echo "  commands -> $CMDS  (/brainbuddy, /brainbuddy-hide, /brainbuddy-show)"
+echo "  commands -> $CMDS  (/brainbuddy, -new, -hatch, -hide, -show)"
 
 cat > "$SHIM" <<'EOF'
 #!/bin/bash
@@ -150,10 +150,12 @@ PY
 fi
 
 echo
-if [ -z "$(bb list 2>/dev/null | grep -v '^no creatures')" ]; then
-  echo "hatch your first one:"
-  echo "  PYTHONPATH=$LIB python3 -m brainbuddy.cli hatch"
-  echo "or just run /brainbuddy in Claude Code."
+# lay the first egg so the zero state is an egg rather than nothing at all.
+# `new` exits 1 when a buddy exists, which is the re-install path: leave it be
+if bb new >/dev/null 2>&1; then
+  echo "an egg is waiting in your statusline. open it:"
+  echo "  /brainbuddy-hatch"
+  echo "it hatches at whatever level your memory has already earned."
 else
   bb list
 fi

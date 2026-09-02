@@ -35,6 +35,8 @@ Map the request onto a subcommand. Run it, then show the result.
 | "list", "roster", "show all" | `list` |
 | "rename X to Y" | `rename X Y` |
 | "retire X" | `retire X` |
+| "new buddy", "start over", "reroll" | hand off to `/brainbuddy-new` |
+| "hatch it", "open the egg" | hand off to `/brainbuddy-hatch` |
 | "hide it", "hide my brainbuddy", "get it off my statusline" | `hide` |
 | "show it", "bring it back", "unhide" | `show` |
 | "settings", "config" | `config` |
@@ -44,15 +46,23 @@ Map the request onto a subcommand. Run it, then show the result.
 
 Settable keys: `provider` (`claude` or `vault`), `vault_root`, `xp_max`, `density` (`compact`, `minimal`, `full`), `unicode`, `hidden`.
 
-`hide` and `show` are also their own commands, `/brainbuddy-hide` and `/brainbuddy-show`, so a bare "hide my brainbuddy" reaches them without going through this one.
+`hide`, `show`, `new` and `hatch` are also their own commands (`/brainbuddy-hide`, `/brainbuddy-show`, `/brainbuddy-new`, `/brainbuddy-hatch`), so a bare "hide my brainbuddy" or "hatch it" reaches them without going through this one.
 
 ## Naming a new creature
 
-`hatch` picks a name from a syllable table when none is given, because the CLI can't reach a model. You can. When hatching without a name, suggest 3 short names that fit the species and rarity the hatch produced, and offer to rename it. Keep it to one line per name.
+`new` picks a name from a syllable table when none is given, because the CLI can't reach a model. You can. When hatching without a name, suggest 3 short names that fit the species and rarity the hatch produced, and offer to rename it. Keep it to one line per name.
 
-## Hatching guardrail
+## Eggs are a state, not a level
 
-`hatch` refuses if the focused creature is under level 100, because hatching starts a new creature at 0 and moves focus. That's deliberate. If the user means it, pass `--force`, but say plainly what happens first: the current creature keeps its level and stops gaining XP until refocused.
+A creature is an **egg** until it's hatched, whatever its level. `new` lays one, `/brainbuddy-hatch` opens it, and the statusline shows egg art with no level until then. Level 0 is a Hatchling, a baby with a face, not an egg.
+
+An egg banks XP while closed, so hatching reveals the level it earned rather than 0. Don't spoil that level before the user runs hatch.
+
+## Adding a second buddy
+
+`new --add` refuses below level 100 and prints why: the new egg starts at 0 and takes focus, so the current buddy holds its level and stops gaining. Relay it, get a yes, re-run with `--yes`.
+
+`new --replace` retires instead of deleting. The old buddy keeps its banked XP and `focus <name>` brings it back, so say that when confirming.
 
 ## Rules
 

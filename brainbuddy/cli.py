@@ -17,7 +17,8 @@ USAGE = """brainbuddy - a terminal pet that evolves with your memory
   render              one-line statusline segment (what the statusline calls)
   compose "<text>"    your statusline text with the creature as a left column
   card                full creature card
-  hatch [name]        hatch a new egg, starts at level 0 and takes focus
+  new [name]          lay a new egg (--replace or --add)
+  hatch               open the egg, revealing whatever level it reached
   focus <name>        choose which creature banks new xp
   list                the roster
   rename <old> <new>
@@ -93,28 +94,68 @@ def cmd_card(args):
     return 0
 
 
-def cmd_hatch(args):
+def cmd_new(args):
+    """Lay a new egg. --replace retires the current buddy, --add keeps it."""
     st = _load()
-    if st.get("creatures") and state_mod.focused(st):
-        c = state_mod.focused(st)
-        lvl = metric.level_for(c["xp_banked"], st["settings"]["xp_max"])
-        if lvl < 100 and "--force" not in args:
-            print("%s is only level %d. Hatching now starts a new creature at 0 and moves focus." % (c["name"], lvl))
-            print("Run: brainbuddy hatch --force")
-            return 1
     name = next((a for a in args if not a.startswith("-")), None)
-    # First creature inherits the memory that already exists; later ones start
-    # at zero, which is the whole point of banking per creature.
+    cur = state_mod.focused(st)
     first = not st.get("creatures")
-    c = state_mod.hatch(st, name=name)
+
+    if cur is None:
+        mode = "add"
+    elif "--replace" in args:
+        mode = "replace"
+    elif "--add" in args:
+        mode = "add"
+    else:
+        print("%s is your current buddy. Pick one:" % cur["name"])
+        print("  brainbuddy new --replace   retire %s and start a new egg" % cur["name"])
+        print("  brainbuddy new --add       keep %s in the roster, start a new egg" % cur["name"])
+        return 1
+
+    if mode == "add" and cur is not None:
+        lvl = metric.level_for(cur["xp_banked"], st["settings"]["xp_max"])
+        if lvl < 100 and "--yes" not in args:
+            print("%s is level %d. A new egg starts at 0 and takes focus, so %s holds its level and stops gaining." % (cur["name"], lvl, cur["name"]))
+            print("Run: brainbuddy new --add --yes")
+            return 1
+
+    if mode == "replace":
+        lvl = metric.level_for(cur["xp_banked"], st["settings"]["xp_max"])
+        state_mod.retire(st, cur["id"])
+        print("retired %s at Lv%d, %d xp kept. `brainbuddy focus %s` brings it back." % (
+            cur["name"], lvl, cur.get("xp_banked", 0), cur["name"]))
+
+    c = state_mod.create(st, name=name)
     if first:
+        # the first egg inherits the memory that already exists, so it opens at
+        # your real level. later ones start at zero, that's per-creature banking
         xp, counts = state_mod.measure_now(st["settings"])
         state_mod.write_cache(xp, counts)
         state_mod.sync(st, xp)
     state_mod.save(st)
+    print(render.egg_notice(st, c))
+    return 0
+
+
+def cmd_hatch(args):
+    """Open the egg. Reveals whatever level it banked its way to."""
+    st = _load()
+    c = state_mod.focused(st)
+    if c is None:
+        print("no egg to open. `brainbuddy new` lays one.")
+        return 1
+    if state_mod.is_hatched(c):
+        lvl = metric.level_for(c["xp_banked"], st["settings"]["xp_max"])
+        print("%s is already out, Lv%d. `brainbuddy card` shows it." % (c["name"], lvl))
+        return 1
+    xp, counts = render.current_xp(st)
+    if xp:
+        state_mod.sync(st, xp)
+    state_mod.reveal(st)
+    state_mod.save(st)
     print(render.hatch_ceremony(st, c))
-    if first:
-        print(render.card(st))
+    print(render.card(st, xp=xp, counts=counts))
     return 0
 
 
@@ -135,17 +176,22 @@ def cmd_focus(args):
 def cmd_list(args):
     st = _load()
     if not st.get("creatures"):
-        print("no creatures yet. brainbuddy hatch")
+        print("no creatures yet. brainbuddy new")
         return 0
     uni = render.unicode_ok(st["settings"])
     for c in st["creatures"]:
         full = creature_mod.hydrate(c)
         lvl = metric.level_for(c["xp_banked"], st["settings"]["xp_max"])
-        idx, stage = metric.stage_for(lvl)
+        if state_mod.is_hatched(c):
+            idx, stage = metric.stage_for(lvl)
+            level_col = "Lv%-4d" % lvl
+        else:
+            idx, stage, level_col = metric.EGG_SPRITE, "unhatched", "egg   "
         flag = "*" if c["id"] == st.get("focused") else " "
-        print("%s %s %-10s Lv%-4d %-10s %s%s" % (
-            flag, sprites.glyph(idx, uni), c["name"], lvl, stage,
-            full["rarity"], " shiny" if full["shiny"] else ""))
+        note = " retired" if c.get("retired_at") else ""
+        print("%s %s %-10s %s %-10s %s%s%s" % (
+            flag, sprites.glyph(idx, uni), c["name"], level_col, stage,
+            full["rarity"], " shiny" if full["shiny"] else "", note))
     print("\n* = focused (the one gaining xp)")
     return 0
 
@@ -170,16 +216,15 @@ def cmd_retire(args):
         print("brainbuddy retire <name>")
         return 1
     st = _load()
-    keep = [c for c in st.get("creatures", []) if c["name"].lower() != args[0].lower()]
-    if len(keep) == len(st.get("creatures", [])):
+    c = state_mod.retire(st, args[0])
+    if c is None:
         print("no creature called %s" % args[0])
         return 1
-    retired = [c for c in st["creatures"] if c["name"].lower() == args[0].lower()][0]
-    st["creatures"] = keep
-    if st.get("focused") == retired["id"]:
-        st["focused"] = keep[0]["id"] if keep else None
     state_mod.save(st)
-    print("retired %s" % retired["name"])
+    # retiring keeps the record. it used to delete, which threw away banked xp
+    # with no confirmation and no way back
+    print("retired %s, %d xp kept. `brainbuddy focus %s` brings it back." % (
+        c["name"], c.get("xp_banked", 0), c["name"]))
     return 0
 
 
@@ -234,7 +279,8 @@ def cmd_simulate(args):
         return 1
     xp = int(args[0])
     st = state_mod.default_state()
-    c = state_mod.hatch(st, name=(args[1] if len(args) > 1 else None))
+    c = state_mod.create(st, name=(args[1] if len(args) > 1 else None))
+    state_mod.reveal(st)
     c["xp_banked"] = xp
     p = metric.progress(xp, st["settings"]["xp_max"])
     c["last_stage_seen"] = p["stage_index"]
@@ -284,7 +330,7 @@ def cmd_show(args):
 
 COMMANDS = {
     "render": cmd_render, "compose": cmd_compose, "refresh": cmd_refresh, "card": cmd_card,
-    "hatch": cmd_hatch, "focus": cmd_focus, "list": cmd_list,
+    "new": cmd_new, "hatch": cmd_hatch, "focus": cmd_focus, "list": cmd_list,
     "rename": cmd_rename, "retire": cmd_retire, "config": cmd_config,
     "simulate": cmd_simulate, "doctor": cmd_doctor,
     "hide": cmd_hide, "show": cmd_show,
