@@ -23,7 +23,8 @@ DEFAULT_SETTINGS = {
     "vault_root": "",
     "weights": {},
     "xp_max": metric.XP_MAX_DEFAULT,
-    "density": "compact",       # "compact" | "minimal" | "full"
+    "density": "compact",       # "compact" | "minimal" | "full" | "sprite"
+    "columns": 0,               # right-align sprite mode to this width, 0 = flush left
     "unicode": True,
 }
 

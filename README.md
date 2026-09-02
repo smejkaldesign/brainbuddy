@@ -2,8 +2,22 @@
 
 A terminal creature that lives in your Claude Code statusline, hatches from an egg, and evolves through five forms as your memory system grows.
 
+Compact, inline in your statusline:
+
 ```
-◔+ Lv35
+◔+ Lv35     ->  <><> Lv35
+```
+
+Or the full creature on its own rows, right-aligned (`density sprite`):
+
+```
+████░░░░░░  eric-brain ⎇ main
+                                                  ___
+                                                ( > < )
+                                                <|///|>
+                                                 /   \
+                                                 ^   ^
+                                                Drain Lv35
 ```
 
 ```
@@ -80,6 +94,28 @@ A square root curve, so early memories move the needle and later ones don't. Lev
 
 Level keeps climbing past 100. Evolution stops at Ascendant.
 
+## Display modes
+
+`density` picks how much room it takes:
+
+| mode | looks like | notes |
+|---|---|---|
+| `minimal` | `◔` | one glyph |
+| `compact` | `<><> Lv35` | default, ~10 columns inline |
+| `full` | `<><> Drain Lv35 +` | adds name and rarity mark |
+| `sprite` | the 5-row creature | its own rows, gains detail each evolution |
+
+`sprite` right-aligns to `columns`, which you have to set yourself:
+
+```bash
+brainbuddy config density sprite
+brainbuddy config columns 110
+```
+
+It has to be declared rather than measured. A statusline script gets no terminal width on stdin and has no tty attached, so there is nothing to read it from. Set it to roughly your window width; too small just sits further left, too large wraps.
+
+In `sprite` mode put the call at the **end** of your statusline script, since it emits its own rows.
+
 ## The roster
 
 At level 100 you can hatch another egg. New creatures **start at 0**, always.
@@ -97,7 +133,7 @@ brainbuddy focus <name>      choose who banks new xp
 brainbuddy list              the roster
 brainbuddy rename <old> <new>
 brainbuddy retire <name>
-brainbuddy config [key val]  provider, vault_root, xp_max, density, unicode
+brainbuddy config [key val]  provider, vault_root, xp_max, density, columns, unicode
 brainbuddy simulate <xp>     preview any level without touching real state
 brainbuddy doctor            what can it see, and why is it zero
 brainbuddy render            the statusline segment

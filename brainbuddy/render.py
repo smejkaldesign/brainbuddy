@@ -96,11 +96,35 @@ def segment(st, xp=None, counts=None):
     mark = full["rarity_mark"]
     shiny = "*" if full["shiny"] else ""
 
+    if settings.get("density") == "sprite":
+        return sprite_block(full, level, idx, tint, settings)
     if settings.get("density") == "minimal":
         return paint(sprites.glyph(idx, uni) + shiny, tint)
     if settings.get("density") == "full":
         return "%s %s %s" % (paint(f + shiny, tint), paint(full["name"], BOLD), paint("Lv%d %s" % (level, mark), DIM))
     return "%s %s" % (paint(f + shiny + mark, tint), paint("Lv%d" % level, DIM))
+
+
+def sprite_block(full, level, stage_index, tint, settings):
+    """Full creature on its own rows, for multi-line statuslines.
+
+    Right-aligns to settings["columns"] because a statusline script can't learn
+    the real terminal width. There's no field for it on stdin and /dev/tty
+    isn't attached, so the width has to be declared rather than measured.
+    """
+    art = sprites.sprite(full["species"], stage_index, full["shiny"])
+    while art and not art[-1].strip():
+        art.pop()
+    label = "%s Lv%d%s" % (full["name"], level, full["rarity_mark"])
+    cols = settings.get("columns") or 0
+
+    rows = []
+    for row in art:
+        pad = " " * max(0, cols - len(row))
+        rows.append(pad + paint(row, tint))
+    pad = " " * max(0, cols - len(label))
+    rows.append(pad + paint(label, DIM))
+    return "\n" + "\n".join(rows)
 
 
 def card(st, xp=None, counts=None):
