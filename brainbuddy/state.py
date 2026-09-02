@@ -48,9 +48,25 @@ def load(path=STATE_PATH):
     return base
 
 
-def save(state, path=STATE_PATH):
+def save(state, path=STATE_PATH, own_settings=False):
+    """Persist state. Only `config` owns settings.
+
+    Background refreshes hold a whole-state copy for as long as the vault scan
+    takes, so writing it back wholesale reverts any setting changed meanwhile.
+    That silently undid config edits. Everyone except config re-reads settings
+    off disk at write time.
+    """
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
+    if not own_settings:
+        try:
+            with open(path, "r") as f:
+                on_disk = json.load(f).get("settings")
+            if on_disk:
+                state = dict(state)
+                state["settings"] = on_disk
+        except (OSError, ValueError):
+            pass
+    tmp = "%s.%d.tmp" % (path, os.getpid())
     with open(tmp, "w") as f:
         json.dump(state, f, indent=2, sort_keys=True)
     os.replace(tmp, path)

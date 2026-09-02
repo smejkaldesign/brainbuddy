@@ -15,7 +15,7 @@ from . import state as state_mod
 USAGE = """brainbuddy - a terminal pet that evolves with your memory
 
   render              one-line statusline segment (what the statusline calls)
-  compose "<text>"    your statusline text with the creature as a right column
+  compose [--cols N] "<text>"   your statusline text with the creature at right
   card                full creature card
   hatch [name]        hatch a new egg, starts at level 0 and takes focus
   focus <name>        choose which creature banks new xp
@@ -53,8 +53,17 @@ def cmd_render(args):
 def cmd_compose(args):
     """Merge caller-supplied statusline text with the creature as a right column."""
     try:
+        cols = None
+        if "--cols" in args:
+            i = args.index("--cols")
+            cols = int(args[i + 1])
+            args = args[:i] + args[i + 2:]
         left = args[0] if args else sys.stdin.read().rstrip("\n")
         st = _load()
+        if cols:
+            # width comes from the statusline script, not state.json. it's a
+            # property of the terminal, and state.json has concurrent writers.
+            st["settings"]["columns"] = cols
         xp, counts = render.current_xp(st, allow_blocking=False)
         if xp:
             event = state_mod.sync(st, xp)
@@ -201,8 +210,8 @@ def cmd_config(args):
     elif key == "unicode":
         value = raw.lower() in ("1", "true", "yes", "on")
     elif key == "density":
-        if raw not in ("compact", "minimal", "full", "sprite"):
-            print("density must be compact, minimal, full or sprite")
+        if raw not in ("compact", "minimal", "full", "sprite", "ruler"):
+            print("density must be compact, minimal, full, sprite or ruler")
             return 1
         value = raw
     elif key == "sprite_height":
@@ -215,7 +224,7 @@ def cmd_config(args):
     else:
         value = raw
     st["settings"][key] = value
-    state_mod.save(st)
+    state_mod.save(st, own_settings=True)
     print("%s = %s" % (key, value))
     return 0
 
