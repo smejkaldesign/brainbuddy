@@ -107,14 +107,11 @@ Level keeps climbing past 100. Evolution stops at Ascendant.
 
 `sprite_height 3` cuts the creature to three rows. It keeps the evolution beats but **drops detail**: the head-top and the feet come off, so the Fledgling loses its `___` and `^   ^`. Use it when vertical space matters more than the full silhouette.
 
-`sprite` right-aligns to `columns`, which you have to set yourself:
+`sprite` right-aligns to the live terminal width and follows window resizes.
 
-```bash
-brainbuddy config density sprite
-brainbuddy config columns 76
-```
+Getting that width takes a detour. A statusline script is handed nothing that is a terminal: stdin is the JSON pipe, stdout is captured, stderr isn't a tty either, and `/dev/tty` isn't attached. The owning `claude` process still has one, so brainbuddy walks up the process tree to find it, caches the path per terminal pane, and reads the size with an ioctl on every render. Detection costs ~30ms once; the ioctl is ~0.1ms.
 
-It has to be declared rather than measured. A statusline script gets no terminal width on stdin and has no tty attached, so there is nothing to read it from. Set it to roughly your window width. Too small just sits further left. **Too large is the one that bites**: Claude Code ellipsizes an over-wide row, so the creature disappears into a trailing `...`. If you see that, lower it.
+If detection fails it falls back to whatever `--cols` the statusline passed, then to the `columns` setting. To find a number by hand, `density ruler` prints a column ruler as the statusline: read the last digit you can see.
 
 In `sprite` mode put the call at the **end** of your statusline script, since it emits its own rows.
 
