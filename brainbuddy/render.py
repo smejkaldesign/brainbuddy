@@ -142,7 +142,12 @@ def compose(st, left, xp=None, counts=None):
     art = sprites.sprite(full["species"], idx, full["shiny"], short=short)
     while art and not art[-1].strip():
         art.pop()
-    art.append("%s Lv%d%s" % (full["name"], level, full["rarity_mark"]))
+
+    banked = c["xp_banked"]
+    lo = metric.xp_for_level(level, settings["xp_max"])
+    hi = metric.xp_for_level(level + 1, settings["xp_max"])
+    frac = (banked - lo) / float(hi - lo) if hi > lo else 0.0
+    art.append("Lv%d %s" % (level, sprites.bar(frac, 6, uni)))
 
     width = max(len(r) for r in art)
     art = [r.center(width) for r in art]
@@ -156,11 +161,11 @@ def compose(st, left, xp=None, counts=None):
         if i >= len(art):
             rows.append(l)
             continue
-        # rstrip the art row first. centring pads it on both sides, and the
-        # trailing half counts toward the width, which gets the row ellipsized.
+        # gap is measured off the block width, not the trimmed row, so the art
+        # stays centred inside the block instead of every row ending flush right
         cell = art[i].rstrip()
         body = paint(cell, tint if i < len(art) - 1 else DIM)
-        gap = max(1, cols - visible_len(l) - len(cell))
+        gap = max(1, cols - visible_len(l) - width)
         rows.append((l if l else NOTRIM) + " " * gap + body)
     return "\n".join(rows)
 
