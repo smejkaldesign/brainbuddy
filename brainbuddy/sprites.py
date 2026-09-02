@@ -77,6 +77,17 @@ FACE_WRAP_ASCII = ["(.)", "(%s)", "<%s>", "[%s]", "{%s}", "*%s*"]
 
 SPRITE_WIDTH = 13
 
+# Three-row cut of the same arc, for when the statusline shouldn't push the
+# footer half a screen down. Same evolution beats, less vertical space.
+SHORT_TEMPLATES = [
+    ["  ___  ", " ({m}{m}{m}) ", "  \\_/  "],
+    [" ({e}) ", " /{m}{m}{m}\\ ", "  ^ ^  "],
+    [" ({e}) ", "<|{m}{m}{m}|>", " /   \\ "],
+    ["  \\|/  ", " ({e}) ", "<|{m}{m}{m}|>"],
+    [" .\\|/. ", " ({e}) ", "/|{m}{m}{m}|\\"],
+    ["*.\\|/.*", "\\({e})/", "/|{m}{m}{m}|\\"],
+]
+
 GLYPHS_UNICODE = ["\u25cc", "\u25cb", "\u25d4", "\u25d1", "\u25d5", "\u25cf"]
 GLYPHS_ASCII = [".", "o", "c", "C", "O", "@"]
 
@@ -102,16 +113,17 @@ def glyph(stage_index, unicode_ok=True):
     return table[max(0, min(len(table) - 1, stage_index))]
 
 
-def sprite(species, stage_index, shiny=False):
-    """Return the 5 rows for a species at a stage, padded to equal width."""
+def sprite(species, stage_index, shiny=False, short=False):
+    """Rows for a species at a stage, padded to equal width."""
     motif, eyes = look(species)
     if shiny:
         motif = motif.upper() if motif.isalpha() else "$"
-    rows = STAGE_TEMPLATES[max(0, min(len(STAGE_TEMPLATES) - 1, stage_index))]
+    table = SHORT_TEMPLATES if short else STAGE_TEMPLATES
+    rows = table[max(0, min(len(table) - 1, stage_index))]
     out = [r.replace("{m}", motif).replace("{e}", eyes) for r in rows]
     # Pad to a fixed width across every stage and species, otherwise the card's
     # right-hand column shifts as the creature evolves.
-    width = max(SPRITE_WIDTH, max(len(r) for r in out))
+    width = max(len(r) for r in out) if short else max(SPRITE_WIDTH, max(len(r) for r in out))
     return [r.center(width) if r.strip() else " " * width for r in out]
 
 

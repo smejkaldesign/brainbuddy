@@ -23,7 +23,7 @@ USAGE = """brainbuddy - a terminal pet that evolves with your memory
   rename <old> <new>
   retire <name>
   config              show settings
-  config <key> <val>  set one (provider, vault_root, xp_max, density, columns, unicode)
+  config <key> <val>  set one (provider, vault_root, xp_max, density, columns, sprite_height, unicode)
   simulate <xp>       preview any level without touching your real state
   refresh             recompute the xp cache (run in the background by render)
   doctor              check what brainbuddy can see
@@ -205,6 +205,8 @@ def cmd_config(args):
             print("density must be compact, minimal, full or sprite")
             return 1
         value = raw
+    elif key == "sprite_height":
+        value = 3 if int(raw) <= 3 else 5
     elif key == "columns":
         value = int(raw)
         if value < 0:
