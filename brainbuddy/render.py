@@ -7,6 +7,7 @@ own even though R2 means we never opened them.
 
 import os
 import sys
+import time
 
 from . import creature as creature_mod
 from . import metric, sprites, state as state_mod
@@ -119,6 +120,89 @@ def visible_len(text):
     return len(ANSI_RE.sub("", text))
 
 
+def _tty_cache():
+    key = os.environ.get("TERM_SESSION_ID") or os.environ.get("ITERM_SESSION_ID") or "default"
+    safe = "".join(ch if ch.isalnum() else "-" for ch in key)[-48:]
+    return os.path.join(state_mod.STATE_DIR, "tty-%s" % safe)
+
+
+def _find_tty():
+    """Walk up to the first ancestor with a real tty.
+
+    Nothing handed to a statusline script is a terminal: stdin is the JSON
+    pipe, stdout is captured, stderr isn't a tty either, and /dev/tty isn't
+    attached. The owning `claude` process still has one, so ask ps for it.
+    Costs ~30ms, which is why the answer gets cached.
+    """
+    import subprocess
+
+    pid = os.getpid()
+    for _ in range(8):
+        try:
+            out = subprocess.run(["ps", "-o", "ppid=,tty=", "-p", str(pid)],
+                                 capture_output=True, text=True, timeout=2).stdout.split()
+        except Exception:
+            return ""
+        if not out:
+            return ""
+        tt = out[1] if len(out) > 1 else "??"
+        if tt not in ("??", "-"):
+            return "/dev/" + tt
+        try:
+            pid = int(out[0])
+        except ValueError:
+            return ""
+        if pid <= 1:
+            return ""
+    return ""
+
+
+def terminal_width(fallback=0):
+    """Live terminal width, or fallback. The ioctl is ~0.1ms once the tty path
+    is known, so this stays on the hot path and picks up window resizes.
+    """
+    import fcntl
+    import struct
+    import termios
+
+    cache = _tty_cache()
+    path = None
+    try:
+        with open(cache, "r") as f:
+            path = f.read().strip()
+        if not path:
+            if time.time() - os.stat(cache).st_mtime < 60:
+                return fallback
+            path = None
+    except OSError:
+        pass
+
+    if path is None:
+        path = _find_tty()
+        try:
+            os.makedirs(state_mod.STATE_DIR, exist_ok=True)
+            with open(cache, "w") as f:
+                f.write(path)
+        except OSError:
+            pass
+        if not path:
+            return fallback
+
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+        try:
+            cols = struct.unpack("hhhh", fcntl.ioctl(fd, termios.TIOCGWINSZ, b"\0" * 8))[1]
+        finally:
+            os.close(fd)
+    except OSError:
+        try:
+            os.remove(cache)
+        except OSError:
+            pass
+        return fallback
+    return cols or fallback
+
+
 def ruler(width=200):
     """Width ruler for the statusline. There's no terminal width on stdin and
     no tty, so the only way to learn it is to print a ruler and read where the
@@ -172,7 +256,7 @@ def compose(st, left, xp=None, counts=None):
     # align on the widest row's last visible character, not the padded width,
     # or the block stops short of the right edge by however much centring added
     width = max(len(r.rstrip()) for r in art)
-    cols = settings.get("columns") or 0
+    cols = terminal_width(settings.get("columns") or 0)
 
     # left may itself be several rows. the creature runs down the right of them
     left_lines = left.split("\n") if left else []
