@@ -119,6 +119,22 @@ def visible_len(text):
     return len(ANSI_RE.sub("", text))
 
 
+def ruler(width=200):
+    """Width ruler for the statusline. There's no terminal width on stdin and
+    no tty, so the only way to learn it is to print a ruler and read where the
+    terminal cuts it off.
+    """
+    out = []
+    for i in range(1, width + 1):
+        if i % 10 == 0:
+            out.append(str((i // 10) % 10))
+        elif i % 5 == 0:
+            out.append("+")
+        else:
+            out.append("-")
+    return "".join(out)
+
+
 def compose(st, left, xp=None, counts=None):
     """Merge a caller's statusline text with the creature as a right column.
 
@@ -126,6 +142,8 @@ def compose(st, left, xp=None, counts=None):
     column starting at the top rather than a block hanging underneath.
     """
     settings = st["settings"]
+    if settings.get("density") == "ruler":
+        return ruler()
     uni = unicode_ok(settings)
     if xp is None:
         xp, counts = current_xp(st, allow_blocking=False)
@@ -151,6 +169,9 @@ def compose(st, left, xp=None, counts=None):
 
     width = max(len(r) for r in art)
     art = [r.center(width) for r in art]
+    # align on the widest row's last visible character, not the padded width,
+    # or the block stops short of the right edge by however much centring added
+    width = max(len(r.rstrip()) for r in art)
     cols = settings.get("columns") or 0
 
     # left may itself be several rows. the creature runs down the right of them
