@@ -1,0 +1,15 @@
+#!/bin/bash
+# Leak guard. brainbuddy points at directories full of private notes, so no
+# absolute home path or vault-shaped filename should ever land in a commit.
+set -euo pipefail
+FILES=$(git diff --cached --name-only 2>/dev/null || git ls-files)
+HITS=0
+for f in $FILES; do
+  [ -f "$f" ] || continue
+  case "$f" in .githooks/*) continue ;; esac
+  if grep -nE '/Users/[a-z]+/(dev|Documents)/|project_[a-z_]+\.md|reference_[a-z_]+\.md' "$f" >/dev/null 2>&1; then
+    echo "leak-guard: $f contains a machine path or vault-shaped filename"
+    HITS=1
+  fi
+done
+[ "$HITS" = 0 ] || { echo "push blocked. scrub these before pushing."; exit 1; }
