@@ -105,6 +105,59 @@ def segment(st, xp=None, counts=None):
     return "%s %s" % (paint(f + shiny + mark, tint), paint("Lv%d" % level, DIM))
 
 
+ANSI_RE = None
+# Claude Code trims leading whitespace off each row, so padding collapses. a
+# zero-width joiner first means the row doesn't start with whitespace.
+NOTRIM = "⁠"
+
+
+def visible_len(text):
+    global ANSI_RE
+    if ANSI_RE is None:
+        import re
+        ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+    return len(ANSI_RE.sub("", text))
+
+
+def compose(st, left, xp=None, counts=None):
+    """Merge a caller's statusline text with the creature as a right column.
+
+    The creature's first row shares row one with the bar, so it reads as a
+    column starting at the top rather than a block hanging underneath.
+    """
+    settings = st["settings"]
+    uni = unicode_ok(settings)
+    if xp is None:
+        xp, counts = current_xp(st, allow_blocking=False)
+    c = state_mod.focused(st)
+    if c is None:
+        return left
+
+    full = creature_mod.hydrate(c)
+    level = metric.level_for(c["xp_banked"], settings["xp_max"])
+    idx, _ = metric.stage_for(level)
+    tint = RARITY_COLOR.get(full["rarity"], "")
+
+    art = sprites.sprite(full["species"], idx, full["shiny"])
+    while art and not art[-1].strip():
+        art.pop()
+    art.append("%s Lv%d%s" % (full["name"], level, full["rarity_mark"]))
+
+    width = max(len(r) for r in art)
+    art = [r.center(width) for r in art[:-1]] + [art[-1].center(width)]
+    cols = settings.get("columns") or 0
+
+    rows = []
+    for i, row in enumerate(art):
+        body = paint(row, tint if i < len(art) - 1 else DIM)
+        if i == 0:
+            gap = max(1, cols - visible_len(left) - width)
+            rows.append(left + " " * gap + body)
+        else:
+            rows.append(NOTRIM + " " * max(0, cols - width) + body)
+    return "\n".join(rows)
+
+
 def sprite_block(full, level, stage_index, tint, settings):
     """Full creature on its own rows, for multi-line statuslines.
 

@@ -15,6 +15,7 @@ from . import state as state_mod
 USAGE = """brainbuddy - a terminal pet that evolves with your memory
 
   render              one-line statusline segment (what the statusline calls)
+  compose "<text>"    your statusline text with the creature as a right column
   card                full creature card
   hatch [name]        hatch a new egg, starts at level 0 and takes focus
   focus <name>        choose which creature banks new xp
@@ -46,6 +47,22 @@ def cmd_render(args):
             sys.stdout.write(line)
     except Exception:
         pass
+    return 0
+
+
+def cmd_compose(args):
+    """Merge caller-supplied statusline text with the creature as a right column."""
+    try:
+        left = args[0] if args else sys.stdin.read().rstrip("\n")
+        st = _load()
+        xp, counts = render.current_xp(st, allow_blocking=False)
+        if xp:
+            event = state_mod.sync(st, xp)
+            if event:
+                state_mod.save(st)
+        sys.stdout.write(render.compose(st, left, xp, counts))
+    except Exception:
+        sys.stdout.write(args[0] if args else "")
     return 0
 
 
@@ -236,7 +253,7 @@ def cmd_doctor(args):
 
 
 COMMANDS = {
-    "render": cmd_render, "refresh": cmd_refresh, "card": cmd_card,
+    "render": cmd_render, "compose": cmd_compose, "refresh": cmd_refresh, "card": cmd_card,
     "hatch": cmd_hatch, "focus": cmd_focus, "list": cmd_list,
     "rename": cmd_rename, "retire": cmd_retire, "config": cmd_config,
     "simulate": cmd_simulate, "doctor": cmd_doctor,
