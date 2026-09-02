@@ -111,7 +111,10 @@ if [ "$WIRE" = 1 ]; then
   else
     EXISTING="$(resolve_statusline)"; TARGET="${EXISTING%% *}"
   fi
-  if [ -n "$TARGET" ] && [ -f "$TARGET" ] && head -1 "$TARGET" | grep -q '^#!'; then
+  if [ "$TARGET" = "$SHIM" ]; then
+    # already the statusline. appending here would make the shim call itself
+    echo "  statusline already points at brainbuddy, nothing to wire"
+  elif [ -n "$TARGET" ] && [ -f "$TARGET" ] && head -1 "$TARGET" | grep -q '^#!'; then
     if grep -q "$BEGIN" "$TARGET" 2>/dev/null; then
       echo "  statusline already wired, leaving it alone"
     else

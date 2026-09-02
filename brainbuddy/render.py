@@ -91,16 +91,16 @@ def segment(st, xp=None, counts=None):
 
     level = metric.level_for(c["xp_banked"], settings["xp_max"])
     idx, _ = metric.stage_for(level)
-    g = sprites.glyph(idx, uni)
+    f = sprites.face(full["species"], idx, uni)
     tint = RARITY_COLOR.get(full["rarity"], "")
     mark = full["rarity_mark"]
     shiny = "*" if full["shiny"] else ""
 
     if settings.get("density") == "minimal":
-        return paint("%s%s" % (g, shiny), tint)
+        return paint(sprites.glyph(idx, uni) + shiny, tint)
     if settings.get("density") == "full":
-        return "%s %s %s" % (paint(g + shiny, tint), paint(full["name"], BOLD), paint("Lv%d %s" % (level, mark), DIM))
-    return "%s %s" % (paint(g + shiny + mark, tint), paint("Lv%d" % level, DIM))
+        return "%s %s %s" % (paint(f + shiny, tint), paint(full["name"], BOLD), paint("Lv%d %s" % (level, mark), DIM))
+    return "%s %s" % (paint(f + shiny + mark, tint), paint("Lv%d" % level, DIM))
 
 
 def card(st, xp=None, counts=None):
