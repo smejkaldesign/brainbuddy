@@ -22,7 +22,7 @@ USAGE = """brainbuddy - a terminal pet that evolves with your memory
   rename <old> <new>
   retire <name>
   config              show settings
-  config <key> <val>  set one (provider, vault_root, xp_max, density, unicode)
+  config <key> <val>  set one (provider, vault_root, xp_max, density, columns, unicode)
   simulate <xp>       preview any level without touching your real state
   refresh             recompute the xp cache (run in the background by render)
   doctor              check what brainbuddy can see
@@ -183,9 +183,16 @@ def cmd_config(args):
             return 1
     elif key == "unicode":
         value = raw.lower() in ("1", "true", "yes", "on")
-    elif key == "density" and raw not in ("compact", "minimal", "full"):
-        print("density must be compact, minimal or full")
-        return 1
+    elif key == "density":
+        if raw not in ("compact", "minimal", "full", "sprite"):
+            print("density must be compact, minimal, full or sprite")
+            return 1
+        value = raw
+    elif key == "columns":
+        value = int(raw)
+        if value < 0:
+            print("columns can't be negative")
+            return 1
     else:
         value = raw
     st["settings"][key] = value
