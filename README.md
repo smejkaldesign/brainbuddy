@@ -105,7 +105,7 @@ Level keeps climbing past 100. Evolution stops at Ascendant.
 | `full` | `<><> Drain Lv35 +` | adds name and rarity mark |
 | `sprite` | the 5-row creature | its own rows, gains detail each evolution |
 
-`sprite_height 3` cuts the creature to three rows. Same evolution beats, and it stops the statusline pushing Claude Code's footer badges down the screen.
+`sprite_height 3` cuts the creature to three rows. It keeps the evolution beats but **drops detail**: the head-top and the feet come off, so the Fledgling loses its `___` and `^   ^`. Use it when vertical space matters more than the full silhouette.
 
 `sprite` right-aligns to `columns`, which you have to set yourself:
 
