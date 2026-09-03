@@ -43,9 +43,8 @@ CLAUDE_SOURCES = [
     {"key": "memories", "glob": "*/memory/*.md", "weight": 3, "exclude": ["MEMORY.md", "index.md"]},
 ]
 
-# Any folder of markdown. The vault layout above keys off specific directory
-# names, so pointing it at someone else's notes counts zero and looks broken.
-# This one just walks for .md, which is the shape most note folders actually are.
+# the vault layout keys off specific directory names, so pointing it at someone
+# else's notes counts zero. this one just walks for .md.
 FOLDER_SOURCES = [
     {"key": "notes", "glob": "**/*.md", "weight": 2, "exclude": ["MEMORY.md", "index.md", "README.md"]},
 ]
@@ -58,9 +57,8 @@ def default_claude_root():
 
 
 def count_source(root, source):
-    """Count matching files. Resolves realpaths so a symlinked memory dir
-    (eric-brain points ~/.claude/... back into the repo) can't be counted twice
-    when two globs reach the same file by different routes.
+    """Count matching files. Resolves realpaths so a symlinked memory dir can't
+    be counted twice when two globs reach the same file by different routes.
     """
     exclude = set(source.get("exclude", []))
     seen = set()

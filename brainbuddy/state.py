@@ -98,10 +98,8 @@ def source_status(settings):
     xp, counts = metric.measure(root, sources, settings.get("weights"))
     if xp:
         return {"state": "ok", "xp": xp, "counts": counts}
-    # A vault root with markdown in it that scored zero is a layout mismatch, not
-    # an empty vault, and that's the difference between "write more" and "wrong
-    # provider". Only vault can be wrong this way: it's the one keyed to specific
-    # directory names, so pointing it at a plain notes folder counts nothing.
+    # only vault keys off directory names, so it's the only one that can score
+    # zero on a root that's full of notes. that's a mismatch, not an empty vault.
     if sources is metric.VAULT_SOURCES:
         _, stray = metric.measure(root, metric.FOLDER_SOURCES)
         found = sum(stray.values())

@@ -270,10 +270,15 @@ def cmd_config(args):
             return 1
         value = raw
     elif key == "vault_root":
-        value = raw
-        # say so now rather than letting it read as an empty vault later
-        if not os.path.isdir(os.path.expanduser(raw)):
+        # a relative path would resolve against whatever directory the statusline
+        # happens to run in, so it reads as a missing root from anywhere else
+        value = raw if raw.startswith("~") else os.path.abspath(os.path.expanduser(raw))
+        if not os.path.isdir(os.path.expanduser(value)):
             print("warning: that folder isn't there yet, so nothing will be counted")
+    elif key == "weights":
+        # a bare string here used to reach metric.measure and crash every read
+        print("weights isn't settable from the CLI, edit state.json")
+        return 1
     elif key == "sprite_height":
         value = 3 if int(raw) <= 3 else 5
     elif key == "columns":
@@ -323,13 +328,19 @@ def cmd_doctor(args):
     status = state_mod.source_status(settings)
     xp, counts = status["xp"], status["counts"]
     print("provider: %s (%s)" % (settings["provider"], PROVIDER_LABEL.get(settings["provider"], "unknown")))
-    # existence, not the path itself. "set" used to print for provider=claude
-    # whether or not the directory was actually there, which hid the real fault
-    print("root: %s" % ("missing" if status["state"] == "missing_root" else "found"))
+    # the root the user typed, home-relative. R12 is about the memory files we
+    # matched, and "why is it zero" is unanswerable without the path itself
+    root = state_mod.sources_for(settings)[0]
+    home = os.path.expanduser("~")
+    if root.startswith(home):
+        root = "~" + root[len(home):]
+    print("root: %s (%s)" % (root, "missing" if status["state"] == "missing_root" else "found"))
     for k in sorted(counts):
         print("  %-10s %d" % (k, counts[k]))
     p = metric.progress(xp, settings["xp_max"])
-    print("xp %d -> level %d (%s)" % (xp, p["level"], p["stage"]))
+    c = state_mod.focused(st)
+    stage = p["stage"] if state_mod.is_hatched(c) else "egg"
+    print("xp %d -> level %d (%s)" % (xp, p["level"], stage))
     help_text = render.no_source_help(settings, status)
     if help_text:
         print("\n" + help_text)
@@ -347,8 +358,10 @@ def cmd_sources(args):
     help_text = render.no_source_help(st["settings"], status)
     if help_text:
         print(help_text)
-    else:
-        print("counting %d xp of memory. `brainbuddy card` shows your buddy." % status["xp"])
+        # nonzero so the installer can branch on the exit code. it used to match
+        # on the first word of the success line, which reworded copy would break
+        return 1
+    print("counting %d xp of memory. /brainbuddy shows your buddy." % status["xp"])
     return 0
 
 

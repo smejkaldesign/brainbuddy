@@ -88,56 +88,63 @@ def current_xp(st, allow_blocking=True):
     return xp, counts
 
 
+# one line, because the whole point is that it gets pasted somewhere
 SETUP_PROMPT = (
-    '"Set up a persistent memory system for this project: keep one markdown\n'
-    '   file per durable fact in your memory directory, an index listing them,\n'
-    '   and write to it as we work."'
+    "Set up a persistent memory system for this project: one markdown file per "
+    "durable fact in your memory directory, an index listing them, and write to "
+    "it as we work."
 )
 
 
 def no_source_help(settings, status):
     """What the user has to go do to earn XP. Empty string when XP is flowing.
 
-    Split by cause on purpose. "Write more notes" is useless advice when the
-    real problem is a root that doesn't exist, and "check your config" is worse
-    when the truth is they've never kept notes anywhere.
+    One branch per cause, and each one only says what's true for that cause.
+    Offering "set the provider" to someone whose provider is already right, or
+    "ask Claude to start keeping memory" to someone who just typo'd a path,
+    reads as boilerplate and buries the one action that would work.
     """
-    if status["state"] == "ok":
+    state = status["state"]
+    if state == "ok":
         return ""
     provider = settings.get("provider", "claude")
 
-    if status["state"] == "layout_mismatch":
+    if state == "layout_mismatch":
         return "\n".join([
-            "Found %d markdown files under that root, but none where the %s layout looks." % (
+            "Found %d markdown files under that root, but none in the places the %s layout looks." % (
                 status.get("stray", 0), provider),
             "",
             "Count it as a plain folder of notes instead:",
-            "  brainbuddy config provider folder",
+            "  /brainbuddy config provider folder",
         ])
 
-    if status["state"] == "missing_root":
-        if provider == "claude":
-            head = "Claude Code's memory directory isn't there yet, so there's nothing to count."
-        else:
-            head = "The folder brainbuddy was pointed at doesn't exist, so there's nothing to count."
-    else:
-        head = "brainbuddy levels off how much you've written down, and nothing's been written down yet."
+    if state == "empty" or provider != "claude":
+        # their setup is fine, so don't hand them configuration to re-do
+        if state == "empty":
+            return "\n".join([
+                "Nothing in there yet, so there's nothing to count. Write a note and it'll",
+                "show up on the next render.",
+            ])
+        return "\n".join([
+            "That folder isn't there, so there's nothing to count. Point it somewhere real:",
+            "  /brainbuddy config vault_root ~/notes",
+            "",
+            "`/brainbuddy config` shows the path it's using now.",
+        ])
 
+    # provider is claude and the directory has never existed, so this is someone
+    # who hasn't kept memory at all. the only branch that earns the long version.
     return "\n".join([
-        head,
+        "Your buddy's level comes from how much you've written down, and there's no",
+        "memory system here yet to count.",
         "",
-        "It counts markdown files in a memory system. Any of these will do:",
+        "Ask Claude Code to start keeping one:",
         "",
-        "  Claude Code's own memory   brainbuddy config provider claude",
-        "  a folder of notes          brainbuddy config provider folder",
-        "                             brainbuddy config vault_root ~/notes",
+        '  "' + SETUP_PROMPT + '"',
         "",
-        "Don't have one yet? Ask Claude Code to start keeping memory:",
-        "",
-        "  " + SETUP_PROMPT,
-        "",
-        "Until something lands there it sits at level 0. Nothing's broken, there's",
-        "just nothing to measure.",
+        "Already keep notes somewhere? Point it at them instead:",
+        "  /brainbuddy config provider folder",
+        "  /brainbuddy config vault_root ~/notes",
     ])
 
 
@@ -162,9 +169,8 @@ def segment(st, xp=None, counts=None):
         mark = full["rarity_mark"]
         shiny = "*" if full["shiny"] else ""
     else:
-        # an unopened egg doesn't show its level. that reveal is the whole point
-        # of hatching, and rarity colour, mark and shiny are all seed-derived
-        # too, so wearing any of them tells you what's inside before you open it
+        # level, rarity colour, mark and shiny all come off the seed, so an egg
+        # wearing any of them has told you what's inside before you opened it
         idx, label = metric.EGG_SPRITE, "egg /brainbuddy-hatch"
         tint, mark, shiny = DIM, "", ""
     f = sprites.face(full["species"], idx, uni)
@@ -331,7 +337,7 @@ def _zero_note(st, xp):
         return None
     if state_mod.source_status(st["settings"])["state"] == "ok":
         return None
-    return paint("nothing to count yet. `brainbuddy doctor` says what it needs", DIM)
+    return paint("nothing to count yet. /brainbuddy doctor says what it needs", DIM)
 
 
 def egg_card(st, c):
@@ -432,14 +438,17 @@ def hatch_ceremony(st, c):
 
 
 def egg_notice(st, c):
-    """What you see after `new`: an egg, no level, and how to open it."""
-    full = creature_mod.hydrate(c)
-    tint = RARITY_COLOR.get(full["rarity"], "")
-    art = sprites.sprite(full["species"], metric.EGG_SPRITE, full["shiny"])
+    """What you see after `new`: an egg, no level, and how to open it.
+
+    Same rule as egg_card. `new` is the main way people get an egg, so a rarity
+    colour here spoils the reveal for most of them.
+    """
+    tint = DIM
+    art = sprites.sprite("Mote", metric.EGG_SPRITE, False)
     out = [""] + ["  " + paint(r, tint) for r in art]
     out += [
         "",
-        "  %s is an egg" % paint(full["name"], BOLD),
+        "  %s is an egg" % paint(c["name"], BOLD),
         "  " + paint("/brainbuddy-hatch to open it", DIM),
         "",
     ]

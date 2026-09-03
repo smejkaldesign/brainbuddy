@@ -117,9 +117,8 @@ def sprite(species, stage_index, shiny=False, short=False):
     """Rows for a species at a stage, padded to equal width."""
     motif, eyes = look(species)
     if stage_index == 0:
-        # stage 0 is the egg. the species motif and shiny's `$` are both derived
-        # from the seed, so an egg drawn with either has already given away
-        # what's inside. every egg looks the same until it's opened
+        # stage 0 is the egg, and motif and shiny's `$` both come off the seed,
+        # so drawing them here gives away what's inside. every egg looks alike.
         motif = SPECIES_LOOK["Mote"][0]
     elif shiny:
         motif = motif.upper() if motif.isalpha() else "$"

@@ -375,7 +375,9 @@ def _egg_renders(colour):
         c["xp_banked"] = 700
         rarities.add(creature.hydrate(c)["rarity"])
         segs.add(render.segment(st, xp=700, counts={}))
-        cols.add(render.compose(st, "BAR", xp=700, counts={}))
+        # every surface that can draw an unhatched egg, or the next one added
+        # leaks the way egg_notice did while this test watched the other two
+        cols.add(render.compose(st, "BAR", xp=700, counts={}) + render.egg_notice(st, c) + render.egg_card(st, c))
     return segs, cols, rarities
 
 
@@ -428,8 +430,11 @@ def test_source_status():
     try:
         settings["vault_root"] = root
         check(state_mod.source_status(settings)["state"] == "empty", "a real but empty root reads as empty")
-        check("nothing's been written down" in render.no_source_help(settings, state_mod.source_status(settings)),
-              "and the help says so rather than blaming the config")
+        empty_help = render.no_source_help(settings, state_mod.source_status(settings))
+        check("Write a note" in empty_help, "and the help says to write something")
+        # the whole point of splitting by cause: their provider is already right,
+        # so re-offering it as the fix buries the one action that would work
+        check("config provider" not in empty_help, "not to re-set config that's already correct")
 
         os.makedirs(os.path.join(root, "sub"))
         for rel in ("a.md", os.path.join("sub", "b.md"), "index.md"):
