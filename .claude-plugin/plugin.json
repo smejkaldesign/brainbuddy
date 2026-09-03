@@ -1,0 +1,13 @@
+{
+  "name": "brainbuddy",
+  "description": "A terminal pet for your statusline that evolves as your memory system grows.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Smejkal Design",
+    "url": "https://github.com/smejkaldesign"
+  },
+  "homepage": "https://github.com/smejkaldesign/brainbuddy",
+  "repository": "https://github.com/smejkaldesign/brainbuddy",
+  "license": "MIT",
+  "keywords": ["statusline", "memory", "pet", "obsidian", "vault"]
+}

@@ -359,6 +359,204 @@ def test_state_roundtrip():
         shutil.rmtree(d)
 
 
+def test_state_migration():
+    """An upgrade must never cost someone their buddy.
+
+    The state file outlives every version of the code that wrote it, so a load
+    has to bring an older one forward rather than reading it as a fresh install.
+    A de-levelled or vanished creature is the one bug with no undo: the XP is
+    gone, and the seed that made that particular creature is gone with it.
+    """
+    print("\nstate migration")
+    import json
+
+    d = tempfile.mkdtemp(prefix="bb-migrate-")
+    path = os.path.join(d, "state.json")
+    try:
+        # a file from before the stamp existed, hatched, with real banked xp
+        legacy = {
+            "high_water_xp": 624,
+            "focused": "abc123",
+            "creatures": [{
+                "id": "abc123", "seed": "seed-one", "name": "Neux",
+                "hatched_at": "2026-01-01T00:00:00Z", "xp_banked": 624, "last_stage_seen": 3,
+            }],
+            "settings": {"provider": "folder", "vault_root": "~/notes"},
+        }
+        with open(path, "w") as f:
+            json.dump(legacy, f)
+
+        st = state_mod.load(path)
+        c = st["creatures"][0]
+        check(st["version"] == state_mod.STATE_VERSION, "an unstamped file loads as the current version")
+        check(c["xp_banked"] == 624, "banked xp survives the migration, got %d" % c["xp_banked"])
+        check(metric.level_for(c["xp_banked"]) == 64, "so the buddy is still level 64 afterwards")
+        check(st["high_water_xp"] == 624, "the high water mark survives too")
+        check(state_mod.is_hatched(c) and st["focused"] == "abc123", "it's still hatched and still focused")
+        check(st["settings"]["provider"] == "folder", "their settings are kept")
+        check(st["settings"]["density"] == "compact", "and settings added since are filled in")
+        check(creature.hydrate(c)["species"] == creature.derive("seed-one")["species"],
+              "the species still comes off the same seed, so it's the same creature")
+
+        # round-trip it the way an upgraded install would: load, save, load again
+        state_mod.save(st, path)
+        again = state_mod.load(path)
+        check(again["creatures"][0]["xp_banked"] == 624, "and again after the next save")
+        check(json.load(open(path))["version"] == state_mod.STATE_VERSION, "the stamp is written to disk")
+
+        # a hand-edited or half-written creature: every read path indexes these
+        with open(path, "w") as f:
+            json.dump({"creatures": [{"seed": "seed-two"}], "focused": "gone"}, f)
+        st = state_mod.load(path)
+        c = st["creatures"][0]
+        check(c["xp_banked"] == 0 and c["last_stage_seen"] == 0, "missing creature keys are filled, not fatal")
+        check(c["id"] and c["name"], "so are the id and the name")
+        check(st["focused"] == c["id"], "a focus pointing at nothing falls back to the roster")
+
+        # a stamp from a version we don't know about is not ours to relabel
+        with open(path, "w") as f:
+            json.dump({"version": 99, "creatures": [], "focused": None}, f)
+        check(state_mod.load(path)["version"] == 99, "a newer stamp survives a downgrade")
+    finally:
+        shutil.rmtree(d)
+
+
+def test_version_check_is_explicit_only():
+    """Nothing but `update` and `doctor --check` may open a socket.
+
+    The statusline runs this code several times a second. A background update
+    check there would be indistinguishable from telemetry, so the rule is that
+    the network is only ever touched because someone asked. The guard below
+    records every socket call and then proves itself by making one on purpose.
+    """
+    print("\nversion check")
+    import subprocess
+
+    from brainbuddy import release
+
+    check(release.status_line("ok", "0.2.0", current="0.1.0").startswith("brainbuddy 0.2.0 is out"),
+          "a newer release says so, and which one")
+    check("pipx upgrade brainbuddy" in release.status_line("ok", "0.2.0", current="0.1.0"),
+          "and names both ways to take it")
+    check("latest" in release.status_line("ok", "0.1.0", current="0.1.0"), "matching versions read as current")
+    check("ahead" in release.status_line("ok", "0.1.0", current="0.2.0"), "a local build ahead of pypi says that")
+    check("isn't on pypi yet" in release.status_line("unpublished", None), "an unpublished package is calm about it")
+    check("couldn't reach pypi" in release.status_line("unreachable", None), "so is being offline")
+    check(release._parts("0.10.0") > release._parts("0.9.0"), "versions compare numerically, not as strings")
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    home = tempfile.mkdtemp(prefix="bb-offline-")
+    log = os.path.join(home, "net.log")
+    # every command the statusline can reach, plus the two that write state
+    child = (
+        "import socket, sys\n"
+        "def guard(*a, **kw):\n"
+        "    open(%r, 'a').write('called\\n')\n"
+        "    raise AssertionError('network')\n"
+        "socket.socket = guard\n"
+        "socket.create_connection = guard\n"
+        "socket.getaddrinfo = guard\n"
+        "from brainbuddy import cli\n"
+        "for argv in (['new'], ['hatch'], ['refresh'], ['render'], ['compose', 'BAR'], ['card'], ['doctor']):\n"
+        "    cli.main(argv)\n"
+        "try:\n"
+        "    socket.socket()\n"
+        "except AssertionError:\n"
+        "    pass\n"
+    ) % log
+    try:
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo)
+        r = subprocess.run([sys.executable, "-c", child], env=env, input="{}",
+                           capture_output=True, text=True)
+        check(r.returncode == 0, "the offline run finishes clean (%s)" % r.stderr.strip()[-120:])
+        calls = open(log).read().splitlines() if os.path.exists(log) else []
+        check(len(calls) == 1, "one socket call, the probe proving the guard works, got %d" % len(calls))
+    finally:
+        shutil.rmtree(home)
+
+
+def test_project_statusline_override():
+    """A project's own statusLine wins, and doctor is the only place that can say so.
+
+    Everything looks installed: the library is there, the shim is wired, the
+    creature is correct. It just never draws inside that repo, and the installer
+    can't fix it because it only ever touches ~/.claude/settings.json.
+    """
+    print("\nproject statusline override")
+    import json
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    home = tempfile.mkdtemp(prefix="bb-project-")
+    try:
+        project = os.path.join(home, "work", "app")
+        os.makedirs(os.path.join(project, ".claude"))
+        os.makedirs(os.path.join(project, ".git"))
+        os.makedirs(os.path.join(home, ".claude"))
+        env = dict(os.environ, HOME=home)
+        subprocess.run(["bash", os.path.join(repo, "install.sh")],
+                       env=env, input="", capture_output=True, text=True)
+
+        def doctor(cwd):
+            return subprocess.run([sys.executable, "-m", "brainbuddy.cli", "doctor"],
+                                  env=dict(env, PYTHONPATH=repo), cwd=cwd,
+                                  capture_output=True, text=True).stdout
+
+        check("sets its own statusline" not in doctor(project), "a project with no settings of its own is quiet")
+
+        theirs = {"statusLine": {"type": "command", "command": "~/repo/bar.sh"}}
+        settings = os.path.join(project, ".claude", "settings.json")
+        with open(settings, "w") as f:
+            json.dump(theirs, f)
+
+        out = doctor(project)
+        check("sets its own statusline" in out, "doctor names the state")
+        check('--statusline "~/repo/bar.sh"' in out, "and hands back the fix with their own command in it")
+        check("statusline-brainbuddy.sh" in out, "pointing the project at the shim")
+        check("~/work/app/.claude/settings.json" in out, "the file is named home-relative, not as a full path")
+        with open(settings) as f:
+            check(json.load(f) == theirs, "and their settings file is not written to")
+
+        deep = os.path.join(project, "src", "web")
+        os.makedirs(deep)
+        check("sets its own statusline" in doctor(deep), "found from a subdirectory, via the repo root")
+        check("sets its own statusline" not in doctor(home), "and not claimed for the home directory itself")
+    finally:
+        shutil.rmtree(home)
+
+
+def test_empty_hatch_is_a_moment():
+    """Hatching with nothing to count still has to land.
+
+    The species, rarity and shiny are decided by the seed, so the reveal is
+    intact; only the level is zero. Printing that and stopping reads as a broken
+    install, which is exactly the wrong first impression for the one user who
+    hasn't got a memory system yet.
+    """
+    print("\nempty hatch")
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    home = tempfile.mkdtemp(prefix="bb-empty-")
+    try:
+        os.makedirs(os.path.join(home, ".claude"))
+        env = dict(os.environ, HOME=home, NO_COLOR="1")
+        subprocess.run(["bash", os.path.join(repo, "install.sh")],
+                       env=env, input="", capture_output=True, text=True)
+        out = subprocess.run([sys.executable, "-m", "brainbuddy.cli", "hatch"],
+                             env=dict(env, PYTHONPATH=repo), capture_output=True, text=True).stdout
+
+        check("the egg cracks" in out, "the reveal still runs")
+        check("Lv0" in out, "at Lv0, since there was nothing to eat")
+        check(any(r in out for r in ("Common", "Uncommon", "Rare", "Epic", "Legendary")),
+              "and it still says what came out")
+        check("that's the floor, not a dud roll" in out, "the zero is framed rather than left hanging")
+        from brainbuddy import render
+        check(render.SETUP_PROMPT in out, "and it ends on how to get something to feed it")
+    finally:
+        shutil.rmtree(home)
+
+
 def _egg_renders(colour):
     """Every unhatched egg's segment and column, over a spread of seeds."""
     from brainbuddy import render
@@ -537,6 +735,58 @@ GENERATED_BLOCK = (
 )
 
 
+def test_plugin_wiring():
+    """A plugin install ships the commands and can't set statusLine.
+
+    So the installer has to be able to do the wiring half without copying a
+    second set of command files over the plugin's, and the SessionStart hook
+    has to tell those two states apart. A hook that cried "not wired" at a
+    wired user would nag them once a session, forever.
+    """
+    print("\nplugin wiring")
+    import json
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    hook = os.path.join(repo, "scripts", "plugin-session-start.sh")
+    home = tempfile.mkdtemp(prefix="bb-plugin-")
+    try:
+        claude = os.path.join(home, ".claude")
+        os.makedirs(os.path.join(claude, "commands"))
+        env = dict(os.environ, HOME=home, CLAUDE_PLUGIN_ROOT=repo)
+
+        before = subprocess.run(["bash", hook], env=env, capture_output=True, text=True)
+        check("not wired up yet" in before.stdout, "unwired: the hook says so")
+        check(json.loads(before.stdout)["hookSpecificOutput"]["hookEventName"] == "SessionStart",
+              "unwired: and says it in the shape a SessionStart hook returns")
+        check("--no-commands" in before.stdout, "unwired: naming the flag that avoids double-listing")
+        with open(os.path.join(claude, "brainbuddy", "plugin-root")) as f:
+            check(f.read().strip() == repo, "the plugin root is recorded for the command to find")
+
+        r = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--no-commands"],
+                           env=env, input="", capture_output=True, text=True)
+        check(r.returncode == 0, "--no-commands: installer exits clean")
+        check(os.listdir(os.path.join(claude, "commands")) == [],
+              "--no-commands: the plugin's five commands aren't copied over a second time")
+        check("/brainbuddy-hatch" in r.stdout, "--no-commands: still ends on the egg")
+
+        after = subprocess.run(["bash", hook], env=env, capture_output=True, text=True)
+        check(after.stdout.strip() == "", "wired: the hook goes quiet")
+
+        # wired library, but a statusline pointing somewhere else. half-wired is
+        # unwired, or the creature is nowhere and nothing says why
+        with open(os.path.join(claude, "settings.json"), "w") as f:
+            json.dump({"statusLine": {"type": "command", "command": "~/other.sh"}}, f)
+        half = subprocess.run(["bash", hook], env=env, capture_output=True, text=True)
+        check("not wired up yet" in half.stdout, "a statusline pointing elsewhere still counts as unwired")
+
+        u = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--no-commands", "--uninstall"],
+                           env=env, input="", capture_output=True, text=True)
+        check(u.returncode == 0, "--no-commands: uninstall exits clean")
+    finally:
+        shutil.rmtree(home)
+
+
 def test_installer_respects_hand_wiring():
     """A brainbuddy block someone has edited belongs to them, not the installer.
 
@@ -689,8 +939,66 @@ def test_session_xp_counter():
         os.environ.pop("NO_COLOR", None)
 
 
+def test_refresh_never_reverts_concurrent_writes():
+    """A background refresh must not hold a roster snapshot across the scan.
+
+    render spawns a refresh whenever the cache goes stale, so the scan window
+    overlaps the exact moment a new user lays and hatches their first egg. The
+    refresh has to write back the world as it is after the scan, not the copy
+    it held before.
+    """
+    print("\nrefresh vs concurrent writes")
+    import json
+    import subprocess
+
+    home = tempfile.mkdtemp(prefix="bb-race-")
+    try:
+        vault = os.path.join(home, "notes")
+        os.makedirs(vault)
+        open(os.path.join(vault, "a.md"), "w").close()
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        script = (
+            "import sys\n"
+            "sys.path.insert(0, %r)\n"
+            "from brainbuddy import cli, state as sm\n"
+            "st = sm.load(); sm.create(st, name='Alpha'); sm.save(st)\n"
+            "real = sm.measure_now\n"
+            "def slow(settings):\n"
+            "    out = real(settings)\n"
+            "    st2 = sm.load(); sm.create(st2, name='Beta'); sm.save(st2)\n"
+            "    return out\n"
+            "sm.measure_now = slow\n"
+            "raise SystemExit(cli.cmd_refresh([]))\n"
+        ) % repo
+        env = dict(os.environ, HOME=home)
+        r = subprocess.run([sys.executable, "-c", script], env=env,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        check(r.returncode == 0, "refresh exits clean, stderr: %s" % r.stderr.decode()[:120])
+        with open(os.path.join(home, ".claude", "brainbuddy", "state.json")) as f:
+            names = [c.get("name") for c in json.load(f)["creatures"]]
+        check("Beta" in names, "an egg laid during the scan survives the refresh, roster: %s" % names)
+    finally:
+        shutil.rmtree(home)
+
+
+def test_migration_replaces_nulls():
+    """A hand-edited null has the key, so setdefault used to keep it and every
+    command that lowercases the name crashed instead of degrading."""
+    print("\nmigration vs hand-edited nulls")
+    st = state_mod.migrate({
+        "creatures": [{"id": "x", "seed": "s", "name": None, "xp_banked": None, "last_stage_seen": None}],
+        "focused": "x", "settings": {},
+    })
+    c = st["creatures"][0]
+    check(isinstance(c["name"], str) and bool(c["name"]), "a null name migrates to a real one")
+    check(c["xp_banked"] == 0, "a null xp_banked migrates to 0")
+    check(c["last_stage_seen"] == 0, "a null last_stage_seen migrates to 0")
+
+
 if __name__ == "__main__":
     test_metric()
+    test_refresh_never_reverts_concurrent_writes()
+    test_migration_replaces_nulls()
     test_sprite_alignment()
     test_compose_column()
     test_no_content_reads()
@@ -699,9 +1007,14 @@ if __name__ == "__main__":
     test_egg_and_hatch()
     test_retire_keeps_the_record()
     test_state_roundtrip()
+    test_state_migration()
+    test_version_check_is_explicit_only()
+    test_project_statusline_override()
+    test_empty_hatch_is_a_moment()
     test_egg_reveals_nothing()
     test_source_status()
     test_installer_wraps_any_statusline()
+    test_plugin_wiring()
     test_installer_respects_hand_wiring()
     test_hatch_from_zero()
     test_session_xp_counter()

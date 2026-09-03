@@ -60,7 +60,11 @@ def spawn_refresh():
 
     try:
         os.makedirs(state_mod.STATE_DIR, exist_ok=True)
-        open(state_mod.CACHE_PATH, "a").close()
+        # the claim has to be a cache read_cache accepts. an empty file reads as
+        # no cache at all, so every render before the scan finished spawned
+        # another scan
+        if state_mod.read_cache() is None:
+            state_mod.write_cache(0, {})
         os.utime(state_mod.CACHE_PATH, None)
         subprocess.Popen(
             [sys.executable, "-m", "brainbuddy.cli", "refresh"],
@@ -368,8 +372,15 @@ def egg_card(st, c):
     return "\n".join(out)
 
 
-def card(st, xp=None, counts=None):
-    """The /brainbuddy view. Multi-line, safe to be verbose, except about paths."""
+def card(st, xp=None, counts=None, hungry_note=True, art=True):
+    """The /brainbuddy view. Multi-line, safe to be verbose, except about paths.
+
+    hungry_note=False for callers that answer the zero themselves. The card's
+    version points at doctor, which is the wrong thing to read directly above
+    the same answer spelled out. art=False for callers that just drew the
+    creature, like the hatch ceremony: it drops the sprite and the name header
+    rather than repeating them.
+    """
     settings = st["settings"]
     uni = unicode_ok(settings)
     if xp is None:
@@ -390,7 +401,6 @@ def card(st, xp=None, counts=None):
     p = metric.progress(banked, settings["xp_max"])
     stats = creature_mod.stats_from_counts(counts)
 
-    art = sprites.sprite(full["species"], p["stage_index"], full["shiny"])
     tint = RARITY_COLOR.get(full["rarity"], "")
 
     header = "%s  %s" % (paint(full["name"], BOLD), paint("%s %s%s" % (full["species"], full["rarity"], " shiny" if full["shiny"] else ""), tint))
@@ -399,9 +409,8 @@ def card(st, xp=None, counts=None):
     span_hi = p["next_level_xp"]
     frac = (banked - span_lo) / float(span_hi - span_lo) if span_hi > span_lo else 0.0
 
-    info = [
-        header,
-        "",
+    info = [] if not art else [header, ""]
+    info += [
         "Level %d   %s   %s" % (p["level"], p["stage"], sprites.stage_track(p["stage_index"], uni)),
         "%s  %d / %d xp" % (sprites.bar(frac, 10, uni), banked, span_hi),
     ]
@@ -410,17 +419,24 @@ def card(st, xp=None, counts=None):
     else:
         info.append(paint("Fully evolved. Hatch a new egg to start another.", DIM))
 
-    info.append("")
-    info.append("  ".join("%s %d" % (k, v) for k, v in stats.items()))
+    if any(stats.values()):
+        # the folder provider feeds none of the five, and a row of zeros reads
+        # as broken rather than early
+        info.append("")
+        info.append("  ".join("%s %d" % (k, v) for k, v in stats.items()))
     info.append(paint("counted: " + "  ".join("%s %d" % (k, v) for k, v in sorted(counts.items())), DIM))
-    note = _zero_note(st, xp)
+    note = _zero_note(st, xp) if hungry_note else None
     if note:
         info += ["", note]
 
+    if not art:
+        return "\n".join("  " + r for r in info).rstrip()
+
+    sprite_art = sprites.sprite(full["species"], p["stage_index"], full["shiny"])
     lines = []
-    pad = max(len(r) for r in art)
-    for i in range(max(len(art), len(info))):
-        left = art[i] if i < len(art) else " " * pad
+    pad = max(len(r) for r in sprite_art)
+    for i in range(max(len(sprite_art), len(info))):
+        left = sprite_art[i] if i < len(sprite_art) else " " * pad
         right = info[i] if i < len(info) else ""
         lines.append("  %s   %s" % (paint(left, tint), right))
     return "\n".join(lines).rstrip()
@@ -446,6 +462,24 @@ def hatch_ceremony(st, c):
         "  " + paint("Lv%d %s" % (level, stage), DIM),
         "",
     ]
+    return "\n".join(out)
+
+
+def empty_hatch_note(st, status):
+    """The reveal with nothing counted. Says day one out loud instead of nothing.
+
+    Hatching on a machine with no memory system is the one path where the
+    ceremony lands on a Lv0 that means "there was nothing to eat". The creature
+    is still whatever the seed made it, so the reveal is intact; what's missing
+    is any sign that the number is the start of something rather than a dud.
+    """
+    out = [
+        "  " + paint("nothing counted yet, so Lv0. that's the floor, not a dud roll.", DIM),
+        "  " + paint("it levels off the markdown you keep, so give it something to eat.", DIM),
+    ]
+    help_text = no_source_help(st["settings"], status)
+    if help_text:
+        out += ["", help_text]
     return "\n".join(out)
 
 

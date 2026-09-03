@@ -20,6 +20,22 @@ jobs:
       - name: tests
         run: python3 tests/test_brainbuddy.py
 
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # catches packaging breaks on the PR instead of on release day
+      - run: python3 -m pip install build
+      - run: python3 -m build
+      - name: entry point works from the wheel
+        run: |
+          python3 -m pip install dist/*.whl
+          brainbuddy simulate 100 >/dev/null
+          brainbuddy doctor | head -1 | grep -q "^brainbuddy "
+
   guard:
     runs-on: ubuntu-latest
     steps:
@@ -29,4 +45,20 @@ jobs:
       - name: leak guard
         run: ./scripts/leak-guard.sh
       - name: shell syntax
-        run: bash -n install.sh && bash -n scripts/leak-guard.sh && bash -n .githooks/pre-push
+        run: bash -n install.sh && bash -n bootstrap.sh && bash -n scripts/leak-guard.sh && bash -n scripts/plugin-session-start.sh && bash -n .githooks/pre-push
+
+  # curl | bash on a stock mac runs bash 3.2, so the installer has to keep
+  # working there, not just on linux's bash 5
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install, reinstall, render, uninstall under system bash 3.2
+        run: |
+          /bin/bash --version | head -1
+          export HOME="$RUNNER_TEMP/bb-home"
+          mkdir -p "$HOME"
+          /bin/bash install.sh --folder "$HOME/notes"
+          /bin/bash install.sh --folder "$HOME/notes"
+          printf '{}' | /bin/bash "$HOME/.claude/brainbuddy/statusline-brainbuddy.sh"
+          /bin/bash install.sh --uninstall

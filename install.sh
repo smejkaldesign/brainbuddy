@@ -1,5 +1,21 @@
 #!/bin/bash
 # brainbuddy installer. wraps an existing statusline, never replaces it.
+
+# every line below this is bash, pipefail included, so bash gets confirmed first.
+# windows has no bash of its own but two shells that are one, so name both.
+if [ -z "${BASH_VERSION:-}" ]; then
+  case "$(uname -s 2>/dev/null || echo unknown)" in
+    MINGW*|MSYS*|CYGWIN*|Windows*)
+      echo "this installer is bash, and this shell isn't. two routes work on windows: WSL, or Git Bash," >&2
+      echo "which comes with git for windows. open either one and run ./install.sh again." >&2
+      ;;
+    *)
+      echo "this installer is bash. run 'bash install.sh' rather than sh." >&2
+      echo "on windows that means WSL or Git Bash; there's no powershell version." >&2
+      ;;
+  esac
+  exit 1
+fi
 set -euo pipefail
 
 usage() {
@@ -12,6 +28,7 @@ brainbuddy installer
   ./install.sh --statusline <cmd>  wrap this command instead of settings.json's
   ./install.sh --inline            one-line segment instead of the boxed column
   ./install.sh --no-wire           install the library only, wire it yourself
+  ./install.sh --no-commands       skip the slash commands, something else ships them
   ./install.sh --uninstall         unwire and restore your old statusline
 EOF
 }
@@ -30,6 +47,7 @@ VAULT=""
 FOLDER=""
 WIRE=1
 INLINE=0
+COMMANDS=1
 MODE=install
 STATUSLINE=""
 
@@ -46,6 +64,7 @@ while [ $# -gt 0 ]; do
     --statusline) need_value --statusline "${2:-}"; STATUSLINE="$2"; shift 2 ;;
     --inline) INLINE=1; shift ;;
     --no-wire) WIRE=0; shift ;;
+    --no-commands) COMMANDS=0; shift ;;
     --uninstall) MODE=uninstall; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1"; exit 1 ;;
@@ -198,6 +217,11 @@ if [ "$MODE" = uninstall ]; then
   PREVIOUS=""
   if [ -s "$WRAPPED" ]; then PREVIOUS="$(cat "$WRAPPED")"; fi
   CURRENT="$(read_statusline)"
+  # a hand-wired settings.json can name the shim through ~, and an exact string
+  # compare would then delete the shim while leaving statusLine pointing at it
+  case "$CURRENT" in
+    "$SHIM"|"~/.claude/brainbuddy/statusline-brainbuddy.sh"|"\$HOME/.claude/brainbuddy/statusline-brainbuddy.sh") CURRENT="$SHIM" ;;
+  esac
   if [ "$CURRENT" = "$SHIM" ]; then
     write_statusline "$PREVIOUS"
     if [ -n "$PREVIOUS" ]; then
@@ -213,8 +237,11 @@ if [ "$MODE" = uninstall ]; then
     ours) strip_legacy_block "$LEGACY" ;;
     modified) echo "left $(basename "$LEGACY") alone, you've edited the brainbuddy block in it" ;;
   esac
-  rm -rf "$LIB" "$SHIM" "$WRAPPED"
-  for cmd in $COMMAND_NAMES; do rm -f "$CMDS/$cmd.md"; done
+  rm -rf "$LIB" "$SHIM" "$WRAPPED" "$HOMEDIR/plugin-root"
+  # under --no-commands they're the plugin's copies, not ours to delete
+  if [ "$COMMANDS" = 1 ]; then
+    for cmd in $COMMAND_NAMES; do rm -f "$CMDS/$cmd.md"; done
+  fi
   echo "uninstalled. state kept at ~/.claude/brainbuddy/state.json (delete it yourself for a clean slate)"
   exit 0
 fi
@@ -225,12 +252,18 @@ rm -rf "$LIB/brainbuddy"
 cp -R "$SRC/brainbuddy" "$LIB/brainbuddy"
 # don't ship the dev machine's bytecode
 find "$LIB/brainbuddy" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
-for cmd in $COMMAND_NAMES; do
-  if [ -f "$SRC/commands/$cmd.md" ]; then cp "$SRC/commands/$cmd.md" "$CMDS/$cmd.md"; fi
-done
+if [ "$COMMANDS" = 1 ]; then
+  for cmd in $COMMAND_NAMES; do
+    if [ -f "$SRC/commands/$cmd.md" ]; then cp "$SRC/commands/$cmd.md" "$CMDS/$cmd.md"; fi
+  done
+fi
 # ~ rather than the expanded path, so a screenshot of this carries no username
 echo "  library  -> ${LIB/#$HOME/~}"
-echo "  commands -> ${CMDS/#$HOME/~}  (/brainbuddy, -new, -hatch, -hide, -show)"
+if [ "$COMMANDS" = 1 ]; then
+  echo "  commands -> ${CMDS/#$HOME/~}  (/brainbuddy, -new, -hatch, -hide, -show)"
+else
+  echo "  commands -> left alone, the plugin already provides them"
+fi
 
 # always, even under --no-wire: self-wirers point their own script at it
 write_shim
@@ -315,10 +348,20 @@ if bb sources >/dev/null 2>&1; then HAS_SOURCE=1; else HAS_SOURCE=0; SOURCE_HELP
 # `new` exits 1 when a buddy exists, which is the re-install path: leave it be
 if ! bb new >/dev/null 2>&1; then bb list; echo; fi
 
+# homework first, egg last: the door closes on the one action left to take,
+# not on a config recipe
+if [ -n "$SOURCE_HELP" ]; then echo "$SOURCE_HELP"; echo; fi
+
 # prompt off the roster, not off whether we just laid it, or a reinstall never
 # re-offers the one action the user still has to take
 if bb list 2>/dev/null | grep -q '^\*.*unhatched'; then
-  echo "there's an egg in your statusline, and it's hungry. open it:"
+  if [ "$WIRE" = 1 ] || [ -n "${HANDWIRED:-}" ]; then
+    echo "there's an egg in your statusline, and it's hungry. open it:"
+  else
+    # --no-wire promised "wire it yourself"; this is the how
+    echo "there's an egg waiting, and it's hungry. it shows up once statusLine.command"
+    echo "points at ~/.claude/brainbuddy/statusline-brainbuddy.sh. open it either way:"
+  fi
   echo "  /brainbuddy-hatch"
   if [ "$HAS_SOURCE" = 1 ]; then
     echo "it hatches at whatever level your memories have already fed it."
@@ -326,5 +369,3 @@ if bb list 2>/dev/null | grep -q '^\*.*unhatched'; then
     echo "it'll open at level 0 for now, and grow once there are memories to feed on."
   fi
 fi
-
-if [ -n "$SOURCE_HELP" ]; then echo; echo "$SOURCE_HELP"; fi

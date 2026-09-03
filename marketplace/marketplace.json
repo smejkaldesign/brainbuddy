@@ -1,0 +1,20 @@
+{
+  "name": "smejkal-design",
+  "owner": {
+    "name": "Smejkal Design",
+    "url": "https://github.com/smejkaldesign"
+  },
+  "description": "Small tools from Smejkal Design.",
+  "plugins": [
+    {
+      "name": "brainbuddy",
+      "source": {
+        "source": "github",
+        "repo": "smejkaldesign/brainbuddy"
+      },
+      "description": "A terminal pet for your statusline that evolves as your memory system grows.",
+      "category": "productivity",
+      "tags": ["statusline", "memory", "pet"]
+    }
+  ]
+}

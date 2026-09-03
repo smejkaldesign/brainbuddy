@@ -87,6 +87,16 @@ spoil the level before running the command.**
 A buddy created later with `/brainbuddy-new --add` starts at 0 and hatches as a Hatchling.
 Both are correct; the difference is whether there was banked XP waiting.
 
+## Hatching with nothing to count
+
+If there's no memory system yet, hatch anyway. The reveal is the same one everybody gets, and
+the species, rarity and shiny are already decided; the only thing missing is the level. `hatch`
+prints its own lines for this: that Lv0 is the floor rather than a bad roll, and what to feed it.
+
+Print those and stop. Don't add encouragement of your own on top, don't apologise for the level,
+and don't suggest re-hatching later for a better one, which isn't a thing. If they want the
+memory system set up, `sources` carries the prompt for it and you can act on it directly.
+
 ## If there's nothing to open
 
 - No buddy at all → point at `/brainbuddy-new`, don't create one silently.
