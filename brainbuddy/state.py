@@ -32,8 +32,39 @@ DEFAULT_SETTINGS = {
 }
 
 
+# enough for the handful of sessions anyone has open at once. the oldest baseline
+# drops out rather than the file growing for the life of the install
+SESSION_KEEP = 8
+
+
 def default_state():
-    return {"version": 1, "high_water_xp": 0, "focused": None, "creatures": [], "settings": dict(DEFAULT_SETTINGS)}
+    return {"version": 1, "high_water_xp": 0, "focused": None, "creatures": [], "sessions": {},
+            "settings": dict(DEFAULT_SETTINGS)}
+
+
+def session_gain(state, session_id, banked):
+    """XP the focused creature has put on since this session first drew itself.
+
+    Returns (gain, is_new). Baselining on first sight is what makes it a session
+    counter: without it every session would open claiming credit for the whole
+    vault. Concurrent sessions each get their own mark, because there are
+    usually several open and one shared mark would have them overwriting
+    each other's starting point.
+    """
+    if not session_id:
+        return 0, False
+    sessions = state.setdefault("sessions", {})
+    row = sessions.get(session_id)
+    # a total below the mark means focus moved to a different creature, so
+    # re-baseline instead of rendering a negative
+    if row is None or row.get("at", 0) > banked:
+        sessions[session_id] = {"at": banked, "ts": int(time.time())}
+        if len(sessions) > SESSION_KEEP:
+            stale = sorted(sessions, key=lambda k: sessions[k].get("ts", 0))[:len(sessions) - SESSION_KEEP]
+            for key in stale:
+                del sessions[key]
+        return 0, True
+    return banked - row["at"], False
 
 
 def load(path=STATE_PATH):

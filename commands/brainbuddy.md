@@ -6,7 +6,8 @@ user_invocable: true
 
 # /brainbuddy
 
-Front end for the `brainbuddy` CLI. Everything runs locally; nothing here reaches the network.
+Front end for the `brainbuddy` CLI. Buddies feed off memories and grow as the second brain
+grows. Everything runs locally; nothing here reaches the network.
 
 Run commands as:
 

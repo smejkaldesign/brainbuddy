@@ -1,8 +1,8 @@
 # brainbuddy
 
-A terminal creature that lives in your Claude Code statusline, hatches from an egg, and evolves through five forms as your memory system grows.
+A terminal creature that lives in your Claude Code statusline, hatches from an egg, and grows on a diet of your own memories.
 
-It measures how much you've written down. Not how long you've used it, not a streak you can lose by taking a weekend off. Write more durable notes, it grows. That's the whole loop.
+Buddies feed off memories. Every durable note you write is XP, so it grows as your second brain grows, through five forms from hatchling to fully grown. Not a streak you can drop by taking a weekend off, and not a timer. Feed it or it sits there. That's the whole loop.
 
 ```
 ┌───────────┐
@@ -84,6 +84,19 @@ guess are the two that decide everything afterwards:
 
 Both questions are skipped on later eggs, which inherit the setup the first one established.
 Neither is asked if there's already a source configured and counting.
+
+### The session counter
+
+To the right of the level, the caption shows what your buddy has eaten **in this session**:
+
+```
+🥚 Neux · Sage Lv66 +16 XP ██░░░░
+```
+
+It baselines the first time a session draws itself, so a new session opens at nothing rather
+than claiming credit for the whole vault, and it's tracked per session id because several are
+usually open at once. It stays hidden until there's something to show, so statusline width
+isn't spent on `+0 XP` all day.
 
 ---
 

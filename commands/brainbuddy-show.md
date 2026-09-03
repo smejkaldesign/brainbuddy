@@ -14,7 +14,7 @@ PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli show
 
 Print the one-line confirmation the CLI returns.
 
-XP kept accruing while it was hidden, so level and progress reflect everything written to the
+It kept eating while it was hidden, so level and progress reflect everything written to the
 vault in the meantime. Expect it to come back further along than it left.
 
 If it still doesn't appear, the cause is almost always the statusline script rather than this

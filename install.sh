@@ -166,11 +166,11 @@ EOF
     cat >> "$SHIM" <<'EOF'
 printf '%s' "$LEFT"
 if [ -n "$LEFT" ]; then printf ' '; fi
-PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli render 2>/dev/null || true
+printf '%s' "$INPUT" | PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli render 2>/dev/null || true
 EOF
   else
     cat >> "$SHIM" <<'EOF'
-PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli compose "$LEFT" 2>/dev/null || printf '%s' "$LEFT"
+printf '%s' "$INPUT" | PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli compose "$LEFT" 2>/dev/null || printf '%s' "$LEFT"
 EOF
   fi
   chmod +x "$SHIM"
@@ -318,12 +318,12 @@ if ! bb new >/dev/null 2>&1; then bb list; echo; fi
 # prompt off the roster, not off whether we just laid it, or a reinstall never
 # re-offers the one action the user still has to take
 if bb list 2>/dev/null | grep -q '^\*.*unhatched'; then
-  echo "an egg is waiting in your statusline. open it:"
+  echo "there's an egg in your statusline, and it's hungry. open it:"
   echo "  /brainbuddy-hatch"
   if [ "$HAS_SOURCE" = 1 ]; then
-    echo "it hatches at whatever level your memory has already earned."
+    echo "it hatches at whatever level your memories have already fed it."
   else
-    echo "it'll open at level 0 for now, and grow once you're writing notes."
+    echo "it'll open at level 0 for now, and grow once there are memories to feed on."
   fi
 fi
 

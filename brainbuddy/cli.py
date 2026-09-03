@@ -41,17 +41,49 @@ def _load():
     return state_mod.load()
 
 
+def _stdin_text():
+    """Whatever the statusline piped us, or "" when a human is at the keyboard.
+
+    isatty, or `brainbuddy compose "text"` typed by hand would sit there waiting
+    for a statusline payload that is never coming.
+    """
+    try:
+        if sys.stdin.isatty():
+            return ""
+        return sys.stdin.read()
+    except Exception:
+        return ""
+
+
+def _session_id(raw):
+    """Claude Code's statusline JSON carries the session id. Only that is read."""
+    try:
+        return json.loads(raw).get("session_id") or None
+    except (ValueError, AttributeError):
+        return None
+
+
+def _bank(st, session_id):
+    """Credit new xp, then work out what this session is responsible for."""
+    xp, counts = render.current_xp(st, allow_blocking=False)
+    dirty = False
+    if xp and state_mod.sync(st, xp):
+        dirty = True
+    c = state_mod.focused(st)
+    gain, is_new = state_mod.session_gain(st, session_id, c.get("xp_banked", 0) if c else 0)
+    if dirty or is_new:
+        state_mod.save(st)
+    return xp, counts, gain
+
+
 def cmd_render(args):
     try:
+        session = _session_id(_stdin_text())
         st = _load()
         if st["settings"].get("hidden"):
             return 0
-        xp, counts = render.current_xp(st, allow_blocking=False)
-        if xp:
-            event = state_mod.sync(st, xp)
-            if event:
-                state_mod.save(st)
-        line = render.segment(st, xp, counts)
+        xp, counts, gain = _bank(st, session)
+        line = render.segment(st, xp, counts, gain=gain)
         if line:
             sys.stdout.write(line)
     except Exception:
@@ -61,21 +93,23 @@ def cmd_render(args):
 
 def cmd_compose(args):
     """Merge caller-supplied statusline text with the creature as a left column."""
+    left = args[0] if args else ""
     try:
-        left = args[0] if args else sys.stdin.read().rstrip("\n")
+        raw = _stdin_text()
+        # the statusline passes its text as an argument and its json on stdin.
+        # piping the text instead still works, it just has no session to count.
+        session = _session_id(raw) if args else None
+        if not args:
+            left = raw.rstrip("\n")
         st = _load()
         # hidden means the caller's bar passes through untouched, xp still banks on the next visible run
         if st["settings"].get("hidden"):
             sys.stdout.write(left)
             return 0
-        xp, counts = render.current_xp(st, allow_blocking=False)
-        if xp:
-            event = state_mod.sync(st, xp)
-            if event:
-                state_mod.save(st)
-        sys.stdout.write(render.compose(st, left, xp, counts))
+        xp, counts, gain = _bank(st, session)
+        sys.stdout.write(render.compose(st, left, xp, counts, gain=gain))
     except Exception:
-        sys.stdout.write(args[0] if args else "")
+        sys.stdout.write(left)
     return 0
 
 

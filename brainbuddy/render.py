@@ -19,6 +19,8 @@ RARITY_COLOR = {
     "Legendary": "\033[32m",
 }
 DIM = "\033[2m"
+# session gain reads as a gain, so green. it is not a rarity, it just shares the code
+GAIN = "\033[32m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
 # 256-colour grey rather than \033[90m, which themes remap and some render near-white.
@@ -122,11 +124,11 @@ def no_source_help(settings, status):
         # their setup is fine, so don't hand them configuration to re-do
         if state == "empty":
             return "\n".join([
-                "Nothing in there yet, so there's nothing to count. Write a note and it'll",
-                "show up on the next render.",
+                "That folder's empty, so there's nothing on the menu. Write a note and your",
+                "buddy eats on the next render.",
             ])
         return "\n".join([
-            "That folder isn't there, so there's nothing to count. Point it somewhere real:",
+            "That folder isn't there, so your buddy has nothing to feed on. Point it somewhere real:",
             "  /brainbuddy config vault_root ~/notes",
             "",
             "`/brainbuddy config` shows the path it's using now.",
@@ -135,8 +137,8 @@ def no_source_help(settings, status):
     # provider is claude and the directory has never existed, so this is someone
     # who hasn't kept memory at all. the only branch that earns the long version.
     return "\n".join([
-        "Your buddy's level comes from how much you've written down, and there's no",
-        "memory system here yet to count.",
+        "Buddies feed off memories, and there's nothing here to feed on yet. Your",
+        "buddy grows as your second brain does, so it needs one to eat from.",
         "",
         "Ask Claude Code to start keeping one:",
         "",
@@ -148,7 +150,7 @@ def no_source_help(settings, status):
     ])
 
 
-def segment(st, xp=None, counts=None):
+def segment(st, xp=None, counts=None, gain=0):
     """One line for the statusline. Empty string means render nothing."""
     settings = st["settings"]
     uni = unicode_ok(settings)
@@ -175,13 +177,16 @@ def segment(st, xp=None, counts=None):
         tint, mark, shiny = DIM, "", ""
     f = sprites.face(full["species"], idx, uni)
 
+    earned = (" " + paint("+%d XP" % gain, GAIN)) if gain > 0 else ""
+
     if settings.get("density") == "sprite":
         return sprite_block(full, "%s %s%s" % (full["name"], label, mark), idx, tint, settings)
     if settings.get("density") == "minimal":
+        # one glyph is the whole point of minimal, so no counter here
         return paint(sprites.glyph(idx, uni) + shiny, tint)
     if settings.get("density") == "full":
-        return "%s %s %s" % (paint(f + shiny, tint), paint(full["name"], BOLD), paint("%s %s" % (label, mark), DIM))
-    return "%s %s" % (paint(f + shiny + mark, tint), paint(label, DIM))
+        return "%s %s %s%s" % (paint(f + shiny, tint), paint(full["name"], BOLD), paint("%s %s" % (label, mark), DIM), earned)
+    return "%s %s%s" % (paint(f + shiny + mark, tint), paint(label, DIM), earned)
 
 
 
@@ -227,7 +232,7 @@ def _column_width(full, short):
     )
 
 
-def compose(st, left, xp=None, counts=None):
+def compose(st, left, xp=None, counts=None, gain=0):
     """Merge a caller's statusline text with the creature as a left column.
 
     The creature's first row shares row one with the bar, so it reads as a
@@ -262,10 +267,15 @@ def compose(st, left, xp=None, counts=None):
     # under the caller's own rows instead of hanging off the bottom of the art
     icon = EGG_ICON if uni else EGG_ICON_ASCII
     if hatched:
-        caption = "%s %s · %s Lv%d %s" % (icon, full["name"], stage, level, sprites.bar(frac, 6, uni))
+        # painted in pieces. wrapping the finished string in BOLD would end at
+        # the gain's own reset and leave the bar unbolded
+        caption = paint("%s %s · %s Lv%d" % (icon, full["name"], stage, level), BOLD)
+        if gain > 0:
+            caption += " " + paint("+%d XP" % gain, GAIN)
+        caption += " " + paint(sprites.bar(frac, 6, uni), BOLD)
     else:
         # no level and no progress bar, or the reveal is spoiled before you open it
-        caption = "%s %s · egg · /brainbuddy-hatch" % (icon, full["name"])
+        caption = paint("%s %s · egg · /brainbuddy-hatch" % (icon, full["name"]), BOLD)
 
     # pin the column to the widest form this creature will ever reach, so the text
     # beside it doesn't jump two columns the day it evolves into an Ascendant
@@ -277,9 +287,7 @@ def compose(st, left, xp=None, counts=None):
 
     # fixed-width column, so nothing here needs the terminal width
     left_lines = left.split("\n") if left else []
-    # BOLD, not DIM: this row reads as a peer of the repo name the host prints
-    # above it, and the host uses \033[1m for that
-    left_lines.append(paint(caption, BOLD))
+    left_lines.append(caption)
 
     if settings.get("border", True):
         tl, h, tr, v, bl, br = BOX_UNICODE if uni else BOX_ASCII
@@ -336,7 +344,7 @@ def _zero_note(st, xp):
         return None
     if state_mod.source_status(st["settings"])["state"] == "ok":
         return None
-    return paint("nothing to count yet. /brainbuddy doctor says what it needs", DIM)
+    return paint("going hungry. /brainbuddy doctor says what it needs", DIM)
 
 
 def egg_card(st, c):
@@ -350,7 +358,7 @@ def egg_card(st, c):
     out += [
         "",
         "  %s  %s" % (paint(c["name"], BOLD), paint("unhatched", DIM)),
-        "  " + paint("%d xp banked and counting" % c.get("xp_banked", 0), DIM),
+        "  " + paint("%d xp eaten and counting" % c.get("xp_banked", 0), DIM),
         "  " + paint("/brainbuddy-hatch to find out what it is", DIM),
     ]
     note = _zero_note(st, c.get("xp_banked", 0))

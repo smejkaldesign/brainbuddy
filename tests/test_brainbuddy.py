@@ -645,6 +645,50 @@ def test_hatch_from_zero():
             shutil.rmtree(home)
 
 
+def test_session_xp_counter():
+    """The counter is per session, so concurrent sessions can't inherit each other.
+
+    Baselining on first sight is the whole mechanism: skip it and every session
+    opens claiming credit for the entire vault. There are usually several open
+    at once here, which is why the mark is per id rather than one shared number.
+    """
+    print("\nsession xp counter")
+    os.environ["NO_COLOR"] = "1"
+    try:
+        from brainbuddy import render
+
+        st = state_mod.default_state()
+        c = _hatched(st, name="Zask")
+        c["xp_banked"] = 80
+
+        gain, is_new = state_mod.session_gain(st, "A", 80)
+        check((gain, is_new) == (0, True), "a session's first sight is +0 and records a mark")
+        check(state_mod.session_gain(st, "A", 90)[0] == 10, "then it counts what landed after that")
+
+        check(state_mod.session_gain(st, "B", 90) == (0, True), "a session opening later starts at +0")
+        check(state_mod.session_gain(st, "A", 96)[0] == 16, "A keeps counting from its own mark")
+        check(state_mod.session_gain(st, "B", 96)[0] == 6, "B counts only what it was around for")
+        check(state_mod.session_gain(st, None, 96) == (0, False), "no session id means no counter and no write")
+
+        # focus moving to a fresher creature drops banked below the mark
+        check(state_mod.session_gain(st, "A", 5) == (0, True), "a total under the mark re-baselines instead of going negative")
+
+        for i in range(state_mod.SESSION_KEEP + 4):
+            state_mod.session_gain(st, "s%d" % i, 100)
+        check(len(st["sessions"]) <= state_mod.SESSION_KEEP,
+              "the roster of marks is capped, got %d" % len(st["sessions"]))
+
+        c["xp_banked"] = 96
+        st["sessions"] = {"A": {"at": 80, "ts": 1}}
+        cap = next(r for r in render.compose(st, "BAR", xp=96, counts={}, gain=16).split("\n") if "Lv" in r)
+        check("+16 XP" in cap, "the caption carries the counter")
+        check(cap.index("Lv") < cap.index("+16 XP"), "and it sits to the right of the level")
+        quiet = next(r for r in render.compose(st, "BAR", xp=96, counts={}, gain=0).split("\n") if "Lv" in r)
+        check("XP" not in quiet, "a session that has earned nothing yet shows no counter")
+    finally:
+        os.environ.pop("NO_COLOR", None)
+
+
 if __name__ == "__main__":
     test_metric()
     test_sprite_alignment()
@@ -660,6 +704,7 @@ if __name__ == "__main__":
     test_installer_wraps_any_statusline()
     test_installer_respects_hand_wiring()
     test_hatch_from_zero()
+    test_session_xp_counter()
     print("\n%s" % ("-" * 46))
     if FAILURES:
         print("%d FAILED" % len(FAILURES))

@@ -55,4 +55,4 @@ something that fits.
 
 - **Never print a filesystem path from a memory directory.** Same rule as `/brainbuddy`.
 - Don't hatch it for them. `new` leaves an egg on purpose; opening it is `/brainbuddy-hatch`.
-- A new egg banks XP while closed, so there's no rush to hatch and no XP lost by waiting.
+- A new egg feeds while it's closed, so there's no rush to hatch and no XP lost by waiting.
