@@ -26,12 +26,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: verify tag matches package version
+      - name: verify tag matches package and plugin versions
         run: |
           PKG=$(python3 -c "import brainbuddy; print(brainbuddy.__version__)")
+          PLUGIN=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])")
           TAG="${GITHUB_REF_NAME#v}"
           if [ "$PKG" != "$TAG" ]; then
             echo "tag v$TAG does not match brainbuddy.__version__ $PKG" >&2
+            exit 1
+          fi
+          if [ "$PLUGIN" != "$TAG" ]; then
+            echo "tag v$TAG does not match plugin.json version $PLUGIN, plugin users would never see this update" >&2
             exit 1
           fi
       - run: python3 -m pip install build
