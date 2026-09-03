@@ -591,6 +591,60 @@ def test_installer_respects_hand_wiring():
             shutil.rmtree(home)
 
 
+def test_hatch_from_zero():
+    """The guided first hatch has to honour both answers, and keep honouring them.
+
+    `--from-zero` parks the high-water mark on everything already written. Get
+    that wrong in either direction and it's silent: too low re-credits the whole
+    vault on the next render, too high means new notes never count at all.
+    """
+    print("\nhatch from zero")
+    import json
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for from_zero in (False, True):
+        home = tempfile.mkdtemp(prefix="bb-zero-")
+        try:
+            notes = os.path.join(home, "notes")
+            os.makedirs(os.path.join(home, ".claude"))
+            os.makedirs(notes)
+            for i in range(40):
+                open(os.path.join(notes, "n%d.md" % i), "w").close()
+            env = dict(os.environ, HOME=home)
+            lib = os.path.join(home, ".claude", "brainbuddy", "lib")
+
+            def bb(*a):
+                return subprocess.run([sys.executable, "-m", "brainbuddy.cli"] + list(a),
+                                      env=dict(env, PYTHONPATH=lib), capture_output=True, text=True).stdout
+
+            subprocess.run(["bash", os.path.join(repo, "install.sh"), "--folder", notes],
+                           env=env, input="", capture_output=True, text=True)
+            out = bb("hatch", "--from-zero") if from_zero else bb("hatch")
+            state = json.load(open(os.path.join(home, ".claude", "brainbuddy", "state.json")))
+            banked = state["creatures"][0]["xp_banked"]
+            label = "from-zero" if from_zero else "score-existing"
+
+            if from_zero:
+                check(banked == 0, "%s: nothing already written is credited, got %d" % (label, banked))
+                check(state["high_water_xp"] == 80, "%s: the mark parks on the existing 80 xp, got %d" % (
+                    label, state["high_water_xp"]))
+                check("baselined" in out, "%s: and it says so, or the level 0 looks broken" % label)
+            else:
+                check(banked == 80, "%s: the whole vault is credited, got %d" % (label, banked))
+                check("baselined" not in out, "%s: no baseline note when nothing was baselined" % label)
+
+            # a note written after the hatch has to count either way
+            for i in range(40, 50):
+                open(os.path.join(notes, "n%d.md" % i), "w").close()
+            bb("refresh")
+            state = json.load(open(os.path.join(home, ".claude", "brainbuddy", "state.json")))
+            grew = state["creatures"][0]["xp_banked"] - banked
+            check(grew == 20, "%s: 10 new notes add 20 xp on top, got %d" % (label, grew))
+        finally:
+            shutil.rmtree(home)
+
+
 if __name__ == "__main__":
     test_metric()
     test_sprite_alignment()
@@ -605,6 +659,7 @@ if __name__ == "__main__":
     test_source_status()
     test_installer_wraps_any_statusline()
     test_installer_respects_hand_wiring()
+    test_hatch_from_zero()
     print("\n%s" % ("-" * 46))
     if FAILURES:
         print("%d FAILED" % len(FAILURES))

@@ -18,7 +18,8 @@ USAGE = """brainbuddy - a terminal pet that evolves with your memory
   compose "<text>"    your statusline text with the creature as a left column
   card                full creature card
   new [name]          lay a new egg (--replace or --add)
-  hatch               open the egg, revealing whatever level it reached
+  hatch [--from-zero] open the egg; --from-zero starts at 0 instead of scoring
+                      what you've already written
   focus <name>        choose which creature banks new xp
   list                the roster
   rename <old> <new>
@@ -144,23 +145,41 @@ def cmd_new(args):
 
 
 def cmd_hatch(args):
-    """Open the egg. Reveals whatever level it banked its way to."""
+    """Open the egg. Reveals whatever level it banked its way to.
+
+    `--from-zero` opens it at level 0 instead, baselining whatever is already
+    written so only notes from here on count.
+    """
     st = _load()
     c = state_mod.focused(st)
     if c is None:
-        print("no egg to open. `brainbuddy new` lays one.")
+        print("no egg to open. /brainbuddy-new lays one.")
         return 1
     if state_mod.is_hatched(c):
         lvl = metric.level_for(c["xp_banked"], st["settings"]["xp_max"])
-        print("%s is already out, Lv%d. `brainbuddy card` shows it." % (c["name"], lvl))
+        print("%s is already out, Lv%d. /brainbuddy shows it." % (c["name"], lvl))
         return 1
-    xp, counts = render.current_xp(st)
-    if xp:
+
+    # measure instead of reading the cache: the guided flow can set the provider
+    # seconds earlier, and a cached count would score the source it replaced
+    xp, counts = state_mod.measure_now(st["settings"])
+    state_mod.write_cache(xp, counts)
+
+    from_zero = "--from-zero" in args
+    if from_zero:
+        # park the high-water mark at everything already written, so none of it
+        # gets credited and the next note is the first thing that counts
+        st["high_water_xp"] = xp
+        c["xp_banked"] = 0
+    else:
         state_mod.sync(st, xp)
     state_mod.reveal(st)
     state_mod.save(st)
     print(render.hatch_ceremony(st, c))
-    print(render.card(st, xp=xp, counts=counts))
+    print(render.card(st, xp=0 if from_zero else xp, counts=counts))
+    if from_zero:
+        # the stats still read the live vault, so say why the level doesn't
+        print("\n  %d xp of existing notes baselined. new ones count from here." % xp)
     return 0
 
 
@@ -338,9 +357,15 @@ def cmd_doctor(args):
     for k in sorted(counts):
         print("  %-10s %d" % (k, counts[k]))
     p = metric.progress(xp, settings["xp_max"])
+    print("source xp %d -> level %d" % (xp, p["level"]))
+    # the two diverge whenever a creature was hatched --from-zero, so one line
+    # claiming to be both would be wrong for anyone who chose that
     c = state_mod.focused(st)
-    stage = p["stage"] if state_mod.is_hatched(c) else "egg"
-    print("xp %d -> level %d (%s)" % (xp, p["level"], stage))
+    if c is not None:
+        banked = c.get("xp_banked", 0)
+        bp = metric.progress(banked, settings["xp_max"])
+        stage = bp["stage"] if state_mod.is_hatched(c) else "egg"
+        print("%s banked %d -> level %d (%s)" % (c["name"], banked, bp["level"], stage))
     help_text = render.no_source_help(settings, status)
     if help_text:
         print("\n" + help_text)

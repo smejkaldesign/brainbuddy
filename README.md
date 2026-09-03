@@ -70,6 +70,21 @@ it hatches at whatever level your memory has already earned.
 
 If there's no memory system for it to count, it says that too, with what to do about it. See [Where XP comes from](#where-xp-comes-from).
 
+### The first hatch asks two questions
+
+`/brainbuddy-hatch` is a short guided setup the first time, because the two things it can't
+guess are the two that decide everything afterwards:
+
+1. **Where do your memories live?** It looks for an Obsidian vault, a notes folder and Claude
+   Code's own memory, then offers what it found with a file count each rather than asking you
+   cold. That sets `provider` and `vault_root`.
+2. **Score what's already written, or start from 0?** Scoring is the default and opens the egg
+   several forms in, which is the moment the whole design is built around. `--from-zero`
+   baselines what's there so only new notes count, for people who'd rather have the climb.
+
+Both questions are skipped on later eggs, which inherit the setup the first one established.
+Neither is asked if there's already a source configured and counting.
+
 ---
 
 ## The egg is a state, not a level
@@ -169,14 +184,15 @@ XP is a weighted count of markdown files in a memory system, so brainbuddy needs
 | `folder` | every `.md` under a directory, recursively | `config vault_root ~/notes` |
 | `vault` | a structured vault, weighted per directory | `config vault_root ~/brain` |
 
-`brainbuddy doctor` says which one is live, whether the root is actually there, and what it counted:
+`brainbuddy doctor` says which one is live, whether the root is actually there, what it counted, and what your buddy actually banked of that. Those last two diverge if you hatched with `--from-zero`:
 
 ```
 $ brainbuddy doctor
 provider: folder (folder of notes)
 root: ~/notes (found)
   notes      9
-xp 18 -> level 10 (Hatchling)
+source xp 18 -> level 10
+Zask banked 18 -> level 10 (Hatchling)
 ```
 
 A zero reading has three different causes, and `doctor` names the one you've got rather than telling everyone to check their config:
@@ -297,7 +313,7 @@ New creatures start at 0, always, because XP banks per creature rather than deri
 
 ```
 brainbuddy new [name]        lay an egg (--replace or --add, --yes to confirm)
-brainbuddy hatch             open the egg, revealing the level it earned
+brainbuddy hatch [--from-zero]  open the egg; --from-zero starts at 0 instead
 brainbuddy card              the full creature card
 brainbuddy list              the roster
 brainbuddy focus <name>      choose who banks new xp, un-retires
