@@ -75,6 +75,40 @@ def test_metric():
         shutil.rmtree(root)
 
 
+def test_sprite_alignment():
+    """Every drawn row has to sit on the same centre line.
+
+    Sage's `|___|` was a column left of its own torso for four PRs because
+    nothing measured it. Padding is what centring reduces to, so compare the
+    two sides directly instead of eyeballing the art.
+    """
+    print("\nsprite alignment")
+    from brainbuddy import sprites
+
+    bad = []
+    for short in (False, True):
+        for shiny in (False, True):
+            for species in sprites.SPECIES_LOOK:
+                for idx in range(len(sprites.STAGE_TEMPLATES)):
+                    art = sprites.sprite(species, idx, shiny, short=short)
+                    widths = {len(r) for r in art}
+                    if len(widths) != 1:
+                        bad.append("%s/%d ragged widths %s" % (species, idx, sorted(widths)))
+                    for n, r in enumerate(art):
+                        if not r.strip():
+                            continue
+                        lead, trail = len(r) - len(r.lstrip()), len(r) - len(r.rstrip())
+                        if abs(lead - trail) > 1:
+                            bad.append("%s/%d%s row %d off-centre (%d left, %d right)" % (
+                                species, idx, " short" if short else "", n, lead, trail))
+    check(not bad, "every sprite row is centred (%s)" % ("; ".join(sorted(set(bad))[:4]) or "all"))
+
+    art = sprites.sprite("Mote", 5, False)
+    check(len({len(r) for r in art}) == 1, "Ascendant rows are one width")
+    check(all(len(r) == sprites.SPRITE_WIDTH for r in sprites.sprite("Mote", 0, False)),
+          "the egg pads to the shared sprite width")
+
+
 def test_no_content_reads():
     """R2. The whole security posture rests on this one.
 
@@ -271,6 +305,7 @@ def test_state_roundtrip():
 
 if __name__ == "__main__":
     test_metric()
+    test_sprite_alignment()
     test_no_content_reads()
     test_creature()
     test_banking()
