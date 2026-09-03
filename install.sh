@@ -104,7 +104,13 @@ if [ -n "$VAULT" ]; then
   bb config vault_root "$VAULT" >/dev/null
   echo "  provider -> vault at $VAULT"
 else
-  echo "  provider -> stock Claude Code memory (~/.claude/projects/*/memory)"
+  # report what's actually configured. this used to claim stock memory on every
+  # run without --vault, including reinstalls over a vault setup it left alone
+  CURRENT_PROVIDER=$(bb config 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('provider','claude'), d.get('vault_root') or '')" 2>/dev/null || echo "claude ")
+  case "$CURRENT_PROVIDER" in
+    "vault "*) echo "  provider -> vault at ${CURRENT_PROVIDER#vault }  (unchanged)" ;;
+    *) echo "  provider -> stock Claude Code memory (~/.claude/projects/*/memory)" ;;
+  esac
 fi
 
 if [ "$WIRE" = 1 ]; then
