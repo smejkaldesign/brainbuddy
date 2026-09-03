@@ -51,10 +51,12 @@ git config core.hooksPath .githooks
 
 ## Versions and releases
 
-The version lives in `brainbuddy/__init__.py` and nowhere else. Don't bump it in a
-feature PR; note the change under `## Unreleased` in `CHANGELOG.md` instead.
+The version lives in `brainbuddy/__init__.py`, with one echo in
+`.claude-plugin/plugin.json` for the plugin cache. Don't bump either in a feature
+PR; note the change under `## Unreleased` in `CHANGELOG.md` instead.
 
-Releases are Eric's: bump `__version__`, move the changelog entries under the new
-heading, tag `vX.Y.Z`. The tag triggers `publish.yml`, which tests, checks the tag
-against `__version__`, builds, and publishes to PyPI via trusted publishing. A tag
-that doesn't match the package version fails the build on purpose.
+Releases are Eric's: bump `__version__` and the plugin.json version together, move
+the changelog entries under the new heading, tag `vX.Y.Z`. The tag triggers
+`publish.yml`, which tests, checks the tag against both versions, builds, and
+publishes to PyPI via trusted publishing. A tag that doesn't match either version
+fails the build on purpose.
