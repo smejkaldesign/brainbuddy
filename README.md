@@ -35,16 +35,30 @@ git clone <this repo> && cd brainbuddy
 /brainbuddy-hatch
 ```
 
-The installer composes with an existing statusline rather than replacing it: if `statusLine.command` already points at a script it appends a fenced block and keeps a `.pre-brainbuddy.bak`, otherwise it writes one. It lays your first egg too.
+The installer **wraps** your existing statusline rather than replacing or editing it. It points `statusLine.command` at a small generated shim, and the shim runs whatever command was there before, on the same stdin Claude Code hands it, then draws the creature to the left of that output. Your own script is never modified.
+
+That's why it works with a statusline it can't parse: `bash ~/statusline.sh`, a `~`-relative path, a one-liner, or a script that ends in `exit 0`. It keeps a `settings.json.pre-brainbuddy.bak`, and `--uninstall` puts your original command back.
 
 | Flag | What it does |
 |---|---|
-| `--vault <path>` | use a vault layout instead of stock Claude Code memory |
-| `--statusline <path>` | wire into a specific script, for project-level setups |
+| `--folder <path>` | count a folder of markdown notes (the usual case for an existing notes dir) |
+| `--vault <path>` | count a structured vault layout |
+| `--statusline <cmd>` | wrap this command instead of the one in `settings.json` |
+| `--inline` | one-line segment after your statusline instead of the boxed column |
 | `--no-wire` | install the library and commands only, wire it yourself |
-| `--uninstall` | strip the wiring back out and restore backups |
+| `--uninstall` | unwire, restore your old statusline, remove the commands |
 
-Re-running it is safe and is how you pick up new commands. It leaves an existing buddy alone.
+Re-running it is safe and is how you pick up new commands. It won't wrap itself twice and it leaves an existing buddy alone. If you installed a version before wrapping existed, re-running strips the block it appended to your script.
+
+It lays your first egg, then tells you how to open it:
+
+```
+an egg is waiting in your statusline. open it:
+  /brainbuddy-hatch
+it hatches at whatever level your memory has already earned.
+```
+
+If there's no memory system for it to count, it says that too, with what to do about it. See [Where XP comes from](#where-xp-comes-from).
 
 ---
 
@@ -135,9 +149,45 @@ All of it is a pure function of the seed, so hand-editing `state.json` can't pro
 
 ---
 
+## Where XP comes from
+
+XP is a weighted count of markdown files in a memory system, so brainbuddy needs one to point at. Three providers, set with `brainbuddy config provider <name>`:
+
+| Provider | Counts | Point it somewhere |
+|---|---|---|
+| `claude` | stock Claude Code memory, `~/.claude/projects/*/memory/*.md` | default, nothing to set |
+| `folder` | every `.md` under a directory, recursively | `config vault_root ~/notes` |
+| `vault` | a structured vault, weighted per directory | `config vault_root ~/brain` |
+
+`brainbuddy doctor` says which one is live, whether the root is actually there, and what it counted:
+
+```
+$ brainbuddy doctor
+provider: folder (folder of notes)
+root: found
+  notes      9
+xp 18 -> level 10 (Hatchling)
+```
+
+A zero reading has three different causes, and `doctor` names the one you've got rather than telling everyone to check their config:
+
+- **the root isn't there** — wrong path, or Claude Code hasn't written memory yet
+- **the root is real but empty** — nothing to do but write things down
+- **the root has markdown the provider's layout doesn't match** — pointing `vault` at a plain notes folder does this, and the fix is `provider folder`
+
+**No memory system at all?** Then there's nothing to count and your buddy sits at level 0, which is a fair reading rather than a bug. The installer and `doctor` both hand you a prompt for it:
+
+> "Set up a persistent memory system for this project: keep one markdown file per durable fact in your memory directory, an index listing them, and write to it as we work."
+
+XP follows on the next render once files start landing there.
+
+---
+
 ## How levelling works
 
 XP is a weighted count of memory artifacts. Durable facts are worth more than session logs because they cost more to produce, and generated index files are excluded so they can't inflate the count for free.
+
+`claude` counts one source at ×3, `folder` counts every note at ×2, and `vault` weights per directory:
 
 | Source | Glob | Weight | Excluded |
 |---|---|---|---|
@@ -170,7 +220,7 @@ Want it slower? `brainbuddy config xp_max 5000` triples the distance. It's your 
 
 ## Display variants
 
-`density` picks how much room it takes:
+`density` picks how much room the **inline** segment takes, so it applies to `render` and to an `--inline` install, not to the boxed column:
 
 | Mode | Looks like | Notes |
 |---|---|---|
@@ -191,7 +241,7 @@ Want it slower? `brainbuddy config xp_max 5000` triples the distance. It's your 
    height 5     height 3
 ```
 
-`compose "<text>"` is the mode the statusline shim uses, and the one in the examples up top: your own text with the creature as a **left column**, sharing row one. Left rather than right on purpose, because a fixed-width column needs no measurement.
+`compose "<text>"` is what the installed shim uses by default, and the mode in the examples up top: your own text with the creature as a **left column**, sharing row one. Left rather than right on purpose, because a fixed-width column needs no measurement. Install with `--inline` if you'd rather have the one-line segment tacked onto the end of your statusline.
 
 The column is boxed in dark grey by default. `config border false` drops the box and gets **two rows of height back**:
 
@@ -246,6 +296,7 @@ brainbuddy retire <name>     retires, keeps the record and its xp
 brainbuddy hide / show       drop it from the statusline, or bring it back
 brainbuddy config [key val]  see settings, or set one
 brainbuddy simulate <xp>     preview any level without touching real state
+brainbuddy sources           what it can count, and what to do if that's nothing
 brainbuddy doctor            what can it see, and why is it zero
 brainbuddy render            the one-line statusline segment
 brainbuddy compose "<text>"  your statusline text, creature as a left column
@@ -256,8 +307,8 @@ Five are slash commands in Claude Code, so plain language reaches them without t
 
 | Setting | Values | Default |
 |---|---|---|
-| `provider` | `claude` or `vault` | `claude` |
-| `vault_root` | path, for `provider vault` | |
+| `provider` | `claude`, `folder` or `vault` | `claude` |
+| `vault_root` | path, for `folder` and `vault` | |
 | `xp_max` | XP at level 100, the pace dial | `1500` |
 | `density` | `minimal` `compact` `full` `sprite` `ruler` | `compact` |
 | `sprite_height` | `3` or `5` | `5` |
@@ -299,9 +350,11 @@ No network calls either: no telemetry, no update check, no analytics. And it nev
 
 ## Under the hood
 
-**Two providers.** `claude` counts stock Claude Code memory under `~/.claude/projects/*/memory`; `vault` counts a layout you point at with `vault_root`. If `doctor` reports 0, it's one of those two, not a reinstall.
+**Three providers.** `claude` counts stock Claude Code memory under `~/.claude/projects/*/memory`, `folder` walks any directory for `.md`, and `vault` counts a weighted layout. See [Where XP comes from](#where-xp-comes-from). If `doctor` reports 0 it's the provider, the root, or an empty memory system, never a reinstall.
 
-**A cache, because the statusline is a hot path.** `render` reads a cached XP value and spawns the recount in the background, blocking only on a cold start.
+**The shim wraps, it doesn't edit.** `statusLine.command` points at a generated shim; your original command is saved next to it and run by it, on the same stdin. Nothing is appended to your files, so there's no case where the wiring lands somewhere unreachable and reports success. A script that already calls brainbuddy itself is detected and left alone rather than wrapped twice.
+
+**A cache, because the statusline is a hot path.** `render` reads a cached XP value and spawns the recount in the background, blocking only on a cold start. Counting the memory system is never done on that path.
 
 **The high-water mark is the anti-punishment mechanism.** New XP is credited as the delta above the highest total ever seen, so deleting notes can't take a level away, and a render before your first hatch can't burn the XP waiting for it.
 
