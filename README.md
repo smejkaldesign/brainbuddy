@@ -424,3 +424,19 @@ python3 tests/test_brainbuddy.py
 ```
 
 Synthetic fixtures in a temp directory; no real memory directory is touched.
+
+CI runs the suite on Python 3.9 through 3.13, plus a leak guard that fails the
+build if an absolute home path or a vault-shaped filename reaches the repo.
+There's a `pre-push` copy of that guard for local use, enabled with:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Stdlib only. No dependencies to install, for the tests or for the tool.
+
+---
+
+## License
+
+MIT. See [LICENSE](LICENSE).
