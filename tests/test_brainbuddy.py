@@ -421,6 +421,59 @@ def test_state_migration():
         shutil.rmtree(d)
 
 
+def test_version_check_is_explicit_only():
+    """Nothing but `update` and `doctor --check` may open a socket.
+
+    The statusline runs this code several times a second. A background update
+    check there would be indistinguishable from telemetry, so the rule is that
+    the network is only ever touched because someone asked. The guard below
+    records every socket call and then proves itself by making one on purpose.
+    """
+    print("\nversion check")
+    import subprocess
+
+    from brainbuddy import release
+
+    check(release.status_line("ok", "0.2.0", current="0.1.0").startswith("brainbuddy 0.2.0 is out"),
+          "a newer release says so, and which one")
+    check("pipx upgrade brainbuddy" in release.status_line("ok", "0.2.0", current="0.1.0"),
+          "and names both ways to take it")
+    check("latest" in release.status_line("ok", "0.1.0", current="0.1.0"), "matching versions read as current")
+    check("ahead" in release.status_line("ok", "0.1.0", current="0.2.0"), "a local build ahead of pypi says that")
+    check("isn't on pypi yet" in release.status_line("unpublished", None), "an unpublished package is calm about it")
+    check("couldn't reach pypi" in release.status_line("unreachable", None), "so is being offline")
+    check(release._parts("0.10.0") > release._parts("0.9.0"), "versions compare numerically, not as strings")
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    home = tempfile.mkdtemp(prefix="bb-offline-")
+    log = os.path.join(home, "net.log")
+    # every command the statusline can reach, plus the two that write state
+    child = (
+        "import socket, sys\n"
+        "def guard(*a, **kw):\n"
+        "    open(%r, 'a').write('called\\n')\n"
+        "    raise AssertionError('network')\n"
+        "socket.socket = guard\n"
+        "socket.create_connection = guard\n"
+        "socket.getaddrinfo = guard\n"
+        "from brainbuddy import cli\n"
+        "for argv in (['new'], ['hatch'], ['refresh'], ['render'], ['compose', 'BAR'], ['card'], ['doctor']):\n"
+        "    cli.main(argv)\n"
+        "try:\n"
+        "    socket.socket()\n"
+        "except AssertionError:\n"
+        "    pass\n"
+    ) % log
+    try:
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo)
+        r = subprocess.run([sys.executable, "-c", child], env=env, input="{}",
+                           capture_output=True, text=True)
+        check(r.returncode == 0, "the offline run finishes clean (%s)" % r.stderr.strip()[-120:])
+        calls = open(log).read().splitlines() if os.path.exists(log) else []
+        check(len(calls) == 1, "one socket call, the probe proving the guard works, got %d" % len(calls))
+    finally:
+        shutil.rmtree(home)
+
 
 
 
@@ -817,6 +870,7 @@ if __name__ == "__main__":
     test_retire_keeps_the_record()
     test_state_roundtrip()
     test_state_migration()
+    test_version_check_is_explicit_only()
     test_egg_reveals_nothing()
     test_source_status()
     test_installer_wraps_any_statusline()

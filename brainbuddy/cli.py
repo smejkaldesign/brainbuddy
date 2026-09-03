@@ -31,7 +31,11 @@ USAGE = """brainbuddy - a terminal pet that evolves with your memory
   simulate <xp>       preview any level without touching your real state
   refresh             recompute the xp cache (run in the background by render)
   sources             what it can count, and what to do if that's nothing
-  doctor              check what brainbuddy can see
+  doctor [--check]    check what brainbuddy can see; --check also asks pypi
+  update              ask pypi whether there's a newer brainbuddy
+
+update and doctor --check are the only commands that go online, and only when
+you run them. Everything else, the statusline included, is offline.
 
 provider is claude (stock Claude Code memory), vault (a structured vault) or
 folder (any directory of markdown, set vault_root to point at it).
@@ -374,7 +378,6 @@ PROVIDER_LABEL = {
     "folder": "folder of notes",
 }
 
-
 def cmd_doctor(args):
     """Report what we can see. Counts only, never a path (R12)."""
     st = _load()
@@ -405,6 +408,22 @@ def cmd_doctor(args):
     help_text = render.no_source_help(settings, status)
     if help_text:
         print("\n" + help_text)
+    if "--check" in args:
+        print("\n" + _version_check())
+    return 0
+
+
+def _version_check():
+    # imported here, not at the top: this is the one path allowed a socket, and
+    # keeping the import inside it is what proves the rest never gets one
+    from . import release
+
+    return release.check()
+
+
+def cmd_update(args):
+    """Ask pypi whether there's a newer brainbuddy. One request, then done."""
+    print(_version_check())
     return 0
 
 
@@ -452,7 +471,7 @@ COMMANDS = {
     "new": cmd_new, "hatch": cmd_hatch, "focus": cmd_focus, "list": cmd_list,
     "rename": cmd_rename, "retire": cmd_retire, "config": cmd_config,
     "simulate": cmd_simulate, "doctor": cmd_doctor, "sources": cmd_sources,
-    "hide": cmd_hide, "show": cmd_show,
+    "hide": cmd_hide, "show": cmd_show, "update": cmd_update,
 }
 
 
