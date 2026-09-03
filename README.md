@@ -12,11 +12,11 @@ It measures how much you've written down. Not how long you've used it, not a str
 ```
 
 ```
-  ___     ████░░░░░░  my-brain ⎇ main
-( > < )   Drain · Sage · Lv65 █████░
-<|///|>
- /   \
- ^   ^
+ .\|/.    ████░░░░░░  my-brain ⎇ main
+( o o )   Drain · Sage · Lv65 █████░
+/|ooo|\
+|___|
+/     \
 ```
 
 The creature is a fixed-width column on the left of whatever your statusline already prints. It needs no width measurement, so your box can be any size and the art still lands whole.
@@ -91,7 +91,7 @@ $ brainbuddy hatch
 
   the egg cracks
 
-       ___
+       _^_
      ( ' ' )
       /$$$\
        ^ ^
@@ -184,7 +184,7 @@ Deleting memories never de-levels anyone. The high-water mark only rises, becaus
 Six sprites: the egg, then five forms. The art gains detail at every step — limbs, a bracket, then flourishes.
 
 ```
-     ___             ___             ___             \|/            .\|/.          *.\|/.*
+     ___             _^_             _^_             \|/            .\|/.          *.\|/.*
     /   \          ( ' ' )         ( ' ' )         ( ' ' )         ( ' ' )        \( ' ' )/
    ( +++ )          /+++\          <|+++|>         <|+++|>         /|+++|\         /|+++|\
     \___/            ^ ^            /   \           /|_|\          |___|           =|___|=
@@ -203,7 +203,7 @@ Sprite 0 is the egg and level stages start at sprite 1. That numbering is delibe
 Eight species. The eyes and the body motif come from the species, so a Bramble is recognisable at a glance.
 
 ```
-       ___            ___            ___            ___            ___            ___            ___            ___
+       _^_            _^_            _^_            _^_            _^_            _^_            _^_            _^_
      ( o o )        ( - - )        ( ^ ^ )        ( . . )        ( o o )        ( x x )        ( ' ' )        ( > < )
      <|ooo|>        <|~~~|>        <|***|>        <|...|>        <|===|>        <|###|>        <|+++|>        <|///|>
       /   \          /   \          /   \          /   \          /   \          /   \          /   \          /   \
@@ -254,7 +254,7 @@ In `minimal` the glyph itself is the progress bar:
 `sprite_height 3` cuts the creature to three rows. It keeps the evolution beats but **drops detail**: the head-top and the feet come off.
 
 ```
-       ___           (' ')
+       _^_           (' ')
      ( ' ' )        <|+++|>
      <|+++|>         /   \
       /   \
