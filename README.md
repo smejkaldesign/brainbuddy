@@ -1,8 +1,8 @@
 # brainbuddy
 
-A terminal creature that lives in your Claude Code statusline, hatches from an egg, and evolves through five forms as your memory system grows.
+A terminal creature that lives in your Claude Code statusline, hatches from an egg, and grows on a diet of your own memories.
 
-It measures how much you've written down. Not how long you've used it, not a streak you can lose by taking a weekend off. Write more durable notes, it grows. That's the whole loop.
+Buddies feed off memories. Every durable note you write is XP, so it grows as your second brain grows, through five forms from hatchling to fully grown. Not a streak you can drop by taking a weekend off, and not a timer. Feed it or it sits there. That's the whole loop.
 
 ```
 ┌───────────┐
@@ -23,7 +23,7 @@ It measures how much you've written down. Not how long you've used it, not a str
 └───────────┘
 ```
 
-The creature is a fixed-width column on the left of whatever your statusline already prints, so your terminal can be any size and the art still lands whole. It sizes your memory by **counting files and never reading them** — see [It never opens your memories](#it-never-opens-your-memories).
+The creature is a fixed-width column on the left of whatever your statusline already prints, so your terminal can be any size and the art still lands whole. It sizes your memory by **counting files and never reading them** (see [It never opens your memories](#it-never-opens-your-memories)).
 
 ---
 
@@ -35,16 +35,68 @@ git clone <this repo> && cd brainbuddy
 /brainbuddy-hatch
 ```
 
-The installer composes with an existing statusline rather than replacing it: if `statusLine.command` already points at a script it appends a fenced block and keeps a `.pre-brainbuddy.bak`, otherwise it writes one. It lays your first egg too.
+The installer **wraps** your existing statusline rather than replacing or editing it. It points `statusLine.command` at a small generated shim, and the shim runs whatever command was there before, on the same stdin Claude Code hands it, then draws the creature to the left of that output. Your own script is never modified.
+
+That's why it works with a statusline it can't parse: `bash ~/statusline.sh`, a `~`-relative path, a one-liner, or a script that ends in `exit 0`. It keeps a `settings.json.pre-brainbuddy.bak`, and `--uninstall` puts your original command back.
 
 | Flag | What it does |
 |---|---|
-| `--vault <path>` | use a vault layout instead of stock Claude Code memory |
-| `--statusline <path>` | wire into a specific script, for project-level setups |
+| `--folder <path>` | count a folder of markdown notes (the usual case for an existing notes dir) |
+| `--vault <path>` | count a structured vault layout |
+| `--statusline <cmd>` | wrap this command instead of the one in `settings.json` |
+| `--inline` | one-line segment after your statusline instead of the boxed column |
 | `--no-wire` | install the library and commands only, wire it yourself |
-| `--uninstall` | strip the wiring back out and restore backups |
+| `--uninstall` | unwire, restore your old statusline, remove the commands |
 
-Re-running it is safe and is how you pick up new commands. It leaves an existing buddy alone.
+Re-running it is safe and is how you pick up new commands. It won't wrap itself twice and it leaves an existing buddy alone. If you installed a version before wrapping existed, re-running strips the block it appended to your script.
+
+**Project-level statuslines need one manual step.** The installer only reads and writes `~/.claude/settings.json`. If a repo sets its own `statusLine` in `<repo>/.claude/settings.json`, that wins inside the repo and the installer never sees it. Wrap it explicitly, then point the project at the shim:
+
+```bash
+./install.sh --statusline "/path/to/repo/.claude/statusline.sh"
+# then in <repo>/.claude/settings.json:
+#   "statusLine": { "type": "command", "command": "~/.claude/brainbuddy/statusline-brainbuddy.sh" }
+```
+
+`wrapped-command` is a single file, so one command gets wrapped for every repo. Pick the statusline you want everywhere.
+
+It lays your first egg, then tells you how to open it:
+
+```
+an egg is waiting in your statusline. open it:
+  /brainbuddy-hatch
+it hatches at whatever level your memory has already earned.
+```
+
+If there's no memory system for it to count, it says that too, with what to do about it. See [Where XP comes from](#where-xp-comes-from).
+
+### The first hatch asks two questions
+
+`/brainbuddy-hatch` is a short guided setup the first time, because the two things it can't
+guess are the two that decide everything afterwards:
+
+1. **Where do your memories live?** It looks for an Obsidian vault, a notes folder and Claude
+   Code's own memory, then offers what it found with a file count each rather than asking you
+   cold. That sets `provider` and `vault_root`.
+2. **Score what's already written, or start from 0?** Scoring is the default and opens the egg
+   several forms in, which is the moment the whole design is built around. `--from-zero`
+   baselines what's there so only new notes count, for people who'd rather have the climb.
+
+Both questions are skipped on later eggs, which inherit the setup the first one established.
+Neither is asked if there's already a source configured and counting.
+
+### The session counter
+
+To the right of the level, the caption shows what your buddy has eaten **in this session**:
+
+```
+🥚 Neux · Sage Lv66 +16 XP ██░░░░
+```
+
+It baselines the first time a session draws itself, so a new session opens at nothing rather
+than claiming credit for the whole vault, and it's tracked per session id because several are
+usually open at once. It stays hidden until there's something to show, so statusline width
+isn't spent on `+0 XP` all day.
 
 ---
 
@@ -85,7 +137,7 @@ $ brainbuddy hatch
   Lv0 Hatchling
 ```
 
-**Eggs bank XP while closed**, so waiting costs nothing. On a fresh install the first egg inherits the memory you already have and usually hatches several forms in rather than as a blank — install, see an egg, open it, meet something that already reflects how much you've written. A buddy added *later* with `--add` starts at 0 and does hatch as a Hatchling, because XP banks per creature.
+**Eggs bank XP while closed**, so waiting costs nothing. On a fresh install the first egg inherits the memory you already have and usually hatches several forms in rather than as a blank. Install, see an egg, open it, meet something that already reflects how much you've written. A buddy added *later* with `--add` starts at 0 and does hatch as a Hatchling, because XP banks per creature.
 
 ---
 
@@ -96,7 +148,7 @@ Six sprites: the egg, then five forms, gaining detail at every step.
 ```
      ___             _^_             _^_             \|/            .\|/.          *.\|/.*
     /   \          ( ' ' )         ( ' ' )         ( ' ' )         ( ' ' )        \( ' ' )/
-   ( +++ )          /+++\          <|+++|>         <|+++|>         /|+++|\         /|+++|\
+   ( ooo )          /+++\          <|+++|>         <|+++|>         /|+++|\         /|+++|\
     \___/            ^ ^            /   \           /|_|\           |___|          =|___|=
                                     ^   ^           ^   ^          /     \         ^     ^
 
@@ -131,13 +183,50 @@ Rarity is rolled from the seed, with a mark that carries the tier without relyin
 | Epic | 4% | `**` |
 | Legendary | 1% | `***` |
 
-All of it is a pure function of the seed, so hand-editing `state.json` can't promote a Common into a shiny Legendary — `hydrate` recomputes the bones on every load and derived values win.
+All of it is a pure function of the seed, so hand-editing `state.json` can't promote a Common into a shiny Legendary; `hydrate` recomputes the bones on every load and derived values win.
+
+---
+
+## Where XP comes from
+
+XP is a weighted count of markdown files in a memory system, so brainbuddy needs one to point at. Three providers, set with `/brainbuddy config provider <name>`:
+
+| Provider | Counts | Point it somewhere |
+|---|---|---|
+| `claude` | stock Claude Code memory, `~/.claude/projects/*/memory/*.md` | default, nothing to set |
+| `folder` | every `.md` under a directory, recursively | `config vault_root ~/notes` |
+| `vault` | a structured vault, weighted per directory | `config vault_root ~/brain` |
+
+`brainbuddy doctor` says which one is live, whether the root is actually there, what it counted, and what your buddy actually banked of that. Those last two diverge if you hatched with `--from-zero`:
+
+```
+$ brainbuddy doctor
+provider: folder (folder of notes)
+root: ~/notes (found)
+  notes      9
+source xp 18 -> level 10
+Zask banked 18 -> level 10 (Hatchling)
+```
+
+A zero reading has three different causes, and `doctor` names the one you've got rather than telling everyone to check their config:
+
+- **the root isn't there**: wrong path, or Claude Code hasn't written memory yet
+- **the root is real but empty**: nothing to do but write things down
+- **the root has markdown the provider's layout doesn't match**: pointing `vault` at a plain notes folder does this, and the fix is `provider folder`
+
+**No memory system at all?** Then there's nothing to count and your buddy sits at level 0, which is a fair reading rather than a bug. The installer and `doctor` both hand you a prompt for it:
+
+> "Set up a persistent memory system for this project: one markdown file per durable fact in your memory directory, an index listing them, and write to it as we work."
+
+XP follows on the next render once files start landing there.
 
 ---
 
 ## How levelling works
 
 XP is a weighted count of memory artifacts. Durable facts are worth more than session logs because they cost more to produce, and generated index files are excluded so they can't inflate the count for free.
+
+`claude` counts one source at ×3, `folder` counts every note at ×2, and `vault` weights per directory:
 
 | Source | Glob | Weight | Excluded |
 |---|---|---|---|
@@ -170,7 +259,7 @@ Want it slower? `brainbuddy config xp_max 5000` triples the distance. It's your 
 
 ## Display variants
 
-`density` picks how much room it takes:
+`density` picks how much room the **inline** segment takes, so it applies to `render` and to an `--inline` install, not to the boxed column:
 
 | Mode | Looks like | Notes |
 |---|---|---|
@@ -191,7 +280,7 @@ Want it slower? `brainbuddy config xp_max 5000` triples the distance. It's your 
    height 5     height 3
 ```
 
-`compose "<text>"` is the mode the statusline shim uses, and the one in the examples up top: your own text with the creature as a **left column**, sharing row one. Left rather than right on purpose, because a fixed-width column needs no measurement.
+`compose "<text>"` is what the installed shim uses by default, and the mode in the examples up top: your own text with the creature as a **left column**, sharing row one. Left rather than right on purpose, because a fixed-width column needs no measurement. Install with `--inline` if you'd rather have the one-line segment tacked onto the end of your statusline.
 
 The column is boxed in dark grey by default. `config border false` drops the box and gets **two rows of height back**:
 
@@ -227,7 +316,7 @@ $ brainbuddy list
 
 That's why `/brainbuddy-new` asks before it acts: `--replace` retires the current buddy and focuses a new egg, `--add` keeps it active and focuses a new egg.
 
-**Neither one deletes anything.** `--replace` retires, which drops it out of the active roster while keeping its banked XP; `focus <name>` brings it back. `--add` states the tradeoff and asks for `--yes`, since a new egg takes focus and the current buddy stops gaining. There's **no level requirement** — the tradeoff is identical at level 12 and level 99, so it's a decision to make rather than a gate to clear.
+**Neither one deletes anything.** `--replace` retires, which drops it out of the active roster while keeping its banked XP; `focus <name>` brings it back. `--add` states the tradeoff and asks for `--yes`, since a new egg takes focus and the current buddy stops gaining. There's **no level requirement**, since the tradeoff is identical at level 12 and level 99, so it's a decision to make rather than a gate to clear.
 
 New creatures start at 0, always, because XP banks per creature rather than deriving from your total memory size.
 
@@ -237,7 +326,7 @@ New creatures start at 0, always, because XP banks per creature rather than deri
 
 ```
 brainbuddy new [name]        lay an egg (--replace or --add, --yes to confirm)
-brainbuddy hatch             open the egg, revealing the level it earned
+brainbuddy hatch [--from-zero]  open the egg; --from-zero starts at 0 instead
 brainbuddy card              the full creature card
 brainbuddy list              the roster
 brainbuddy focus <name>      choose who banks new xp, un-retires
@@ -246,6 +335,7 @@ brainbuddy retire <name>     retires, keeps the record and its xp
 brainbuddy hide / show       drop it from the statusline, or bring it back
 brainbuddy config [key val]  see settings, or set one
 brainbuddy simulate <xp>     preview any level without touching real state
+brainbuddy sources           what it can count, and what to do if that's nothing
 brainbuddy doctor            what can it see, and why is it zero
 brainbuddy render            the one-line statusline segment
 brainbuddy compose "<text>"  your statusline text, creature as a left column
@@ -254,10 +344,18 @@ brainbuddy refresh           recompute the xp cache
 
 Five are slash commands in Claude Code, so plain language reaches them without the CLI: `/brainbuddy`, `/brainbuddy-new`, `/brainbuddy-hatch`, `/brainbuddy-hide`, `/brainbuddy-show`.
 
+There's no `brainbuddy` on your PATH: the library is imported by the statusline, not installed as a binary. The five slash commands above reach everything you'd normally want. For the rest, alias it:
+
+```bash
+alias brainbuddy='PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli'
+```
+
+The `brainbuddy ...` examples in this README assume that alias.
+
 | Setting | Values | Default |
 |---|---|---|
-| `provider` | `claude` or `vault` | `claude` |
-| `vault_root` | path, for `provider vault` | |
+| `provider` | `claude`, `folder` or `vault` | `claude` |
+| `vault_root` | path, for `folder` and `vault` | |
 | `xp_max` | XP at level 100, the pace dial | `1500` |
 | `density` | `minimal` `compact` `full` `sprite` `ruler` | `compact` |
 | `sprite_height` | `3` or `5` | `5` |
@@ -291,7 +389,7 @@ Only two steps need you: hatching the egg, and eventually starting another. Leve
 
 brainbuddy sizes your memory system by **counting files**. `glob` and `stat`, and that's all: it never calls `open()`, never reads a byte of content, never parses frontmatter. That isn't a promise about what it does with your data, it's a statement that it never has your data.
 
-Two tests enforce it — a runtime trap that patches every file-reading builtin and asserts none fire during a measurement, and a static pass that tokenizes `metric.py` and fails if a reader appears in the code at all.
+Two tests enforce it: a runtime trap that patches every file-reading builtin and asserts none fire during a measurement, and a static pass that tokenizes `metric.py` and fails if a reader appears in the code at all.
 
 No network calls either: no telemetry, no update check, no analytics. And it never prints a path it matched, in any mode including `doctor`, because filenames alone leak more than people expect.
 
@@ -299,13 +397,15 @@ No network calls either: no telemetry, no update check, no analytics. And it nev
 
 ## Under the hood
 
-**Two providers.** `claude` counts stock Claude Code memory under `~/.claude/projects/*/memory`; `vault` counts a layout you point at with `vault_root`. If `doctor` reports 0, it's one of those two, not a reinstall.
+**Three providers.** `claude` counts stock Claude Code memory under `~/.claude/projects/*/memory`, `folder` walks any directory for `.md`, and `vault` counts a weighted layout. See [Where XP comes from](#where-xp-comes-from). If `doctor` reports 0 it's the provider, the root, or an empty memory system, never a reinstall.
 
-**A cache, because the statusline is a hot path.** `render` reads a cached XP value and spawns the recount in the background, blocking only on a cold start.
+**The shim wraps, it doesn't edit.** `statusLine.command` points at a generated shim; your original command is saved next to it and run by it, on the same stdin. Nothing is appended to your files, so there's no case where the wiring lands somewhere unreachable and reports success. A script that already calls brainbuddy itself is detected and left alone rather than wrapped twice.
+
+**A cache, because the statusline is a hot path.** `render` reads a cached XP value and spawns the recount in the background, blocking only on a cold start. Counting the memory system is never done on that path.
 
 **The high-water mark is the anti-punishment mechanism.** New XP is credited as the delta above the highest total ever seen, so deleting notes can't take a level away, and a render before your first hatch can't burn the XP waiting for it.
 
-**State lives at `~/.claude/brainbuddy/`** — the roster, settings, and the XP cache.
+**State lives at `~/.claude/brainbuddy/`** holds the roster, settings, and the XP cache.
 
 ---
 

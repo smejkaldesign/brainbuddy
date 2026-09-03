@@ -43,20 +43,27 @@ CLAUDE_SOURCES = [
     {"key": "memories", "glob": "*/memory/*.md", "weight": 3, "exclude": ["MEMORY.md", "index.md"]},
 ]
 
+# the vault layout keys off directory names, so it counts zero on anyone else's notes
+FOLDER_SOURCES = [
+    {"key": "notes", "glob": "**/*.md", "weight": 2, "exclude": ["MEMORY.md", "index.md", "README.md"]},
+]
+
+PROVIDERS = ("claude", "vault", "folder")
+
 
 def default_claude_root():
     return os.path.expanduser("~/.claude/projects")
 
 
 def count_source(root, source):
-    """Count matching files. Resolves realpaths so a symlinked memory dir
-    (eric-brain points ~/.claude/... back into the repo) can't be counted twice
-    when two globs reach the same file by different routes.
+    """Count matching files. Resolves realpaths so a symlinked memory dir can't
+    be counted twice when two globs reach the same file by different routes.
     """
     exclude = set(source.get("exclude", []))
     seen = set()
     pattern = os.path.join(root, source["glob"])
-    for path in glob.iglob(pattern):
+    # glob skips dotted dirs itself, so ** doesn't wander into .git
+    for path in glob.iglob(pattern, recursive=True):
         if os.path.basename(path) in exclude:
             continue
         try:

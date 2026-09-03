@@ -1,5 +1,5 @@
 #!/bin/bash
-# brainbuddy installer. composes with an existing statusline, never replaces it.
+# brainbuddy installer. wraps an existing statusline, never replaces it.
 set -euo pipefail
 
 usage() {
@@ -7,29 +7,44 @@ usage() {
 brainbuddy installer
 
   ./install.sh                     install and wire up the statusline
-  ./install.sh --vault <path>      use a vault layout instead of stock Claude Code memory
-  ./install.sh --statusline <path> wire into a specific script (project-level setups)
+  ./install.sh --folder <path>     count a folder of markdown notes
+  ./install.sh --vault <path>      use a structured vault layout
+  ./install.sh --statusline <cmd>  wrap this command instead of settings.json's
+  ./install.sh --inline            one-line segment instead of the boxed column
   ./install.sh --no-wire           install the library only, wire it yourself
-  ./install.sh --uninstall         remove the wiring and restore backups
+  ./install.sh --uninstall         unwire and restore your old statusline
 EOF
 }
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB="$HOME/.claude/brainbuddy/lib"
+HOMEDIR="$HOME/.claude/brainbuddy"
+LIB="$HOMEDIR/lib"
 CMDS="$HOME/.claude/commands"
 SETTINGS="$HOME/.claude/settings.json"
-SHIM="$HOME/.claude/brainbuddy/statusline-brainbuddy.sh"
+SHIM="$HOMEDIR/statusline-brainbuddy.sh"
+WRAPPED="$HOMEDIR/wrapped-command"
 BEGIN="# >>> brainbuddy >>>"
 END="# <<< brainbuddy <<<"
+COMMAND_NAMES="brainbuddy brainbuddy-hide brainbuddy-show brainbuddy-new brainbuddy-hatch"
 VAULT=""
+FOLDER=""
 WIRE=1
+INLINE=0
 MODE=install
 STATUSLINE=""
 
+# shift 2 with nothing to shift trips set -e, so a missing value used to exit 1
+# with no output at all
+need_value() {
+  if [ -z "${2:-}" ]; then echo "$1 needs a value"; usage; exit 1; fi
+}
+
 while [ $# -gt 0 ]; do
   case "$1" in
-    --vault) VAULT="${2:-}"; shift 2 ;;
-    --statusline) STATUSLINE="${2:-}"; shift 2 ;;
+    --vault) need_value --vault "${2:-}"; VAULT="$2"; shift 2 ;;
+    --folder) need_value --folder "${2:-}"; FOLDER="$2"; shift 2 ;;
+    --statusline) need_value --statusline "${2:-}"; STATUSLINE="$2"; shift 2 ;;
+    --inline) INLINE=1; shift ;;
     --no-wire) WIRE=0; shift ;;
     --uninstall) MODE=uninstall; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -39,7 +54,7 @@ done
 
 command -v python3 >/dev/null 2>&1 || { echo "python3 not found. brainbuddy needs it."; exit 1; }
 
-resolve_statusline() {
+read_statusline() {
   python3 - "$SETTINGS" <<'PY'
 import json, sys
 try:
@@ -50,17 +65,120 @@ except Exception:
 PY
 }
 
-if [ "$MODE" = uninstall ]; then
-  if [ -n "$STATUSLINE" ]; then
-    TARGET="$STATUSLINE"
+write_statusline() {
+  # $1 = command, or empty to drop the key entirely
+  python3 - "$SETTINGS" "$1" <<'PY'
+import json, os, shutil, sys
+path, command = sys.argv[1], sys.argv[2]
+data = {}
+if os.path.exists(path):
+    # raw bytes, before parsing. a backup of the parse result is worthless
+    # exactly when you need it
+    backup = path + ".pre-brainbuddy.bak"
+    if not os.path.exists(backup):
+        shutil.copyfile(path, backup)
+    with open(path) as f:
+        try:
+            data = json.load(f)
+        except ValueError:
+            sys.stderr.write("settings.json isn't valid JSON, so nothing was changed. fix it and re-run.\n")
+            raise SystemExit(1)
+# mutate rather than replace, or siblings like padding get dropped
+line = data.get("statusLine")
+if not isinstance(line, dict):
+    line = {}
+if command:
+    line.setdefault("type", "command")
+    line["command"] = command
+    data["statusLine"] = line
+else:
+    data.pop("statusLine", None)
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+PY
+}
+
+target_path_of() {
+  local cmd="$1" cand
+  # the script can be the whole string, the first word or the last. ~ expands by
+  # substitution, since `eval echo` would run substitutions from the user's config.
+  for cand in "$cmd" "${cmd%% *}" "${cmd##* }"; do
+    cand="${cand/#\~/$HOME}"
+    if [ -n "$cand" ] && [ -f "$cand" ]; then echo "$cand"; return 0; fi
+  done
+  echo ""
+}
+
+# none | ours | modified. ours comes out or the creature renders twice; an edited
+# one is their code.
+classify_target() {
+  local target="$1"
+  if [ -z "$target" ] || [ ! -f "$target" ]; then echo none; return 0; fi
+  python3 - "$target" "$BEGIN" "$END" <<'PY'
+import sys
+path, begin, end = sys.argv[1], sys.argv[2], sys.argv[3]
+GENERATED = ['printf " "', '"$HOME/.claude/brainbuddy/statusline-brainbuddy.sh"']
+try:
+    with open(path) as f:
+        lines = [line.rstrip("\n") for line in f]
+except OSError:
+    print("none")
+    raise SystemExit
+inner, inside, fenced = [], False, False
+for line in lines:
+    s = line.strip()
+    if s == begin:
+        inside, fenced = True, True
+        continue
+    if s == end:
+        inside = False
+        continue
+    if inside and s:
+        inner.append(s)
+if fenced:
+    print("ours" if inner == GENERATED else "modified")
+elif any("brainbuddy.cli" in line for line in lines):
+    print("modified")
+else:
+    print("none")
+PY
+}
+
+# bash -c not sh -c, since the wrapped string is whatever was in
+# statusLine.command and may lean on bash, which isn't sh everywhere.
+write_shim() {
+  # one prologue for both modes, or a bug in it has two places to live
+  cat > "$SHIM" <<'EOF'
+#!/bin/bash
+# generated by the brainbuddy installer. safe to delete, reinstalling restores it.
+# already inside our own wrap, so the thing we'd run next is us. that forks forever.
+if [ -n "${BRAINBUDDY_WRAPPING:-}" ]; then exit 0; fi
+export BRAINBUDDY_WRAPPING=1
+INPUT="$(cat)"
+LEFT=""
+if [ -s "$HOME/.claude/brainbuddy/wrapped-command" ]; then
+  LEFT="$(printf '%s' "$INPUT" | bash -c "$(cat "$HOME/.claude/brainbuddy/wrapped-command")" 2>/dev/null)"
+fi
+EOF
+  if [ "$INLINE" = 1 ]; then
+    cat >> "$SHIM" <<'EOF'
+printf '%s' "$LEFT"
+if [ -n "$LEFT" ]; then printf ' '; fi
+printf '%s' "$INPUT" | PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli render 2>/dev/null || true
+EOF
   else
-    EXISTING="$(resolve_statusline)"
-    TARGET="${EXISTING%% *}"
+    cat >> "$SHIM" <<'EOF'
+printf '%s' "$INPUT" | PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli compose "$LEFT" 2>/dev/null || printf '%s' "$LEFT"
+EOF
   fi
-  # Strip our block out of a script we appended to, rather than restoring a
-  # backup wholesale. The user may have edited the rest of the file since.
-  if [ -n "$TARGET" ] && [ -f "$TARGET" ] && grep -q "$BEGIN" "$TARGET" 2>/dev/null; then
-    python3 - "$TARGET" "$BEGIN" "$END" <<'PY'
+  chmod +x "$SHIM"
+}
+
+strip_legacy_block() {
+  local target="$1"
+  python3 - "$target" "$BEGIN" "$END" <<'PY'
 import sys
 path, begin, end = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(path) as f:
@@ -73,95 +191,140 @@ for line in lines:
 with open(path, "w") as f:
     f.writelines(out)
 PY
-    echo "removed the brainbuddy block from your statusline"
+  echo "  removed the old brainbuddy block from $(basename "$target")"
+}
+
+if [ "$MODE" = uninstall ]; then
+  PREVIOUS=""
+  if [ -s "$WRAPPED" ]; then PREVIOUS="$(cat "$WRAPPED")"; fi
+  CURRENT="$(read_statusline)"
+  if [ "$CURRENT" = "$SHIM" ]; then
+    write_statusline "$PREVIOUS"
+    if [ -n "$PREVIOUS" ]; then
+      echo "restored your previous statusline"
+    else
+      echo "removed the statusline entry we added"
+    fi
   fi
-  rm -rf "$LIB" "$SHIM" "$CMDS/brainbuddy.md"
-  echo "uninstalled. state kept at ~/.claude/brainbuddy/state.json (delete it yourself if you want a clean slate)"
+  # our own shim always contains a brainbuddy call, so classifying it would
+  # accuse the user of editing a file we generated. look at what it wrapped.
+  if [ "$CURRENT" = "$SHIM" ]; then LEGACY="$(target_path_of "$PREVIOUS")"; else LEGACY="$(target_path_of "$CURRENT")"; fi
+  case "$(classify_target "$LEGACY")" in
+    ours) strip_legacy_block "$LEGACY" ;;
+    modified) echo "left $(basename "$LEGACY") alone, you've edited the brainbuddy block in it" ;;
+  esac
+  rm -rf "$LIB" "$SHIM" "$WRAPPED"
+  for cmd in $COMMAND_NAMES; do rm -f "$CMDS/$cmd.md"; done
+  echo "uninstalled. state kept at ~/.claude/brainbuddy/state.json (delete it yourself for a clean slate)"
   exit 0
 fi
 
 echo "installing brainbuddy"
-mkdir -p "$LIB" "$CMDS" "$HOME/.claude/brainbuddy"
+mkdir -p "$LIB" "$CMDS" "$HOMEDIR"
 rm -rf "$LIB/brainbuddy"
 cp -R "$SRC/brainbuddy" "$LIB/brainbuddy"
-for cmd in brainbuddy brainbuddy-hide brainbuddy-show brainbuddy-new brainbuddy-hatch; do
-  [ -f "$SRC/commands/$cmd.md" ] && cp "$SRC/commands/$cmd.md" "$CMDS/$cmd.md"
+# don't ship the dev machine's bytecode
+find "$LIB/brainbuddy" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
+for cmd in $COMMAND_NAMES; do
+  if [ -f "$SRC/commands/$cmd.md" ]; then cp "$SRC/commands/$cmd.md" "$CMDS/$cmd.md"; fi
 done
-echo "  library  -> $LIB"
-echo "  commands -> $CMDS  (/brainbuddy, -new, -hatch, -hide, -show)"
+# ~ rather than the expanded path, so a screenshot of this carries no username
+echo "  library  -> ${LIB/#$HOME/~}"
+echo "  commands -> ${CMDS/#$HOME/~}  (/brainbuddy, -new, -hatch, -hide, -show)"
 
-cat > "$SHIM" <<'EOF'
-#!/bin/bash
-# generated by the brainbuddy installer. safe to delete, reinstalling restores it.
-PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli render 2>/dev/null || true
-EOF
-chmod +x "$SHIM"
+# always, even under --no-wire: self-wirers point their own script at it
+write_shim
 
 bb() { PYTHONPATH="$LIB" python3 -m brainbuddy.cli "$@"; }
 
-if [ -n "$VAULT" ]; then
+if [ -n "$FOLDER" ]; then
+  bb config provider folder >/dev/null
+  bb config vault_root "$FOLDER" >/dev/null
+  # a typo'd path otherwise reads as a working setup here and only surfaces
+  # further down, after we've promised the egg will have earned a level
+  if [ -d "${FOLDER/#\~/$HOME}" ]; then TYPO=""; else TYPO="  (not there yet)"; fi
+  echo "  provider -> folder of notes at $FOLDER$TYPO"
+elif [ -n "$VAULT" ]; then
   bb config provider vault >/dev/null
   bb config vault_root "$VAULT" >/dev/null
-  echo "  provider -> vault at $VAULT"
+  if [ -d "${VAULT/#\~/$HOME}" ]; then TYPO=""; else TYPO="  (not there yet)"; fi
+  echo "  provider -> vault at $VAULT$TYPO"
 else
   # report what's actually configured. this used to claim stock memory on every
   # run without --vault, including reinstalls over a vault setup it left alone
   CURRENT_PROVIDER=$(bb config 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('provider','claude'), d.get('vault_root') or '')" 2>/dev/null || echo "claude ")
   case "$CURRENT_PROVIDER" in
     "vault "*) echo "  provider -> vault at ${CURRENT_PROVIDER#vault }  (unchanged)" ;;
+    "folder "*) echo "  provider -> folder of notes at ${CURRENT_PROVIDER#folder }  (unchanged)" ;;
     *) echo "  provider -> stock Claude Code memory (~/.claude/projects/*/memory)" ;;
   esac
 fi
 
 if [ "$WIRE" = 1 ]; then
   if [ -n "$STATUSLINE" ]; then
-    EXISTING="$STATUSLINE"; TARGET="$STATUSLINE"
+    EXISTING="$STATUSLINE"
   else
-    EXISTING="$(resolve_statusline)"; TARGET="${EXISTING%% *}"
+    EXISTING="$(read_statusline)"
   fi
-  if [ "$TARGET" = "$SHIM" ]; then
-    # already the statusline. appending here would make the shim call itself
-    echo "  statusline already points at brainbuddy, nothing to wire"
-  elif [ -n "$TARGET" ] && [ -f "$TARGET" ] && head -1 "$TARGET" | grep -q '^#!'; then
-    if grep -q "$BEGIN" "$TARGET" 2>/dev/null; then
-      echo "  statusline already wired, leaving it alone"
+
+  # re-installing over ourselves, so keep what we wrapped last time
+  if [ "$EXISTING" = "$SHIM" ]; then
+    EXISTING=""
+    if [ -s "$WRAPPED" ]; then EXISTING="$(cat "$WRAPPED")"; fi
+  fi
+
+  HANDWIRED=""
+  TARGET="$(target_path_of "$EXISTING")"
+  case "$(classify_target "$TARGET")" in
+    ours) strip_legacy_block "$TARGET" ;;
+    modified) HANDWIRED="$TARGET" ;;
+  esac
+fi
+
+if [ "$WIRE" = 1 ] && [ -n "${HANDWIRED:-}" ]; then
+  echo "  ! $(basename "$HANDWIRED") calls brainbuddy itself, so wrapping it would draw two creatures"
+  echo "    leaving your wiring and settings.json alone, library updated in place."
+  echo "    to hand the wiring over, drop the brainbuddy lines from that script and re-run"
+  WIRE=0
+fi
+
+if [ "$WIRE" = 1 ]; then
+  if [ -n "$EXISTING" ]; then
+    printf '%s' "$EXISTING" > "$WRAPPED"
+    if [ "$INLINE" = 1 ]; then
+      WIRED="  statusline -> wrapping your existing one, creature as a segment after it"
     else
-      cp "$TARGET" "$TARGET.pre-brainbuddy.bak"
-      # $HOME rather than the expanded path, since statusline scripts get committed
-      printf '\n%s\nprintf " "\n%s\n%s\n' "$BEGIN" '"$HOME/.claude/brainbuddy/statusline-brainbuddy.sh"' "$END" >> "$TARGET"
-      echo "  statusline -> appended to $(basename "$TARGET") (backup: $(basename "$TARGET").pre-brainbuddy.bak)"
+      WIRED="  statusline -> wrapping your existing one, creature on the left"
     fi
-  elif [ -n "$EXISTING" ]; then
-    echo "  ! your statusline is a plain command, not a script:"
-    echo "      $EXISTING"
-    echo "    add this after it yourself, or point statusLine.command at a script:"
-    echo "      $SHIM"
   else
-    python3 - "$SETTINGS" "$SHIM" <<'PY'
-import json, os, sys
-path, shim = sys.argv[1], sys.argv[2]
-data = {}
-if os.path.exists(path):
-    with open(path) as f:
-        try: data = json.load(f)
-        except ValueError: data = {}
-    os.replace(path, path + ".pre-brainbuddy.bak")
-data["statusLine"] = {"type": "command", "command": shim}
-os.makedirs(os.path.dirname(path), exist_ok=True)
-with open(path, "w") as f:
-    json.dump(data, f, indent=2)
-PY
-    echo "  statusline -> set in settings.json"
+    : > "$WRAPPED"
+    WIRED="  statusline -> set in settings.json"
   fi
+
+  # after the write, not before, so a refusal doesn't get announced as a success
+  write_statusline "$SHIM"
+  echo "$WIRED"
 fi
 
 echo
+# `sources` exits nonzero when there's nothing to count
+SOURCE_HELP=""
+if bb sources >/dev/null 2>&1; then HAS_SOURCE=1; else HAS_SOURCE=0; SOURCE_HELP="$(bb sources 2>/dev/null || true)"; fi
+
 # lay the first egg so the zero state is an egg rather than nothing at all.
 # `new` exits 1 when a buddy exists, which is the re-install path: leave it be
-if bb new >/dev/null 2>&1; then
-  echo "an egg is waiting in your statusline. open it:"
+if ! bb new >/dev/null 2>&1; then bb list; echo; fi
+
+# prompt off the roster, not off whether we just laid it, or a reinstall never
+# re-offers the one action the user still has to take
+if bb list 2>/dev/null | grep -q '^\*.*unhatched'; then
+  echo "there's an egg in your statusline, and it's hungry. open it:"
   echo "  /brainbuddy-hatch"
-  echo "it hatches at whatever level your memory has already earned."
-else
-  bb list
+  if [ "$HAS_SOURCE" = 1 ]; then
+    echo "it hatches at whatever level your memories have already fed it."
+  else
+    echo "it'll open at level 0 for now, and grow once there are memories to feed on."
+  fi
 fi
+
+if [ -n "$SOURCE_HELP" ]; then echo; echo "$SOURCE_HELP"; fi

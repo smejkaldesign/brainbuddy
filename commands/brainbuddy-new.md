@@ -34,9 +34,12 @@ and people brace for losing their level.
 
 ## Add warns first, on purpose
 
-`--add` refuses below level 100 and prints why: a new egg starts at 0 and takes focus, so the
-current buddy holds its level and stops gaining. Relay that, get a yes, then re-run with
+`--add` always asks first, at any level, and prints why: a new egg starts at 0 and takes focus,
+so the current buddy holds its level and stops gaining. Relay that, get a yes, then re-run with
 `--yes`. Don't add `--yes` pre-emptively; the refusal is the confirmation step.
+
+There's no level threshold. The tradeoff is identical at level 12 and level 99, so don't tell
+anyone they have to reach 100 first.
 
 ## Naming
 
@@ -52,4 +55,4 @@ something that fits.
 
 - **Never print a filesystem path from a memory directory.** Same rule as `/brainbuddy`.
 - Don't hatch it for them. `new` leaves an egg on purpose; opening it is `/brainbuddy-hatch`.
-- A new egg banks XP while closed, so there's no rush to hatch and no XP lost by waiting.
+- A new egg feeds while it's closed, so there's no rush to hatch and no XP lost by waiting.

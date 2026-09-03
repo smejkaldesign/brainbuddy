@@ -18,7 +18,8 @@ USAGE = """brainbuddy - a terminal pet that evolves with your memory
   compose "<text>"    your statusline text with the creature as a left column
   card                full creature card
   new [name]          lay a new egg (--replace or --add)
-  hatch               open the egg, revealing whatever level it reached
+  hatch [--from-zero] open the egg; --from-zero starts at 0 instead of scoring
+                      what you've already written
   focus <name>        choose which creature banks new xp
   list                the roster
   rename <old> <new>
@@ -28,7 +29,11 @@ USAGE = """brainbuddy - a terminal pet that evolves with your memory
   hide / show         drop the creature from the statusline, or bring it back
   simulate <xp>       preview any level without touching your real state
   refresh             recompute the xp cache (run in the background by render)
+  sources             what it can count, and what to do if that's nothing
   doctor              check what brainbuddy can see
+
+provider is claude (stock Claude Code memory), vault (a structured vault) or
+folder (any directory of markdown, set vault_root to point at it).
 """
 
 
@@ -36,17 +41,49 @@ def _load():
     return state_mod.load()
 
 
+def _stdin_text():
+    """Whatever the statusline piped us, or "" when a human is at the keyboard.
+
+    isatty, or `brainbuddy compose "text"` typed by hand would sit there waiting
+    for a statusline payload that is never coming.
+    """
+    try:
+        if sys.stdin.isatty():
+            return ""
+        return sys.stdin.read()
+    except Exception:
+        return ""
+
+
+def _session_id(raw):
+    """Claude Code's statusline JSON carries the session id. Only that is read."""
+    try:
+        return json.loads(raw).get("session_id") or None
+    except (ValueError, AttributeError):
+        return None
+
+
+def _bank(st, session_id):
+    """Credit new xp, then work out what this session is responsible for."""
+    xp, counts = render.current_xp(st, allow_blocking=False)
+    dirty = False
+    if xp and state_mod.sync(st, xp):
+        dirty = True
+    c = state_mod.focused(st)
+    gain, is_new = state_mod.session_gain(st, session_id, c.get("xp_banked", 0) if c else 0)
+    if dirty or is_new:
+        state_mod.save(st)
+    return xp, counts, gain
+
+
 def cmd_render(args):
     try:
+        session = _session_id(_stdin_text())
         st = _load()
         if st["settings"].get("hidden"):
             return 0
-        xp, counts = render.current_xp(st, allow_blocking=False)
-        if xp:
-            event = state_mod.sync(st, xp)
-            if event:
-                state_mod.save(st)
-        line = render.segment(st, xp, counts)
+        xp, counts, gain = _bank(st, session)
+        line = render.segment(st, xp, counts, gain=gain)
         if line:
             sys.stdout.write(line)
     except Exception:
@@ -56,21 +93,23 @@ def cmd_render(args):
 
 def cmd_compose(args):
     """Merge caller-supplied statusline text with the creature as a left column."""
+    left = args[0] if args else ""
     try:
-        left = args[0] if args else sys.stdin.read().rstrip("\n")
+        raw = _stdin_text()
+        # the statusline passes its text as an argument and its json on stdin.
+        # piping the text instead still works, it just has no session to count.
+        session = _session_id(raw) if args else None
+        if not args:
+            left = raw.rstrip("\n")
         st = _load()
         # hidden means the caller's bar passes through untouched, xp still banks on the next visible run
         if st["settings"].get("hidden"):
             sys.stdout.write(left)
             return 0
-        xp, counts = render.current_xp(st, allow_blocking=False)
-        if xp:
-            event = state_mod.sync(st, xp)
-            if event:
-                state_mod.save(st)
-        sys.stdout.write(render.compose(st, left, xp, counts))
+        xp, counts, gain = _bank(st, session)
+        sys.stdout.write(render.compose(st, left, xp, counts, gain=gain))
     except Exception:
-        sys.stdout.write(args[0] if args else "")
+        sys.stdout.write(left)
     return 0
 
 
@@ -140,23 +179,41 @@ def cmd_new(args):
 
 
 def cmd_hatch(args):
-    """Open the egg. Reveals whatever level it banked its way to."""
+    """Open the egg. Reveals whatever level it banked its way to.
+
+    `--from-zero` opens it at level 0 instead, baselining whatever is already
+    written so only notes from here on count.
+    """
     st = _load()
     c = state_mod.focused(st)
     if c is None:
-        print("no egg to open. `brainbuddy new` lays one.")
+        print("no egg to open. /brainbuddy-new lays one.")
         return 1
     if state_mod.is_hatched(c):
         lvl = metric.level_for(c["xp_banked"], st["settings"]["xp_max"])
-        print("%s is already out, Lv%d. `brainbuddy card` shows it." % (c["name"], lvl))
+        print("%s is already out, Lv%d. /brainbuddy shows it." % (c["name"], lvl))
         return 1
-    xp, counts = render.current_xp(st)
-    if xp:
+
+    # measure instead of reading the cache: the guided flow can set the provider
+    # seconds earlier, and a cached count would score the source it replaced
+    xp, counts = state_mod.measure_now(st["settings"])
+    state_mod.write_cache(xp, counts)
+
+    from_zero = "--from-zero" in args
+    if from_zero:
+        # park the high-water mark at everything already written, so none of it
+        # gets credited and the next note is the first thing that counts
+        st["high_water_xp"] = xp
+        c["xp_banked"] = 0
+    else:
         state_mod.sync(st, xp)
     state_mod.reveal(st)
     state_mod.save(st)
     print(render.hatch_ceremony(st, c))
-    print(render.card(st, xp=xp, counts=counts))
+    print(render.card(st, xp=0 if from_zero else xp, counts=counts))
+    if from_zero:
+        # the stats still read the live vault, so say why the level doesn't
+        print("\n  %d xp of existing notes baselined. new ones count from here." % xp)
     return 0
 
 
@@ -260,6 +317,21 @@ def cmd_config(args):
             print("density must be compact, minimal, full, sprite or ruler")
             return 1
         value = raw
+    elif key == "provider":
+        if raw not in metric.PROVIDERS:
+            print("provider must be one of: %s" % ", ".join(metric.PROVIDERS))
+            return 1
+        value = raw
+    elif key == "vault_root":
+        # a relative path would resolve against whatever directory the statusline
+        # happens to run in, so it reads as a missing root from anywhere else
+        value = raw if raw.startswith("~") else os.path.abspath(os.path.expanduser(raw))
+        if not os.path.isdir(os.path.expanduser(value)):
+            print("warning: that folder isn't there yet, so nothing will be counted")
+    elif key == "weights":
+        # a bare string here used to reach metric.measure and crash every read
+        print("weights isn't settable from the CLI, edit state.json")
+        return 1
     elif key == "sprite_height":
         value = 3 if int(raw) <= 3 else 5
     elif key == "columns":
@@ -295,18 +367,60 @@ def cmd_simulate(args):
     return 0
 
 
+PROVIDER_LABEL = {
+    "claude": "stock Claude Code memory",
+    "vault": "vault layout",
+    "folder": "folder of notes",
+}
+
+
 def cmd_doctor(args):
     """Report what we can see. Counts only, never a path (R12)."""
     st = _load()
-    xp, counts = state_mod.measure_now(st["settings"])
-    print("provider: %s" % st["settings"]["provider"])
-    print("configured root: %s" % ("set" if (st["settings"]["provider"] != "vault" or st["settings"]["vault_root"]) else "MISSING"))
+    settings = st["settings"]
+    status = state_mod.source_status(settings)
+    xp, counts = status["xp"], status["counts"]
+    print("provider: %s (%s)" % (settings["provider"], PROVIDER_LABEL.get(settings["provider"], "unknown")))
+    # the root the user typed, home-relative. R12 covers the memory files we match,
+    # and "why is it zero" can't be answered without this
+    root = state_mod.sources_for(settings)[0]
+    home = os.path.expanduser("~")
+    if root.startswith(home):
+        root = "~" + root[len(home):]
+    print("root: %s (%s)" % (root, "missing" if status["state"] == "missing_root" else "found"))
     for k in sorted(counts):
         print("  %-10s %d" % (k, counts[k]))
-    p = metric.progress(xp, st["settings"]["xp_max"])
-    print("xp %d -> level %d (%s)" % (xp, p["level"], p["stage"]))
-    if xp == 0:
-        print("\nnothing found. check: brainbuddy config provider / vault_root")
+    p = metric.progress(xp, settings["xp_max"])
+    print("source xp %d -> level %d" % (xp, p["level"]))
+    # the two diverge whenever a creature was hatched --from-zero, so one line
+    # claiming to be both would be wrong for anyone who chose that
+    c = state_mod.focused(st)
+    if c is not None:
+        banked = c.get("xp_banked", 0)
+        bp = metric.progress(banked, settings["xp_max"])
+        stage = bp["stage"] if state_mod.is_hatched(c) else "egg"
+        print("%s banked %d -> level %d (%s)" % (c["name"], banked, bp["level"], stage))
+    help_text = render.no_source_help(settings, status)
+    if help_text:
+        print("\n" + help_text)
+    return 0
+
+
+def cmd_sources(args):
+    """What it can count, and what to do when that's nothing.
+
+    The installer calls this so a fresh install on a machine with no memory
+    system says so on the spot, instead of leaving a level-0 egg and no reason.
+    """
+    st = _load()
+    status = state_mod.source_status(st["settings"])
+    help_text = render.no_source_help(st["settings"], status)
+    if help_text:
+        print(help_text)
+        # nonzero so the installer can branch on the exit code. it used to match
+        # on the first word of the success line, which reworded copy would break
+        return 1
+    print("counting %d xp of memory. /brainbuddy shows your buddy." % status["xp"])
     return 0
 
 
@@ -335,7 +449,7 @@ COMMANDS = {
     "render": cmd_render, "compose": cmd_compose, "refresh": cmd_refresh, "card": cmd_card,
     "new": cmd_new, "hatch": cmd_hatch, "focus": cmd_focus, "list": cmd_list,
     "rename": cmd_rename, "retire": cmd_retire, "config": cmd_config,
-    "simulate": cmd_simulate, "doctor": cmd_doctor,
+    "simulate": cmd_simulate, "doctor": cmd_doctor, "sources": cmd_sources,
     "hide": cmd_hide, "show": cmd_show,
 }
 

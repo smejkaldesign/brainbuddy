@@ -359,6 +359,336 @@ def test_state_roundtrip():
         shutil.rmtree(d)
 
 
+def _egg_renders(colour):
+    """Every unhatched egg's segment and column, over a spread of seeds."""
+    from brainbuddy import render
+
+    if colour:
+        os.environ.pop("NO_COLOR", None)
+    else:
+        os.environ["NO_COLOR"] = "1"
+    segs, cols, rarities = set(), set(), set()
+    for i in range(400):
+        st = state_mod.default_state()
+        c = state_mod.create(st, name="Egg")
+        c["seed"] = "seed-%d" % i
+        c["xp_banked"] = 700
+        rarities.add(creature.hydrate(c)["rarity"])
+        segs.add(render.segment(st, xp=700, counts={}))
+        # every surface that can draw an unhatched egg, or the next one added
+        # leaks the way egg_notice did while this test watched the other two
+        cols.add(render.compose(st, "BAR", xp=700, counts={}) + render.egg_notice(st, c) + render.egg_card(st, c))
+    return segs, cols, rarities
+
+
+def test_egg_reveals_nothing():
+    """An egg has to look the same no matter what's inside it.
+
+    Species motif, shiny's `$`, the rarity mark and the rarity colour all come
+    off the seed, so an egg wearing any of them answers the question hatching
+    exists to answer. Three of the four leaked into the statusline for seven
+    PRs because nothing here compared one egg against another.
+    """
+    print("\negg reveals nothing")
+    from brainbuddy import sprites
+
+    try:
+        for short in (False, True):
+            arts = set()
+            for species in sprites.SPECIES_LOOK:
+                for shiny in (False, True):
+                    arts.add(tuple(sprites.sprite(species, 0, shiny, short=short)))
+            check(len(arts) == 1, "one egg sprite across every species and shiny%s, got %d" % (
+                " (short)" if short else "", len(arts)))
+
+        for colour in (False, True):
+            segs, cols, rarities = _egg_renders(colour)
+            where = "with colour" if colour else "plain"
+            check(len(rarities) >= 3, "%s: fixture spans %d rarities" % (where, len(rarities)))
+            check(len(segs) == 1, "%s: the segment is identical for every egg, got %d" % (where, len(segs)))
+            check(len(cols) == 1, "%s: so is the composed column, got %d" % (where, len(cols)))
+            check("Lv" not in segs.pop(), "%s: and neither shows a level" % where)
+    finally:
+        os.environ.pop("NO_COLOR", None)
+
+
+def test_source_status():
+    """A zero XP reading has three causes and they need three different answers.
+
+    Doctor used to print "check provider / vault_root" for all of them, which
+    is actively wrong advice for someone who has simply never kept notes.
+    """
+    print("\nsource status")
+    from brainbuddy import render
+
+    settings = dict(state_mod.DEFAULT_SETTINGS)
+    settings["provider"] = "folder"
+    settings["vault_root"] = os.path.join(tempfile.gettempdir(), "bb-not-here-at-all")
+    check(state_mod.source_status(settings)["state"] == "missing_root", "a root that isn't there reads as missing_root")
+
+    root = tempfile.mkdtemp(prefix="bb-folder-")
+    try:
+        settings["vault_root"] = root
+        check(state_mod.source_status(settings)["state"] == "empty", "a real but empty root reads as empty")
+        empty_help = render.no_source_help(settings, state_mod.source_status(settings))
+        check("Write a note" in empty_help, "and the help says to write something")
+        # the whole point of splitting by cause: their provider is already right,
+        # so re-offering it as the fix buries the one action that would work
+        check("config provider" not in empty_help, "not to re-set config that's already correct")
+
+        os.makedirs(os.path.join(root, "sub"))
+        for rel in ("a.md", os.path.join("sub", "b.md"), "index.md"):
+            open(os.path.join(root, rel), "w").close()
+        s = state_mod.source_status(settings)
+        check(s["state"] == "ok" and s["counts"]["notes"] == 2,
+              "the folder provider walks subdirs and skips index.md, got %s" % s["counts"])
+        check(render.no_source_help(settings, s) == "", "a working source gets no lecture")
+
+        settings["provider"] = "vault"
+        s = state_mod.source_status(settings)
+        check(s["state"] == "layout_mismatch" and s["stray"] == 2,
+              "the vault layout over a plain folder reads as layout_mismatch, got %s" % s)
+        check("provider folder" in render.no_source_help(settings, s),
+              "and it points at the folder provider instead of 'write more notes'")
+    finally:
+        shutil.rmtree(root)
+
+
+def test_installer_wraps_any_statusline():
+    """The installer has to end up drawing the box, whatever it was handed.
+
+    Appending into the user's own script was the old mechanism. It silently did
+    nothing when that script ended in `exit`, refused outright for the two
+    commonest command shapes, and produced the inline segment rather than the
+    boxed column the README leads with. Every case here shipped broken.
+    """
+    print("\ninstaller wiring")
+    import json
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cases = [
+        ("absolute path", "%s", False),
+        ("bash prefix", "bash %s", False),
+        ("home-relative", "~/.claude/statusline.sh", False),
+        ("ends in exit", "%s", True),
+    ]
+    for label, template, exits in cases:
+        home = tempfile.mkdtemp(prefix="bb-install-")
+        try:
+            claude = os.path.join(home, ".claude")
+            os.makedirs(claude)
+            script = os.path.join(claude, "statusline.sh")
+            with open(script, "w") as f:
+                f.write('#!/bin/bash\nprintf "HOST"\n' + ("exit 0\n" if exits else ""))
+            os.chmod(script, 0o755)
+            command = template % script if "%s" in template else template
+            with open(os.path.join(claude, "settings.json"), "w") as f:
+                json.dump({"theme": "dark", "statusLine": {"type": "command", "command": command}}, f)
+
+            env = dict(os.environ, HOME=home)
+            r = subprocess.run(["bash", os.path.join(repo, "install.sh")],
+                               env=env, input="", capture_output=True, text=True)
+            check(r.returncode == 0, "%s: installer exits clean" % label)
+
+            shim = os.path.join(claude, "brainbuddy", "statusline-brainbuddy.sh")
+            out = subprocess.run(["bash", shim], env=env, input="{}",
+                                 capture_output=True, text=True).stdout
+            check("HOST" in out, "%s: the statusline it wrapped still renders" % label)
+            check("┌" in out or "+-" in out, "%s: the creature lands in its box" % label)
+            check("/brainbuddy-hatch" in out, "%s: and it says how to open the egg" % label)
+
+            with open(script) as f:
+                check("brainbuddy" not in f.read(), "%s: their script is untouched" % label)
+
+            u = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--uninstall"],
+                               env=env, input="", capture_output=True, text=True)
+            with open(os.path.join(claude, "settings.json")) as f:
+                restored = json.load(f)
+            check(u.returncode == 0 and restored["statusLine"]["command"] == command,
+                  "%s: uninstall puts their command back" % label)
+            check(restored.get("theme") == "dark", "%s: and leaves the rest of settings.json alone" % label)
+        finally:
+            shutil.rmtree(home)
+
+    # no script at all, just a command
+    home = tempfile.mkdtemp(prefix="bb-install-")
+    try:
+        claude = os.path.join(home, ".claude")
+        os.makedirs(claude)
+        with open(os.path.join(claude, "settings.json"), "w") as f:
+            json.dump({"statusLine": {"type": "command", "command": "echo HOST"}}, f)
+        env = dict(os.environ, HOME=home)
+        subprocess.run(["bash", os.path.join(repo, "install.sh")],
+                       env=env, input="", capture_output=True, text=True)
+        shim = os.path.join(claude, "brainbuddy", "statusline-brainbuddy.sh")
+        out = subprocess.run(["bash", shim], env=env, input="{}",
+                             capture_output=True, text=True).stdout
+        check("HOST" in out and ("┌" in out or "+-" in out),
+              "plain command: a bare command gets wrapped and boxed too")
+    finally:
+        shutil.rmtree(home)
+
+
+GENERATED_BLOCK = (
+    '\n# >>> brainbuddy >>>\nprintf " "\n'
+    '"$HOME/.claude/brainbuddy/statusline-brainbuddy.sh"\n'
+    "# <<< brainbuddy <<<\n"
+)
+
+
+def test_installer_respects_hand_wiring():
+    """A brainbuddy block someone has edited belongs to them, not the installer.
+
+    Wrapping a script that already calls the CLI would draw two creatures, so
+    the installer has to stop. What it must not do is delete the block to make
+    room: people edit inside the fence, and the first cut of the wrapping
+    installer silently ate a customised one on the way past.
+    """
+    print("\nhand-wired statuslines")
+    import json
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    edited = GENERATED_BLOCK.replace(
+        'printf " "',
+        'PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli compose "$MY_BAR"',
+    )
+    for label, block, survives in [("untouched block", GENERATED_BLOCK, False), ("edited block", edited, True)]:
+        home = tempfile.mkdtemp(prefix="bb-wired-")
+        try:
+            claude = os.path.join(home, ".claude")
+            os.makedirs(claude)
+            script = os.path.join(claude, "statusline.sh")
+            body = '#!/bin/bash\nprintf "HOST"\n' + block
+            with open(script, "w") as f:
+                f.write(body)
+            os.chmod(script, 0o755)
+            with open(os.path.join(claude, "settings.json"), "w") as f:
+                json.dump({"statusLine": {"type": "command", "command": script}}, f)
+
+            env = dict(os.environ, HOME=home)
+            r = subprocess.run(["bash", os.path.join(repo, "install.sh")],
+                               env=env, input="", capture_output=True, text=True)
+            check(r.returncode == 0, "%s: installer exits clean" % label)
+            with open(script) as f:
+                same = f.read() == body
+            with open(os.path.join(claude, "settings.json")) as f:
+                still_theirs = json.load(f)["statusLine"]["command"] == script
+
+            if survives:
+                check(same, "%s: their script is left exactly as they wrote it" % label)
+                check(still_theirs, "%s: and their statusline stays wired to it" % label)
+                check("two creatures" in r.stdout, "%s: and the installer says why" % label)
+            else:
+                check(not same, "%s: our own block is removed" % label)
+                check(not still_theirs, "%s: and the shim takes over" % label)
+                shim = os.path.join(claude, "brainbuddy", "statusline-brainbuddy.sh")
+                out = subprocess.run(["bash", shim], env=env, input="{}",
+                                     capture_output=True, text=True).stdout
+                check(out.count("/brainbuddy-hatch") == 1, "%s: exactly one creature renders" % label)
+        finally:
+            shutil.rmtree(home)
+
+
+def test_hatch_from_zero():
+    """The guided first hatch has to honour both answers, and keep honouring them.
+
+    `--from-zero` parks the high-water mark on everything already written. Get
+    that wrong in either direction and it's silent: too low re-credits the whole
+    vault on the next render, too high means new notes never count at all.
+    """
+    print("\nhatch from zero")
+    import json
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for from_zero in (False, True):
+        home = tempfile.mkdtemp(prefix="bb-zero-")
+        try:
+            notes = os.path.join(home, "notes")
+            os.makedirs(os.path.join(home, ".claude"))
+            os.makedirs(notes)
+            for i in range(40):
+                open(os.path.join(notes, "n%d.md" % i), "w").close()
+            env = dict(os.environ, HOME=home)
+            lib = os.path.join(home, ".claude", "brainbuddy", "lib")
+
+            def bb(*a):
+                return subprocess.run([sys.executable, "-m", "brainbuddy.cli"] + list(a),
+                                      env=dict(env, PYTHONPATH=lib), capture_output=True, text=True).stdout
+
+            subprocess.run(["bash", os.path.join(repo, "install.sh"), "--folder", notes],
+                           env=env, input="", capture_output=True, text=True)
+            out = bb("hatch", "--from-zero") if from_zero else bb("hatch")
+            state = json.load(open(os.path.join(home, ".claude", "brainbuddy", "state.json")))
+            banked = state["creatures"][0]["xp_banked"]
+            label = "from-zero" if from_zero else "score-existing"
+
+            if from_zero:
+                check(banked == 0, "%s: nothing already written is credited, got %d" % (label, banked))
+                check(state["high_water_xp"] == 80, "%s: the mark parks on the existing 80 xp, got %d" % (
+                    label, state["high_water_xp"]))
+                check("baselined" in out, "%s: and it says so, or the level 0 looks broken" % label)
+            else:
+                check(banked == 80, "%s: the whole vault is credited, got %d" % (label, banked))
+                check("baselined" not in out, "%s: no baseline note when nothing was baselined" % label)
+
+            # a note written after the hatch has to count either way
+            for i in range(40, 50):
+                open(os.path.join(notes, "n%d.md" % i), "w").close()
+            bb("refresh")
+            state = json.load(open(os.path.join(home, ".claude", "brainbuddy", "state.json")))
+            grew = state["creatures"][0]["xp_banked"] - banked
+            check(grew == 20, "%s: 10 new notes add 20 xp on top, got %d" % (label, grew))
+        finally:
+            shutil.rmtree(home)
+
+
+def test_session_xp_counter():
+    """The counter is per session, so concurrent sessions can't inherit each other.
+
+    Baselining on first sight is the whole mechanism: skip it and every session
+    opens claiming credit for the entire vault. There are usually several open
+    at once here, which is why the mark is per id rather than one shared number.
+    """
+    print("\nsession xp counter")
+    os.environ["NO_COLOR"] = "1"
+    try:
+        from brainbuddy import render
+
+        st = state_mod.default_state()
+        c = _hatched(st, name="Zask")
+        c["xp_banked"] = 80
+
+        gain, is_new = state_mod.session_gain(st, "A", 80)
+        check((gain, is_new) == (0, True), "a session's first sight is +0 and records a mark")
+        check(state_mod.session_gain(st, "A", 90)[0] == 10, "then it counts what landed after that")
+
+        check(state_mod.session_gain(st, "B", 90) == (0, True), "a session opening later starts at +0")
+        check(state_mod.session_gain(st, "A", 96)[0] == 16, "A keeps counting from its own mark")
+        check(state_mod.session_gain(st, "B", 96)[0] == 6, "B counts only what it was around for")
+        check(state_mod.session_gain(st, None, 96) == (0, False), "no session id means no counter and no write")
+
+        # focus moving to a fresher creature drops banked below the mark
+        check(state_mod.session_gain(st, "A", 5) == (0, True), "a total under the mark re-baselines instead of going negative")
+
+        for i in range(state_mod.SESSION_KEEP + 4):
+            state_mod.session_gain(st, "s%d" % i, 100)
+        check(len(st["sessions"]) <= state_mod.SESSION_KEEP,
+              "the roster of marks is capped, got %d" % len(st["sessions"]))
+
+        c["xp_banked"] = 96
+        st["sessions"] = {"A": {"at": 80, "ts": 1}}
+        cap = next(r for r in render.compose(st, "BAR", xp=96, counts={}, gain=16).split("\n") if "Lv" in r)
+        check("+16 XP" in cap, "the caption carries the counter")
+        check(cap.index("Lv") < cap.index("+16 XP"), "and it sits to the right of the level")
+        quiet = next(r for r in render.compose(st, "BAR", xp=96, counts={}, gain=0).split("\n") if "Lv" in r)
+        check("XP" not in quiet, "a session that has earned nothing yet shows no counter")
+    finally:
+        os.environ.pop("NO_COLOR", None)
+
+
 if __name__ == "__main__":
     test_metric()
     test_sprite_alignment()
@@ -369,6 +699,12 @@ if __name__ == "__main__":
     test_egg_and_hatch()
     test_retire_keeps_the_record()
     test_state_roundtrip()
+    test_egg_reveals_nothing()
+    test_source_status()
+    test_installer_wraps_any_statusline()
+    test_installer_respects_hand_wiring()
+    test_hatch_from_zero()
+    test_session_xp_counter()
     print("\n%s" % ("-" * 46))
     if FAILURES:
         print("%d FAILED" % len(FAILURES))

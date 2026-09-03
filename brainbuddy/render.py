@@ -19,6 +19,8 @@ RARITY_COLOR = {
     "Legendary": "\033[32m",
 }
 DIM = "\033[2m"
+# session gain reads as a gain, so green. it is not a rarity, it just shares the code
+GAIN = "\033[32m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
 # 256-colour grey rather than \033[90m, which themes remap and some render near-white.
@@ -88,7 +90,67 @@ def current_xp(st, allow_blocking=True):
     return xp, counts
 
 
-def segment(st, xp=None, counts=None):
+# one line, because the whole point is that it gets pasted somewhere
+SETUP_PROMPT = (
+    "Set up a persistent memory system for this project: one markdown file per "
+    "durable fact in your memory directory, an index listing them, and write to "
+    "it as we work."
+)
+
+
+def no_source_help(settings, status):
+    """What the user has to go do to earn XP. Empty string when XP is flowing.
+
+    One branch per cause, and each one only says what's true for that cause.
+    Offering "set the provider" to someone whose provider is already right, or
+    "ask Claude to start keeping memory" to someone who just typo'd a path,
+    reads as boilerplate and buries the one action that would work.
+    """
+    state = status["state"]
+    if state == "ok":
+        return ""
+    provider = settings.get("provider", "claude")
+
+    if state == "layout_mismatch":
+        return "\n".join([
+            "Found %d markdown files under that root, but none in the places the %s layout looks." % (
+                status.get("stray", 0), provider),
+            "",
+            "Count it as a plain folder of notes instead:",
+            "  /brainbuddy config provider folder",
+        ])
+
+    if state == "empty" or provider != "claude":
+        # their setup is fine, so don't hand them configuration to re-do
+        if state == "empty":
+            return "\n".join([
+                "That folder's empty, so there's nothing on the menu. Write a note and your",
+                "buddy eats on the next render.",
+            ])
+        return "\n".join([
+            "That folder isn't there, so your buddy has nothing to feed on. Point it somewhere real:",
+            "  /brainbuddy config vault_root ~/notes",
+            "",
+            "`/brainbuddy config` shows the path it's using now.",
+        ])
+
+    # provider is claude and the directory has never existed, so this is someone
+    # who hasn't kept memory at all. the only branch that earns the long version.
+    return "\n".join([
+        "Buddies feed off memories, and there's nothing here to feed on yet. Your",
+        "buddy grows as your second brain does, so it needs one to eat from.",
+        "",
+        "Ask Claude Code to start keeping one:",
+        "",
+        '  "' + SETUP_PROMPT + '"',
+        "",
+        "Already keep notes somewhere? Point it at them instead:",
+        "  /brainbuddy config provider folder",
+        "  /brainbuddy config vault_root ~/notes",
+    ])
+
+
+def segment(st, xp=None, counts=None, gain=0):
     """One line for the statusline. Empty string means render nothing."""
     settings = st["settings"]
     uni = unicode_ok(settings)
@@ -105,21 +167,26 @@ def segment(st, xp=None, counts=None):
     if state_mod.is_hatched(c):
         idx, _ = metric.stage_for(level)
         label = "Lv%d" % level
+        tint = RARITY_COLOR.get(full["rarity"], "")
+        mark = full["rarity_mark"]
+        shiny = "*" if full["shiny"] else ""
     else:
-        # an unopened egg doesn't show its level. that reveal is the whole point of hatching
-        idx, label = metric.EGG_SPRITE, "egg"
+        # level, rarity colour, mark and shiny all come off the seed, so an egg
+        # wearing any of them has told you what's inside before you opened it
+        idx, label = metric.EGG_SPRITE, "egg /brainbuddy-hatch"
+        tint, mark, shiny = DIM, "", ""
     f = sprites.face(full["species"], idx, uni)
-    tint = RARITY_COLOR.get(full["rarity"], "")
-    mark = full["rarity_mark"]
-    shiny = "*" if full["shiny"] else ""
+
+    earned = (" " + paint("+%d XP" % gain, GAIN)) if gain > 0 else ""
 
     if settings.get("density") == "sprite":
         return sprite_block(full, "%s %s%s" % (full["name"], label, mark), idx, tint, settings)
     if settings.get("density") == "minimal":
+        # one glyph is the whole point of minimal, so no counter here
         return paint(sprites.glyph(idx, uni) + shiny, tint)
     if settings.get("density") == "full":
-        return "%s %s %s" % (paint(f + shiny, tint), paint(full["name"], BOLD), paint("%s %s" % (label, mark), DIM))
-    return "%s %s" % (paint(f + shiny + mark, tint), paint(label, DIM))
+        return "%s %s %s%s" % (paint(f + shiny, tint), paint(full["name"], BOLD), paint("%s %s" % (label, mark), DIM), earned)
+    return "%s %s%s" % (paint(f + shiny + mark, tint), paint(label, DIM), earned)
 
 
 
@@ -165,7 +232,7 @@ def _column_width(full, short):
     )
 
 
-def compose(st, left, xp=None, counts=None):
+def compose(st, left, xp=None, counts=None, gain=0):
     """Merge a caller's statusline text with the creature as a left column.
 
     The creature's first row shares row one with the bar, so it reads as a
@@ -187,7 +254,7 @@ def compose(st, left, xp=None, counts=None):
     level = metric.level_for(c["xp_banked"], settings["xp_max"])
     hatched = state_mod.is_hatched(c)
     idx, stage = metric.stage_for(level) if hatched else (metric.EGG_SPRITE, "egg")
-    tint = RARITY_COLOR.get(full["rarity"], "")
+    tint = RARITY_COLOR.get(full["rarity"], "") if hatched else DIM
 
     short = settings.get("sprite_height", 5) <= 3
     art = _trim(sprites.sprite(full["species"], idx, full["shiny"], short=short))
@@ -200,10 +267,15 @@ def compose(st, left, xp=None, counts=None):
     # under the caller's own rows instead of hanging off the bottom of the art
     icon = EGG_ICON if uni else EGG_ICON_ASCII
     if hatched:
-        caption = "%s %s · %s Lv%d %s" % (icon, full["name"], stage, level, sprites.bar(frac, 6, uni))
+        # painted in pieces. wrapping the finished string in BOLD would end at
+        # the gain's own reset and leave the bar unbolded
+        caption = paint("%s %s · %s Lv%d" % (icon, full["name"], stage, level), BOLD)
+        if gain > 0:
+            caption += " " + paint("+%d XP" % gain, GAIN)
+        caption += " " + paint(sprites.bar(frac, 6, uni), BOLD)
     else:
         # no level and no progress bar, or the reveal is spoiled before you open it
-        caption = "%s %s · egg · /brainbuddy-hatch" % (icon, full["name"])
+        caption = paint("%s %s · egg · /brainbuddy-hatch" % (icon, full["name"]), BOLD)
 
     # pin the column to the widest form this creature will ever reach, so the text
     # beside it doesn't jump two columns the day it evolves into an Ascendant
@@ -215,9 +287,7 @@ def compose(st, left, xp=None, counts=None):
 
     # fixed-width column, so nothing here needs the terminal width
     left_lines = left.split("\n") if left else []
-    # BOLD, not DIM: this row reads as a peer of the repo name the host prints
-    # above it, and the host uses \033[1m for that
-    left_lines.append(paint(caption, BOLD))
+    left_lines.append(caption)
 
     if settings.get("border", True):
         tl, h, tr, v, bl, br = BOX_UNICODE if uni else BOX_ASCII
@@ -265,6 +335,18 @@ def sprite_block(full, label, stage_index, tint, settings):
     return "\n" + "\n".join(rows)
 
 
+def _zero_note(st, xp):
+    """One line for the card when nothing is being counted. None when it is.
+
+    Only runs on a zero, so the scan it costs never lands on a working setup.
+    """
+    if xp:
+        return None
+    if state_mod.source_status(st["settings"])["state"] == "ok":
+        return None
+    return paint("going hungry. /brainbuddy doctor says what it needs", DIM)
+
+
 def egg_card(st, c):
     """An egg's card. Names nothing derived from the seed, or there's no reveal left.
 
@@ -276,10 +358,13 @@ def egg_card(st, c):
     out += [
         "",
         "  %s  %s" % (paint(c["name"], BOLD), paint("unhatched", DIM)),
-        "  " + paint("%d xp banked and counting" % c.get("xp_banked", 0), DIM),
+        "  " + paint("%d xp eaten and counting" % c.get("xp_banked", 0), DIM),
         "  " + paint("/brainbuddy-hatch to find out what it is", DIM),
-        "",
     ]
+    note = _zero_note(st, c.get("xp_banked", 0))
+    if note:
+        out += ["", "  " + note]
+    out.append("")
     return "\n".join(out)
 
 
@@ -291,7 +376,12 @@ def card(st, xp=None, counts=None):
         xp, counts = current_xp(st)
     c = state_mod.focused(st)
     if c is None:
-        return "No buddy yet. Lay an egg with: brainbuddy new"
+        # a retired buddy isn't "no buddy". this used to assert the roster was
+        # empty and drop the one command that gets them back
+        parked = [x["name"] for x in st.get("creatures", [])]
+        if parked:
+            return "Nothing focused. `/brainbuddy focus %s` brings it back, or /brainbuddy-new lays a fresh egg." % parked[0]
+        return "No buddy yet. /brainbuddy-new lays an egg."
     if not state_mod.is_hatched(c):
         return egg_card(st, c)
 
@@ -323,6 +413,9 @@ def card(st, xp=None, counts=None):
     info.append("")
     info.append("  ".join("%s %d" % (k, v) for k, v in stats.items()))
     info.append(paint("counted: " + "  ".join("%s %d" % (k, v) for k, v in sorted(counts.items())), DIM))
+    note = _zero_note(st, xp)
+    if note:
+        info += ["", note]
 
     lines = []
     pad = max(len(r) for r in art)
@@ -357,14 +450,17 @@ def hatch_ceremony(st, c):
 
 
 def egg_notice(st, c):
-    """What you see after `new`: an egg, no level, and how to open it."""
-    full = creature_mod.hydrate(c)
-    tint = RARITY_COLOR.get(full["rarity"], "")
-    art = sprites.sprite(full["species"], metric.EGG_SPRITE, full["shiny"])
+    """What you see after `new`: an egg, no level, and how to open it.
+
+    Same rule as egg_card. `new` is the main way people get an egg, so a rarity
+    colour here spoils the reveal for most of them.
+    """
+    tint = DIM
+    art = sprites.sprite("Mote", metric.EGG_SPRITE, False)
     out = [""] + ["  " + paint(r, tint) for r in art]
     out += [
         "",
-        "  %s is an egg" % paint(full["name"], BOLD),
+        "  %s is an egg" % paint(c["name"], BOLD),
         "  " + paint("/brainbuddy-hatch to open it", DIM),
         "",
     ]
