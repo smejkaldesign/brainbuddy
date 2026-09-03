@@ -13,10 +13,10 @@ from . import metric, sprites, state as state_mod
 
 RARITY_COLOR = {
     "Common": "\033[37m",
-    "Uncommon": "\033[32m",
+    "Uncommon": "\033[33m",
     "Rare": "\033[36m",
     "Epic": "\033[35m",
-    "Legendary": "\033[33m",
+    "Legendary": "\033[32m",
 }
 DIM = "\033[2m"
 BOLD = "\033[1m"
