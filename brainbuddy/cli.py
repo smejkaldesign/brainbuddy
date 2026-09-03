@@ -24,7 +24,7 @@ USAGE = """brainbuddy - a terminal pet that evolves with your memory
   rename <old> <new>
   retire <name>
   config              show settings
-  config <key> <val>  set one (provider, vault_root, xp_max, density, columns, sprite_height, unicode, hidden)
+  config <key> <val>  set one (provider, vault_root, xp_max, density, columns, sprite_height, unicode, border, hidden)
   hide / show         drop the creature from the statusline, or bring it back
   simulate <xp>       preview any level without touching your real state
   refresh             recompute the xp cache (run in the background by render)
@@ -253,7 +253,7 @@ def cmd_config(args):
         if value < 1:
             print("xp_max must be positive")
             return 1
-    elif key in ("unicode", "hidden"):
+    elif key in ("unicode", "hidden", "border"):
         value = raw.lower() in ("1", "true", "yes", "on")
     elif key == "density":
         if raw not in ("compact", "minimal", "full", "sprite", "ruler"):

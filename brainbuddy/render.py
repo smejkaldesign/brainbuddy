@@ -13,14 +13,26 @@ from . import metric, sprites, state as state_mod
 
 RARITY_COLOR = {
     "Common": "\033[37m",
-    "Uncommon": "\033[32m",
+    "Uncommon": "\033[33m",
     "Rare": "\033[36m",
     "Epic": "\033[35m",
-    "Legendary": "\033[33m",
+    "Legendary": "\033[32m",
 }
 DIM = "\033[2m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
+# 256-colour grey rather than \033[90m, which themes remap and some render near-white.
+# The box is meant to sit behind the creature, so it has to stay darker than the art.
+BORDER = "\033[38;5;240m"
+
+BOX_UNICODE = ("┌", "─", "┐", "│", "└", "┘")
+BOX_ASCII = ("+", "-", "+", "|", "+", "+")
+BOX_PAD = 1
+
+# marks the segment as brainbuddy's. it sits in the right-hand column, so the two
+# cells an emoji takes can't push the boxed art out of alignment
+EGG_ICON = "🥚"
+EGG_ICON_ASCII = "o"
 
 
 def color_ok():
@@ -128,9 +140,29 @@ def ruler(width=200):
     return "".join(out)
 
 
-# the old 2 sat on top of whatever side padding the sprite happened to carry, so
-# the real gap was ~5. now that the art is trimmed this is the whole gap
-GUTTER = 3
+# the whole gap now that the art is trimmed, so it's the real number rather than
+# sitting on top of the sprite's own padding. the box adds BOX_PAD inside the wall
+GUTTER = 2
+
+
+def _trim(art):
+    """Drop blank edge rows and the shared left indent the templates carry."""
+    art = list(art)
+    while art and not art[-1].strip():
+        art.pop()
+    while art and not art[0].strip():
+        art.pop(0)
+    indent = min(len(r) - len(r.lstrip()) for r in art if r.strip())
+    return [r[indent:].rstrip() for r in art]
+
+
+def _column_width(full, short):
+    """Widest trimmed form for this creature, across every stage."""
+    return max(
+        len(r)
+        for i in range(len(sprites.STAGE_TEMPLATES))
+        for r in _trim(sprites.sprite(full["species"], i, full["shiny"], short=short))
+    )
 
 
 def compose(st, left, xp=None, counts=None):
@@ -158,13 +190,7 @@ def compose(st, left, xp=None, counts=None):
     tint = RARITY_COLOR.get(full["rarity"], "")
 
     short = settings.get("sprite_height", 5) <= 3
-    art = sprites.sprite(full["species"], idx, full["shiny"], short=short)
-    # trim both ends: a blank row at the top reads as a gap between the creature
-    # and whatever the host draws above it
-    while art and not art[-1].strip():
-        art.pop()
-    while art and not art[0].strip():
-        art.pop(0)
+    art = _trim(sprites.sprite(full["species"], idx, full["shiny"], short=short))
 
     banked = c["xp_banked"]
     lo = metric.xp_for_level(level, settings["xp_max"])
@@ -172,28 +198,49 @@ def compose(st, left, xp=None, counts=None):
     frac = (banked - lo) / float(hi - lo) if hi > lo else 0.0
     # the caption is a statusline row, not part of the sprite block, so it lines up
     # under the caller's own rows instead of hanging off the bottom of the art
+    icon = EGG_ICON if uni else EGG_ICON_ASCII
     if hatched:
-        caption = "%s · %s · Lv%d %s" % (full["name"], stage, level, sprites.bar(frac, 6, uni))
+        caption = "%s %s · %s Lv%d %s" % (icon, full["name"], stage, level, sprites.bar(frac, 6, uni))
     else:
         # no level and no progress bar, or the reveal is spoiled before you open it
-        caption = "%s · egg · /brainbuddy-hatch" % full["name"]
+        caption = "%s %s · egg · /brainbuddy-hatch" % (icon, full["name"])
 
-    # the sprites carry side padding, which held the column off the left edge
-    indent = min(len(r) - len(r.lstrip()) for r in art if r.strip())
-    art = [r[indent:].rstrip() for r in art]
-    block = max(len(r) for r in art)
-    art = [r.ljust(block) for r in art]
+    # pin the column to the widest form this creature will ever reach, so the text
+    # beside it doesn't jump two columns the day it evolves into an Ascendant
+    block = _column_width(full, short)
+    lead = " " * ((block - max(len(r) for r in art)) // 2)
+    # shift the whole sprite as one unit. centring row by row would undo the
+    # per-row padding the art relies on to line up
+    art = [(lead + r).ljust(block) for r in art]
 
     # fixed-width column, so nothing here needs the terminal width
     left_lines = left.split("\n") if left else []
-    left_lines.append(paint(caption, DIM))
+    # BOLD, not DIM: this row reads as a peer of the repo name the host prints
+    # above it, and the host uses \033[1m for that
+    left_lines.append(paint(caption, BOLD))
+
+    if settings.get("border", True):
+        tl, h, tr, v, bl, br = BOX_UNICODE if uni else BOX_ASCII
+        # a column of breathing room, or a wide stage's arms touch the wall
+        inner = block + 2 * BOX_PAD
+        bar = paint(v, BORDER)
+        pad = " " * BOX_PAD
+        cells = [paint(tl + h * inner + tr, BORDER)]
+        cells += [bar + paint(pad + r + pad, tint) + bar for r in art]
+        cells.append(paint(bl + h * inner + br, BORDER))
+        # the caller's first row belongs beside the head, not beside the box lid
+        left_lines.insert(0, "")
+        width = inner + 2
+    else:
+        cells = [paint(r, tint) for r in art]
+        width = block
 
     rows = []
-    for i in range(max(len(left_lines), len(art))):
+    for i in range(max(len(left_lines), len(cells))):
         l = left_lines[i] if i < len(left_lines) else ""
-        cell = art[i] if i < len(art) else " " * block
-        body = paint(cell, tint) if i < len(art) else cell
-        rows.append((body + " " * GUTTER + l).rstrip())
+        # painted cells carry escape bytes, so pad from the known column width
+        cell = cells[i] if i < len(cells) else " " * width
+        rows.append((cell + " " * GUTTER + l).rstrip())
     return "\n".join(rows)
 
 

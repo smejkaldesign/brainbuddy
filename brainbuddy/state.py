@@ -28,6 +28,7 @@ DEFAULT_SETTINGS = {
     "sprite_height": 5,         # 5 rows, or 3 to keep the footer closer
     "unicode": True,
     "hidden": False,          # keep the creature out of the statusline without uninstalling
+    "border": True,           # box the compose column. costs two rows of height
 }
 
 
