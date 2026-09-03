@@ -3,7 +3,10 @@
 Notable changes, newest first. Versions follow semver; the version lives in
 `brainbuddy/__init__.py` and each release is the matching `v*` tag.
 
-## Unreleased
+## 1.0.0
+
+The first public release: install it with one command, and the owner's costs
+stay at zero because everything lives on your machine.
 
 - Fixed: a background refresh no longer writes back the roster it loaded before
   the scan, which could silently revert an egg laid or hatched while it ran.
