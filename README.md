@@ -6,8 +6,8 @@ It measures how much you've written down. Not how long you've used it, not a str
 
 ```
 ┌───────────┐
-│    ___    │   ████░░░░░░  my-brain ⎇ main
-│   /   \   │   Zask · egg · /brainbuddy-hatch
+│    ___    │  ████░░░░░░  my-brain ⎇ main
+│   /   \   │  Zask · egg · /brainbuddy-hatch
 │  ( ooo )  │
 │   \___/   │
 └───────────┘
@@ -15,8 +15,8 @@ It measures how much you've written down. Not how long you've used it, not a str
 
 ```
 ┌───────────┐
-│   .\|/.   │   ████░░░░░░  my-brain ⎇ main
-│  ( o o )  │   Drain · Sage · Lv65 █████░
+│   .\|/.   │  ████░░░░░░  my-brain ⎇ main
+│  ( o o )  │  Drain · Sage · Lv65 █████░
 │  /|ooo|\  │
 │   |___|   │
 │  /     \  │
@@ -196,12 +196,12 @@ Want it slower? `brainbuddy config xp_max 5000` triples the distance. It's your 
 The column is boxed in dark grey by default. `config border false` drops the box and gets **two rows of height back**:
 
 ```
-┌───────────┐
-│   .\|/.   │   ████░░░░░░  my-brain ⎇ main      .\|/.     ████░░░░░░  my-brain ⎇ main
-│  ( o o )  │   Drain · Sage · Lv65 █████░      ( o o )    Drain · Sage · Lv65 █████░
-│  /|ooo|\  │                                   /|ooo|\
-│   |___|   │                                    |___|
-│  /     \  │                                   /     \
+┌───────────┐                                    .\|/.    ████░░░░░░  my-brain ⎇ main
+│   .\|/.   │  ████░░░░░░  my-brain ⎇ main      ( o o )   Drain · Sage · Lv65 █████░
+│  ( o o )  │  Drain · Sage · Lv65 █████░       /|ooo|\
+│  /|ooo|\  │                                    |___|
+│   |___|   │                                   /     \
+│  /     \  │
 └───────────┘
 ```
 

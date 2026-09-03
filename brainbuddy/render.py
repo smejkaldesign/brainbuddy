@@ -135,9 +135,9 @@ def ruler(width=200):
     return "".join(out)
 
 
-# the old 2 sat on top of whatever side padding the sprite happened to carry, so
-# the real gap was ~5. now that the art is trimmed this is the whole gap
-GUTTER = 3
+# the whole gap now that the art is trimmed, so it's the real number rather than
+# sitting on top of the sprite's own padding. the box adds BOX_PAD inside the wall
+GUTTER = 2
 
 
 def _trim(art):
