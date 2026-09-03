@@ -62,18 +62,30 @@ PY
 write_statusline() {
   # $1 = command, or empty to drop the key entirely
   python3 - "$SETTINGS" "$1" <<'PY'
-import json, os, sys
+import json, os, shutil, sys
 path, command = sys.argv[1], sys.argv[2]
 data = {}
 if os.path.exists(path):
+    # raw bytes, before parsing. a backup of the parse result is worthless
+    # exactly when you need it
+    backup = path + ".pre-brainbuddy.bak"
+    if not os.path.exists(backup):
+        shutil.copyfile(path, backup)
     with open(path) as f:
-        try: data = json.load(f)
-        except ValueError: data = {}
-    if not os.path.exists(path + ".pre-brainbuddy.bak"):
-        with open(path + ".pre-brainbuddy.bak", "w") as f:
-            json.dump(data, f, indent=2)
+        try:
+            data = json.load(f)
+        except ValueError:
+            sys.stderr.write("settings.json isn't valid JSON, so nothing was changed. fix it and re-run.\n")
+            raise SystemExit(1)
+# mutate the existing entry rather than replacing it, or siblings like padding
+# get dropped on the way through
+line = data.get("statusLine")
+if not isinstance(line, dict):
+    line = {}
 if command:
-    data["statusLine"] = {"type": "command", "command": command}
+    line.setdefault("type", "command")
+    line["command"] = command
+    data["statusLine"] = line
 else:
     data.pop("statusLine", None)
 os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -93,12 +105,8 @@ target_path_of() {
   echo ""
 }
 
-# none | ours | modified.
-#
-# Installs before the wrapping shim appended a fenced block into the user's own
-# script, and those have to come out or the creature renders twice. But people
-# edited inside the fence, so a block that no longer matches what we generated
-# is their code and we don't get to delete it.
+# none | ours | modified. a block we generated has to come out or the creature
+# renders twice, but one that's been edited is their code, so we leave it.
 classify_target() {
   local target="$1"
   if [ -z "$target" ] || [ ! -f "$target" ]; then echo none; return 0; fi
@@ -132,13 +140,8 @@ else:
 PY
 }
 
-# The shim runs whatever statusline was there before, on the same stdin Claude
-# Code gave us, then draws the creature beside its output. Wrapping rather than
-# appending is what makes the boxed column the default and what lets this work
-# with a command we can't parse or a script that ends in `exit`.
-#
-# bash -c, not sh -c: the wrapped string is whatever the user had in
-# statusLine.command and may lean on bash, which is not sh on every platform.
+# bash -c not sh -c, since the wrapped string is whatever was in
+# statusLine.command and may lean on bash, which isn't sh everywhere.
 write_shim() {
   if [ "$INLINE" = 1 ]; then
     cat > "$SHIM" <<'EOF'
@@ -253,8 +256,8 @@ if [ "$WIRE" = 1 ]; then
     EXISTING="$(read_statusline)"
   fi
 
-  # Re-install over ourselves: settings.json points at the shim, so the thing
-  # worth keeping is whatever we wrapped last time, not the shim itself.
+  # re-installing over ourselves, so keep what we wrapped last time
+  # rather than the shim we're pointing at
   if [ "$EXISTING" = "$SHIM" ]; then
     EXISTING=""
     if [ -s "$WRAPPED" ]; then EXISTING="$(cat "$WRAPPED")"; fi
@@ -280,13 +283,15 @@ fi
 if [ "$WIRE" = 1 ]; then
   if [ -n "$EXISTING" ]; then
     printf '%s' "$EXISTING" > "$WRAPPED"
-    echo "  statusline -> wrapping your existing one, creature on the left"
+    WIRED="  statusline -> wrapping your existing one, creature on the left"
   else
     : > "$WRAPPED"
-    echo "  statusline -> set in settings.json"
+    WIRED="  statusline -> set in settings.json"
   fi
 
+  # after the write, not before, so a refusal doesn't get announced as a success
   write_statusline "$SHIM"
+  echo "$WIRED"
 fi
 
 echo
