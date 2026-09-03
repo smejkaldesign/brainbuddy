@@ -525,6 +525,37 @@ def test_project_statusline_override():
         shutil.rmtree(home)
 
 
+def test_empty_hatch_is_a_moment():
+    """Hatching with nothing to count still has to land.
+
+    The species, rarity and shiny are decided by the seed, so the reveal is
+    intact; only the level is zero. Printing that and stopping reads as a broken
+    install, which is exactly the wrong first impression for the one user who
+    hasn't got a memory system yet.
+    """
+    print("\nempty hatch")
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    home = tempfile.mkdtemp(prefix="bb-empty-")
+    try:
+        os.makedirs(os.path.join(home, ".claude"))
+        env = dict(os.environ, HOME=home, NO_COLOR="1")
+        subprocess.run(["bash", os.path.join(repo, "install.sh")],
+                       env=env, input="", capture_output=True, text=True)
+        out = subprocess.run([sys.executable, "-m", "brainbuddy.cli", "hatch"],
+                             env=dict(env, PYTHONPATH=repo), capture_output=True, text=True).stdout
+
+        check("the egg cracks" in out, "the reveal still runs")
+        check("Lv0" in out, "at Lv0, since there was nothing to eat")
+        check(any(r in out for r in ("Common", "Uncommon", "Rare", "Epic", "Legendary")),
+              "and it still says what came out")
+        check("that's the floor, not a dud roll" in out, "the zero is framed rather than left hanging")
+        from brainbuddy import render
+        check(render.SETUP_PROMPT in out, "and it ends on how to get something to feed it")
+    finally:
+        shutil.rmtree(home)
+
 
 def _egg_renders(colour):
     """Every unhatched egg's segment and column, over a spread of seeds."""
@@ -921,6 +952,7 @@ if __name__ == "__main__":
     test_state_migration()
     test_version_check_is_explicit_only()
     test_project_statusline_override()
+    test_empty_hatch_is_a_moment()
     test_egg_reveals_nothing()
     test_source_status()
     test_installer_wraps_any_statusline()

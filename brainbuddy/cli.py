@@ -214,11 +214,16 @@ def cmd_hatch(args):
         state_mod.sync(st, xp)
     state_mod.reveal(st)
     state_mod.save(st)
+    # a zero here means there was nothing to count, not that the egg was empty.
+    # --from-zero lands on Lv0 too, but that one was chosen and says so itself
+    empty = not from_zero and not xp
     print(render.hatch_ceremony(st, c))
-    print(render.card(st, xp=0 if from_zero else xp, counts=counts))
+    print(render.card(st, xp=0 if from_zero else xp, counts=counts, hungry_note=not empty))
     if from_zero:
         # the stats still read the live vault, so say why the level doesn't
         print("\n  %d xp of existing notes baselined. new ones count from here." % xp)
+    elif empty:
+        print("\n" + render.empty_hatch_note(st, state_mod.source_status(st["settings"])))
     return 0
 
 

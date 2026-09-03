@@ -368,8 +368,13 @@ def egg_card(st, c):
     return "\n".join(out)
 
 
-def card(st, xp=None, counts=None):
-    """The /brainbuddy view. Multi-line, safe to be verbose, except about paths."""
+def card(st, xp=None, counts=None, hungry_note=True):
+    """The /brainbuddy view. Multi-line, safe to be verbose, except about paths.
+
+    hungry_note=False for callers that answer the zero themselves. The card's
+    version points at doctor, which is the wrong thing to read directly above
+    the same answer spelled out.
+    """
     settings = st["settings"]
     uni = unicode_ok(settings)
     if xp is None:
@@ -413,7 +418,7 @@ def card(st, xp=None, counts=None):
     info.append("")
     info.append("  ".join("%s %d" % (k, v) for k, v in stats.items()))
     info.append(paint("counted: " + "  ".join("%s %d" % (k, v) for k, v in sorted(counts.items())), DIM))
-    note = _zero_note(st, xp)
+    note = _zero_note(st, xp) if hungry_note else None
     if note:
         info += ["", note]
 
@@ -446,6 +451,24 @@ def hatch_ceremony(st, c):
         "  " + paint("Lv%d %s" % (level, stage), DIM),
         "",
     ]
+    return "\n".join(out)
+
+
+def empty_hatch_note(st, status):
+    """The reveal with nothing counted. Says day one out loud instead of nothing.
+
+    Hatching on a machine with no memory system is the one path where the
+    ceremony lands on a Lv0 that means "there was nothing to eat". The creature
+    is still whatever the seed made it, so the reveal is intact; what's missing
+    is any sign that the number is the start of something rather than a dud.
+    """
+    out = [
+        "  " + paint("nothing counted yet, so Lv0. that's the floor, not a dud roll.", DIM),
+        "  " + paint("it levels off the markdown you keep, so give it something to eat.", DIM),
+    ]
+    help_text = no_source_help(st["settings"], status)
+    if help_text:
+        out += ["", help_text]
     return "\n".join(out)
 
 
