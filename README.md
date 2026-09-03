@@ -5,21 +5,25 @@ A terminal creature that lives in your Claude Code statusline, hatches from an e
 It measures how much you've written down. Not how long you've used it, not a streak you can lose by taking a weekend off. Write more durable notes, it grows. That's the whole loop.
 
 ```
-  ___     ████░░░░░░  my-brain ⎇ main
- /   \    Zask · egg · /brainbuddy-hatch
-( ooo )
- \___/
+┌───────────┐
+│    ___    │   ████░░░░░░  my-brain ⎇ main
+│   /   \   │   Zask · egg · /brainbuddy-hatch
+│  ( ooo )  │
+│   \___/   │
+└───────────┘
 ```
 
 ```
- .\|/.    ████░░░░░░  my-brain ⎇ main
-( o o )   Drain · Sage · Lv65 █████░
-/|ooo|\
- |___|
-/     \
+┌───────────┐
+│   .\|/.   │   ████░░░░░░  my-brain ⎇ main
+│  ( o o )  │   Drain · Sage · Lv65 █████░
+│  /|ooo|\  │
+│   |___|   │
+│  /     \  │
+└───────────┘
 ```
 
-The creature is a fixed-width column on the left of whatever your statusline already prints, so your box can be any size and the art still lands whole. It sizes your memory by **counting files and never reading them** — see [It never opens your memories](#it-never-opens-your-memories).
+The creature is a fixed-width column on the left of whatever your statusline already prints, so your terminal can be any size and the art still lands whole. It sizes your memory by **counting files and never reading them** — see [It never opens your memories](#it-never-opens-your-memories).
 
 ---
 
@@ -189,6 +193,20 @@ Want it slower? `brainbuddy config xp_max 5000` triples the distance. It's your 
 
 `compose "<text>"` is the mode the statusline shim uses, and the one in the examples up top: your own text with the creature as a **left column**, sharing row one. Left rather than right on purpose, because a fixed-width column needs no measurement.
 
+The column is boxed in dark grey by default. `config border false` drops the box and gets **two rows of height back**:
+
+```
+┌───────────┐
+│   .\|/.   │   ████░░░░░░  my-brain ⎇ main      .\|/.     ████░░░░░░  my-brain ⎇ main
+│  ( o o )  │   Drain · Sage · Lv65 █████░      ( o o )    Drain · Sage · Lv65 █████░
+│  /|ooo|\  │                                   /|ooo|\
+│   |___|   │                                    |___|
+│  /     \  │                                   /     \
+└───────────┘
+```
+
+Either way the column is pinned to the creature's **widest** form, so your text doesn't shift sideways the day it evolves into an Ascendant.
+
 `sprite` does need a width, and a statusline script is handed nothing that is a terminal. So `density ruler` prints a column ruler instead of a creature: read the last digit you can see and pass it to `config columns <n>`.
 
 `/brainbuddy-hide` takes the creature out without uninstalling anything. XP keeps banking while it's hidden, so it comes back further along than it left.
@@ -243,6 +261,7 @@ Five are slash commands in Claude Code, so plain language reaches them without t
 | `xp_max` | XP at level 100, the pace dial | `1500` |
 | `density` | `minimal` `compact` `full` `sprite` `ruler` | `compact` |
 | `sprite_height` | `3` or `5` | `5` |
+| `border` | box the `compose` column, costs 2 rows | `true` |
 | `columns` | right-align width for `sprite` | `0` |
 | `unicode` | `true` or `false` | `true` |
 | `hidden` | `true` or `false` | `false` |

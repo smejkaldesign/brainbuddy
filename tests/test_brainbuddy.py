@@ -109,6 +109,56 @@ def test_sprite_alignment():
           "the egg pads to the shared sprite width")
 
 
+def test_compose_column():
+    """The left column has to be one width for the life of the creature.
+
+    Whatever sits beside it is the user's own statusline, so a column that
+    resizes on evolution drags their text two spaces sideways. The border made
+    that visible; it was always there.
+    """
+    print("\ncompose column")
+    os.environ["NO_COLOR"] = "1"
+    try:
+        from brainbuddy import render
+
+        def widths(**settings):
+            # only the row carrying the caller's text shows where the column ends.
+            # the caption row's own length tracks the level, not the column
+            out = []
+            for xp in (0, 30, 90, 300, 700, 1400):
+                st = state_mod.default_state()
+                st["settings"].update(settings)
+                c = state_mod.create(st, name="Zask")
+                c["xp_banked"] = xp
+                state_mod.reveal(st)
+                rows = render.compose(st, "BAR", xp=xp, counts={}).split("\n")
+                out.append(next(len(r.split("BAR")[0]) for r in rows if "BAR" in r))
+            return out
+
+        for label, kw in [("boxed", {}), ("bare", {"border": False}), ("short", {"sprite_height": 3})]:
+            w = widths(**kw)
+            check(len(set(w)) == 1, "%s column is one width across every stage, got %s" % (label, sorted(set(w))))
+
+        st = state_mod.default_state()
+        c = state_mod.create(st, name="Zask")
+        c["xp_banked"] = 700
+        state_mod.reveal(st)
+        boxed = render.compose(st, "BAR", xp=700, counts={}).split("\n")
+        st["settings"]["border"] = False
+        bare = render.compose(st, "BAR", xp=700, counts={}).split("\n")
+        check(len(boxed) == len(bare) + 2, "the box costs exactly two rows, got %d" % (len(boxed) - len(bare)))
+        check(boxed[0].startswith("┌") and boxed[-1].startswith("└"), "the box closes top and bottom")
+        check(all(r.startswith("│") for r in boxed[1:-1]), "every creature row is walled")
+        check("BAR" in boxed[1], "the caller's first row sits beside the head, not the lid")
+
+        st["settings"].update({"border": True, "unicode": False})
+        ascii_box = render.compose(st, "BAR", xp=700, counts={}).split("\n")
+        check(ascii_box[0].startswith("+-") and ascii_box[1].startswith("|"), "ascii terminals get +- and |")
+        check(not any(ch in "".join(ascii_box) for ch in "┌─│└"), "no box-drawing leaks into ascii mode")
+    finally:
+        os.environ.pop("NO_COLOR", None)
+
+
 def test_no_content_reads():
     """R2. The whole security posture rests on this one.
 
@@ -306,6 +356,7 @@ def test_state_roundtrip():
 if __name__ == "__main__":
     test_metric()
     test_sprite_alignment()
+    test_compose_column()
     test_no_content_reads()
     test_creature()
     test_banking()
