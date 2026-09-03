@@ -12,6 +12,7 @@ brainbuddy installer
   ./install.sh --statusline <cmd>  wrap this command instead of settings.json's
   ./install.sh --inline            one-line segment instead of the boxed column
   ./install.sh --no-wire           install the library only, wire it yourself
+  ./install.sh --no-commands       skip the slash commands, something else ships them
   ./install.sh --uninstall         unwire and restore your old statusline
 EOF
 }
@@ -30,6 +31,7 @@ VAULT=""
 FOLDER=""
 WIRE=1
 INLINE=0
+COMMANDS=1
 MODE=install
 STATUSLINE=""
 
@@ -46,6 +48,7 @@ while [ $# -gt 0 ]; do
     --statusline) need_value --statusline "${2:-}"; STATUSLINE="$2"; shift 2 ;;
     --inline) INLINE=1; shift ;;
     --no-wire) WIRE=0; shift ;;
+    --no-commands) COMMANDS=0; shift ;;
     --uninstall) MODE=uninstall; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1"; exit 1 ;;
@@ -213,8 +216,11 @@ if [ "$MODE" = uninstall ]; then
     ours) strip_legacy_block "$LEGACY" ;;
     modified) echo "left $(basename "$LEGACY") alone, you've edited the brainbuddy block in it" ;;
   esac
-  rm -rf "$LIB" "$SHIM" "$WRAPPED"
-  for cmd in $COMMAND_NAMES; do rm -f "$CMDS/$cmd.md"; done
+  rm -rf "$LIB" "$SHIM" "$WRAPPED" "$HOMEDIR/plugin-root"
+  # under --no-commands they're the plugin's copies, not ours to delete
+  if [ "$COMMANDS" = 1 ]; then
+    for cmd in $COMMAND_NAMES; do rm -f "$CMDS/$cmd.md"; done
+  fi
   echo "uninstalled. state kept at ~/.claude/brainbuddy/state.json (delete it yourself for a clean slate)"
   exit 0
 fi
@@ -225,12 +231,18 @@ rm -rf "$LIB/brainbuddy"
 cp -R "$SRC/brainbuddy" "$LIB/brainbuddy"
 # don't ship the dev machine's bytecode
 find "$LIB/brainbuddy" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
-for cmd in $COMMAND_NAMES; do
-  if [ -f "$SRC/commands/$cmd.md" ]; then cp "$SRC/commands/$cmd.md" "$CMDS/$cmd.md"; fi
-done
+if [ "$COMMANDS" = 1 ]; then
+  for cmd in $COMMAND_NAMES; do
+    if [ -f "$SRC/commands/$cmd.md" ]; then cp "$SRC/commands/$cmd.md" "$CMDS/$cmd.md"; fi
+  done
+fi
 # ~ rather than the expanded path, so a screenshot of this carries no username
 echo "  library  -> ${LIB/#$HOME/~}"
-echo "  commands -> ${CMDS/#$HOME/~}  (/brainbuddy, -new, -hatch, -hide, -show)"
+if [ "$COMMANDS" = 1 ]; then
+  echo "  commands -> ${CMDS/#$HOME/~}  (/brainbuddy, -new, -hatch, -hide, -show)"
+else
+  echo "  commands -> left alone, the plugin already provides them"
+fi
 
 # always, even under --no-wire: self-wirers point their own script at it
 write_shim
