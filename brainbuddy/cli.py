@@ -31,7 +31,11 @@ USAGE = """brainbuddy - a terminal pet that evolves with your memory
   simulate <xp>       preview any level without touching your real state
   refresh             recompute the xp cache (run in the background by render)
   sources             what it can count, and what to do if that's nothing
-  doctor              check what brainbuddy can see
+  doctor [--check]    check what brainbuddy can see; --check also asks pypi
+  update              ask pypi whether there's a newer brainbuddy
+
+update and doctor --check are the only commands that go online, and only when
+you run them. Everything else, the statusline included, is offline.
 
 provider is claude (stock Claude Code memory), vault (a structured vault) or
 folder (any directory of markdown, set vault_root to point at it).
@@ -210,11 +214,16 @@ def cmd_hatch(args):
         state_mod.sync(st, xp)
     state_mod.reveal(st)
     state_mod.save(st)
+    # a zero here means there was nothing to count, not that the egg was empty.
+    # --from-zero lands on Lv0 too, but that one was chosen and says so itself
+    empty = not from_zero and not xp
     print(render.hatch_ceremony(st, c))
-    print(render.card(st, xp=0 if from_zero else xp, counts=counts))
+    print(render.card(st, xp=0 if from_zero else xp, counts=counts, hungry_note=not empty))
     if from_zero:
         # the stats still read the live vault, so say why the level doesn't
         print("\n  %d xp of existing notes baselined. new ones count from here." % xp)
+    elif empty:
+        print("\n" + render.empty_hatch_note(st, state_mod.source_status(st["settings"])))
     return 0
 
 
@@ -374,6 +383,74 @@ PROVIDER_LABEL = {
     "folder": "folder of notes",
 }
 
+SHIM = "~/.claude/brainbuddy/statusline-brainbuddy.sh"
+USER_SETTINGS = os.path.expanduser("~/.claude/settings.json")
+
+
+def _statusline_command(path):
+    """statusLine.command out of a settings file, or "". Reads, never writes."""
+    try:
+        with open(path, "r") as f:
+            return (json.load(f).get("statusLine") or {}).get("command") or ""
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
+def _project_settings():
+    """The .claude/settings.json this directory would actually use, or None.
+
+    The working directory first, then the repo root, because a statusline set at
+    the root applies to every directory under it and doctor is usually run from
+    somewhere deeper.
+    """
+    # realpath both sides: /tmp and /home are symlinks on plenty of machines, so
+    # comparing what getcwd returns against what ~ expands to misses otherwise
+    here = os.path.realpath(os.getcwd())
+    home = os.path.realpath(os.path.expanduser("~"))
+    candidates, d = [here], here
+    while d != home:
+        if os.path.isdir(os.path.join(d, ".git")):
+            candidates.append(d)
+            break
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    for c in candidates:
+        path = os.path.join(c, ".claude", "settings.json")
+        # a repo checked out at $HOME would otherwise report the user's own file
+        # as a project overriding itself
+        if os.path.isfile(path) and os.path.realpath(path) != os.path.realpath(USER_SETTINGS):
+            return path
+    return None
+
+
+def _project_override():
+    """Named when a project's own statusline is what runs here. None otherwise.
+
+    The installer only ever touches ~/.claude/settings.json. A project that sets
+    statusLine wins inside that project, so the install is correct, the creature
+    is nowhere, and nothing on either side says why.
+    """
+    if "statusline-brainbuddy.sh" not in _statusline_command(USER_SETTINGS):
+        return None
+    path = _project_settings()
+    if path is None:
+        return None
+    command = _statusline_command(path)
+    if not command or "statusline-brainbuddy.sh" in command:
+        return None
+    home = os.path.realpath(os.path.expanduser("~"))
+    shown = "~" + path[len(home):] if path.startswith(home) else path
+    return "\n".join([
+        "this project sets its own statusline in %s, so that one runs here and your buddy doesn't." % shown,
+        "the installer only wires ~/.claude/settings.json, and a project's own file wins inside the project.",
+        "",
+        "wrap theirs, then point the project at the shim:",
+        '  ./install.sh --statusline "%s"' % command,
+        '  then in that file: "statusLine": { "type": "command", "command": "%s" }' % SHIM,
+    ])
+
 
 def cmd_doctor(args):
     """Report what we can see. Counts only, never a path (R12)."""
@@ -402,9 +479,28 @@ def cmd_doctor(args):
         bp = metric.progress(banked, settings["xp_max"])
         stage = bp["stage"] if state_mod.is_hatched(c) else "egg"
         print("%s banked %d -> level %d (%s)" % (c["name"], banked, bp["level"], stage))
+    override = _project_override()
+    if override:
+        print("\n" + override)
     help_text = render.no_source_help(settings, status)
     if help_text:
         print("\n" + help_text)
+    if "--check" in args:
+        print("\n" + _version_check())
+    return 0
+
+
+def _version_check():
+    # imported here, not at the top: this is the one path allowed a socket, and
+    # keeping the import inside it is what proves the rest never gets one
+    from . import release
+
+    return release.check()
+
+
+def cmd_update(args):
+    """Ask pypi whether there's a newer brainbuddy. One request, then done."""
+    print(_version_check())
     return 0
 
 
@@ -452,7 +548,7 @@ COMMANDS = {
     "new": cmd_new, "hatch": cmd_hatch, "focus": cmd_focus, "list": cmd_list,
     "rename": cmd_rename, "retire": cmd_retire, "config": cmd_config,
     "simulate": cmd_simulate, "doctor": cmd_doctor, "sources": cmd_sources,
-    "hide": cmd_hide, "show": cmd_show,
+    "hide": cmd_hide, "show": cmd_show, "update": cmd_update,
 }
 
 

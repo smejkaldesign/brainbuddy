@@ -5,6 +5,22 @@ Notable changes, newest first. Versions follow semver; the version lives in
 
 ## Unreleased
 
+- Upgrades keep your buddy. `state.json` carries a schema version, and a file
+  written by any earlier version is brought forward on load: nothing is dropped,
+  missing fields are filled, and a focus pointing at a creature that isn't there
+  falls back to the roster rather than rendering as no buddy at all.
+- `brainbuddy update` and `brainbuddy doctor --check` ask PyPI whether there's a
+  newer version. They're the only two commands that go online, and only when you
+  run them; the statusline never does, and a test asserts it. No network is not
+  an error, it's one line and exit 0.
+- `doctor` names a project-level statusline. If a repo's own
+  `.claude/settings.json` sets `statusLine`, that wins inside the repo and the
+  creature never draws there. Doctor says so and prints the two-step fix with
+  your own command already in it. It only ever reads that file.
+- Windows: `install.sh` and `bootstrap.sh` name WSL and Git Bash when they're
+  run by something that isn't bash. There's no PowerShell version.
+- Hatching with no memory system is a moment rather than a silent Lv0. The
+  reveal is unchanged; the level is followed by what it means and what to feed.
 - One-line install: `bootstrap.sh` fetches the latest tagged release, unpacks it
   to a temp dir and runs its `install.sh` with whatever flags you passed, so the
   usual path is one command instead of a clone. It falls back to the default
