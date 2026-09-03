@@ -7,7 +7,7 @@ user_invocable: true
 # /brainbuddy-hatch
 
 Open the egg. Buddies feed off memories, so a **first** hatch is a short guided setup: ask what
-it gets to eat, ask whether the existing pile counts, then open it.
+it gets to eat, ask whether the existing pile counts, ask what to call it, then open it.
 
 ## Step 1: is this a first hatch?
 
@@ -17,9 +17,10 @@ PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli sources
 
 Exit 0 means it's already counting something. Exit 1 means it isn't, and the output says why.
 
-**Ask the two questions below when** this is the roster's first hatch, or `sources` exited 1.
-Otherwise skip both, don't re-ask on every egg, and go straight to Step 3. A second buddy from
-`/brainbuddy-new --add` inherits the setup the first one established.
+**Ask questions 2a and 2b when** this is the roster's first hatch, or `sources` exited 1.
+Otherwise skip those two, don't re-ask on every egg, and go straight to Step 2c. A second
+buddy from `/brainbuddy-new --add` inherits the setup the first one established. The naming
+question (2c) is per-egg and never skipped.
 
 ## Step 2a: what does it get to feed on?
 
@@ -65,14 +66,34 @@ Give them the real number from `doctor`:
 Both are legitimate. Don't editorialise beyond one line each, and don't tell them the level
 either choice would produce, because that spoils the reveal.
 
+## Step 2c: name it
+
+Ask on **every** hatch, not just the first: the egg has no name until it's opened, and this
+is the one chance to choose it. Fetch two fresh ideas first:
+
+```bash
+PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli names
+```
+
+Offer exactly these, letting them type their own via the free-text option:
+
+1. The first suggestion from `names`
+2. The second suggestion from `names`
+3. **Let it name itself** — the egg picked a name when it was laid, revealed at the hatch
+4. Their own name, typed in (the built-in Other/custom option)
+
+Don't reveal what "let it name itself" resolves to; that's part of the reveal. Names cap at
+24 characters.
+
 ## Step 3: open it
 
 ```bash
 PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli hatch
 ```
 
-Add `--from-zero` if that's what they picked. Print what the CLI returns; it emits the reveal
-and then the full card, so don't also run `card` afterwards.
+Add `--from-zero` if that's what they picked, and `--name <their choice>` unless they chose
+to let it name itself. Print what the CLI returns; it emits the reveal and then the full
+card, so don't also run `card` afterwards.
 
 `hatch` measures the source fresh rather than trusting the cache, so a provider set seconds
 earlier is scored correctly.

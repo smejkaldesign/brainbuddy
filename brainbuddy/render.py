@@ -180,16 +180,18 @@ def segment(st, xp=None, counts=None, gain=0):
         idx, label = metric.EGG_SPRITE, "egg /brainbuddy-hatch"
         tint, mark, shiny = DIM, "", ""
     f = sprites.face(full["species"], idx, uni)
+    # the name is chosen at the hatch, so before it there isn't one to show
+    shown = full["name"] if state_mod.is_hatched(c) else "Unhatched"
 
     earned = (" " + paint("+%d XP" % gain, GAIN)) if gain > 0 else ""
 
     if settings.get("density") == "sprite":
-        return sprite_block(full, "%s %s%s" % (full["name"], label, mark), idx, tint, settings)
+        return sprite_block(full, "%s %s%s" % (shown, label, mark), idx, tint, settings)
     if settings.get("density") == "minimal":
         # one glyph is the whole point of minimal, so no counter here
         return paint(sprites.glyph(idx, uni) + shiny, tint)
     if settings.get("density") == "full":
-        return "%s %s %s%s" % (paint(f + shiny, tint), paint(full["name"], BOLD), paint("%s %s" % (label, mark), DIM), earned)
+        return "%s %s %s%s" % (paint(f + shiny, tint), paint(shown, BOLD), paint("%s %s" % (label, mark), DIM), earned)
     return "%s %s%s" % (paint(f + shiny + mark, tint), paint(label, DIM), earned)
 
 
@@ -272,14 +274,16 @@ def compose(st, left, xp=None, counts=None, gain=0):
     icon = EGG_ICON if uni else EGG_ICON_ASCII
     if hatched:
         # painted in pieces. wrapping the finished string in BOLD would end at
-        # the gain's own reset and leave the bar unbolded
+        # the gain's own reset and leave the bar unbolded. the gain reads as a
+        # delta on the bar, so it sits to the bar's right
         caption = paint("%s %s · %s Lv%d" % (icon, full["name"], stage, level), BOLD)
+        caption += " " + paint(sprites.bar(frac, 6, uni), BOLD)
         if gain > 0:
             caption += " " + paint("+%d XP" % gain, GAIN)
-        caption += " " + paint(sprites.bar(frac, 6, uni), BOLD)
     else:
-        # no level and no progress bar, or the reveal is spoiled before you open it
-        caption = paint("%s %s · egg · /brainbuddy-hatch" % (icon, full["name"]), BOLD)
+        # no name, no level, no progress bar: the name is chosen at the hatch
+        # and everything else would spoil the reveal before you open it
+        caption = paint("%s Unhatched · /brainbuddy-hatch" % icon, BOLD)
 
     # pin the column to the widest form this creature will ever reach, so the text
     # beside it doesn't jump two columns the day it evolves into an Ascendant
@@ -361,7 +365,7 @@ def egg_card(st, c):
     out = [""] + ["  " + r for r in art]
     out += [
         "",
-        "  %s  %s" % (paint(c["name"], BOLD), paint("unhatched", DIM)),
+        "  %s" % paint("Unhatched", BOLD),
         "  " + paint("%d xp eaten and counting" % c.get("xp_banked", 0), DIM),
         "  " + paint("/brainbuddy-hatch to find out what it is", DIM),
     ]
@@ -494,7 +498,7 @@ def egg_notice(st, c):
     out = [""] + ["  " + paint(r, tint) for r in art]
     out += [
         "",
-        "  %s is an egg" % paint(c["name"], BOLD),
+        "  %s" % paint("An egg, unhatched", BOLD),
         "  " + paint("/brainbuddy-hatch to open it", DIM),
         "",
     ]

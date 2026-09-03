@@ -20,7 +20,8 @@ USAGE = """brainbuddy - a terminal pet that evolves with your memory
   card                full creature card
   new [name]          lay a new egg (--replace or --add)
   hatch [--from-zero] open the egg; --from-zero starts at 0 instead of scoring
-                      what you've already written
+        [--name <n>]  what you've already written. --name names it as it opens
+  names               two fresh name ideas, for naming an egg before it opens
   focus <name>        choose which creature banks new xp
   list                the roster
   rename <old> <new>
@@ -202,6 +203,14 @@ def cmd_hatch(args):
         print("%s is already out, Lv%d. /brainbuddy shows it." % (c["name"], lvl))
         return 1
 
+    if "--name" in args:
+        i = args.index("--name")
+        chosen = args[i + 1].strip() if i + 1 < len(args) and not args[i + 1].startswith("-") else ""
+        if not chosen:
+            print("--name takes the name. try: hatch --name Zephyr")
+            return 1
+        c["name"] = chosen[:24]
+
     # measure instead of reading the cache: the guided flow can set the provider
     # seconds earlier, and a cached count would score the source it replaced
     xp, counts = state_mod.measure_now(st["settings"])
@@ -229,6 +238,16 @@ def cmd_hatch(args):
         print("\n  %d xp of existing notes baselined. new ones count from here." % xp)
     elif empty:
         print("\n" + render.empty_hatch_note(st, state_mod.source_status(st["settings"])))
+    return 0
+
+
+def cmd_names(args):
+    """Two fresh name ideas. Random on purpose: the egg's own seed already has a
+    fallback name, and drawing from it here would make every suggestion the same."""
+    import uuid
+
+    for _ in range(2):
+        print(creature_mod.suggest_name(uuid.uuid4().hex))
     return 0
 
 
@@ -568,7 +587,7 @@ def cmd_show(args):
 
 COMMANDS = {
     "render": cmd_render, "compose": cmd_compose, "refresh": cmd_refresh, "card": cmd_card,
-    "new": cmd_new, "hatch": cmd_hatch, "focus": cmd_focus, "list": cmd_list,
+    "new": cmd_new, "hatch": cmd_hatch, "names": cmd_names, "focus": cmd_focus, "list": cmd_list,
     "rename": cmd_rename, "retire": cmd_retire, "config": cmd_config,
     "simulate": cmd_simulate, "doctor": cmd_doctor, "sources": cmd_sources,
     "hide": cmd_hide, "show": cmd_show, "update": cmd_update,

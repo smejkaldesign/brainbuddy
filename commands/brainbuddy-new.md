@@ -43,13 +43,9 @@ anyone they have to reach 100 first.
 
 ## Naming
 
-`new` picks a name from a syllable table when none is given, because the CLI can't reach a
-model. You can, so offer 3 short ones, one line each, and mention `rename` works any time.
-
-**Don't base them on the species or rarity.** Both are derived from the seed and known the
-moment the egg exists, so suggesting "a name that suits the Ember" tells them what's inside
-before they hatch it. Suggest names that just sound good. Rename after the reveal if they want
-something that fits.
+Don't name it here. An egg renders as Unhatched everywhere, and the name is chosen during
+`/brainbuddy-hatch` (two ideas from `brainbuddy names`, their own, or let it name itself).
+Laying the egg and naming what's inside are different moments; keep them apart.
 
 ## Rules
 

@@ -6,7 +6,7 @@ A terminal creature that lives in your Claude Code statusline, hatches from an e
 day one
 ┌───────────┐
 │    ___    │  ████░░░░░░  my-brain ⎇ main
-│   /   \   │  🥚 Zask · egg · /brainbuddy-hatch
+│   /   \   │  🥚 Unhatched · /brainbuddy-hatch
 │  ( ooo )  │
 │   \___/   │
 └───────────┘
@@ -135,10 +135,10 @@ That's why it works with a statusline it can't parse: `bash ~/statusline.sh`, a 
 
 ---
 
-## The first hatch asks two questions
+## The first hatch asks three questions
 
-`/brainbuddy-hatch` is a short guided setup the first time, because the two things it can't
-guess are the two that decide everything afterwards:
+`/brainbuddy-hatch` is a short guided setup the first time, because the things it can't
+guess are the ones that decide everything afterwards:
 
 1. **Where do your memories live?** It looks for an Obsidian vault, a notes folder and Claude
    Code's own memory, then offers what it found with a file count each rather than asking you
@@ -146,16 +146,20 @@ guess are the two that decide everything afterwards:
 2. **Score what's already written, or start from 0?** Scoring is the default and opens the egg
    several forms in, which is the moment the whole design is built around. `--from-zero`
    baselines what's there so only new notes count, for people who'd rather have the climb.
+3. **What's it called?** Two fresh ideas from `brainbuddy names`, your own, or let the egg
+   name itself and find out at the reveal. Until it hatches, the statusline just says
+   Unhatched, because there's nothing to know yet.
 
-Both questions are skipped on later eggs, which inherit the setup the first one established.
-Neither is asked if there's already a source configured and counting.
+The first two are skipped on later eggs, which inherit the setup the first one established,
+and skipped entirely if a source is already configured and counting. The name is asked for
+every egg.
 
 ## The session counter
 
-To the right of the level, the caption shows what your buddy has eaten **in this session**:
+To the right of the level bar, the caption shows what your buddy has eaten **in this session**:
 
 ```
-🥚 Neux · Sage Lv66 +16 XP ██░░░░
+🥚 Neux · Sage Lv66 ██░░░░ +16 XP
 ```
 
 It baselines the first time a session draws itself, so a new session opens at nothing rather
@@ -180,8 +184,8 @@ $ brainbuddy card
       \___/
 
 
-  Zask  unhatched
-  0 xp banked and counting
+  Unhatched
+  0 xp eaten and counting
   /brainbuddy-hatch to find out what it is
 ```
 
@@ -386,8 +390,9 @@ New creatures start at 0, always, because XP banks per creature rather than deri
 ## Commands
 
 ```
-brainbuddy new [name]        lay an egg (--replace or --add, --yes to confirm)
-brainbuddy hatch [--from-zero]  open the egg; --from-zero starts at 0 instead
+brainbuddy new               lay an egg (--replace or --add, --yes to confirm)
+brainbuddy hatch [--name <n>] [--from-zero]  open the egg, naming it as it opens
+brainbuddy names             two fresh name ideas for the egg
 brainbuddy card              the full creature card
 brainbuddy list              the roster
 brainbuddy focus <name>      choose who banks new xp, un-retires

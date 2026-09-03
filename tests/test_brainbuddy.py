@@ -568,7 +568,9 @@ def _egg_renders(colour):
     segs, cols, rarities = set(), set(), set()
     for i in range(400):
         st = state_mod.default_state()
-        c = state_mod.create(st, name="Egg")
+        # a distinct name per egg, so the sets below also prove no surface
+        # shows a name before the hatch chooses one
+        c = state_mod.create(st, name="Egg%d" % i)
         c["seed"] = "seed-%d" % i
         c["xp_banked"] = 700
         rarities.add(creature.hydrate(c)["rarity"])
@@ -605,6 +607,9 @@ def test_egg_reveals_nothing():
             check(len(rarities) >= 3, "%s: fixture spans %d rarities" % (where, len(rarities)))
             check(len(segs) == 1, "%s: the segment is identical for every egg, got %d" % (where, len(segs)))
             check(len(cols) == 1, "%s: so is the composed column, got %d" % (where, len(cols)))
+            col = cols.pop()
+            check("Unhatched" in col, "%s: an egg renders as Unhatched" % where)
+            check("Egg0" not in col and "Egg1" not in col, "%s: and never as a name" % where)
             check("Lv" not in segs.pop(), "%s: and neither shows a level" % where)
     finally:
         os.environ.pop("NO_COLOR", None)
@@ -933,10 +938,37 @@ def test_session_xp_counter():
         cap = next(r for r in render.compose(st, "BAR", xp=96, counts={}, gain=16).split("\n") if "Lv" in r)
         check("+16 XP" in cap, "the caption carries the counter")
         check(cap.index("Lv") < cap.index("+16 XP"), "and it sits to the right of the level")
+        bar_char = "█" if "█" in cap else "#"
+        check(cap.index(bar_char) < cap.index("+16 XP"), "and to the right of the progress bar")
         quiet = next(r for r in render.compose(st, "BAR", xp=96, counts={}, gain=0).split("\n") if "Lv" in r)
         check("XP" not in quiet, "a session that has earned nothing yet shows no counter")
     finally:
         os.environ.pop("NO_COLOR", None)
+
+
+def test_hatch_naming():
+    """The name is chosen at the hatch: --name lands it, and `names` has ideas.
+
+    Before the hatch there's nothing to call it, which the egg tests cover; this
+    covers the choosing itself.
+    """
+    print("\nhatch naming")
+    import io
+    from contextlib import redirect_stdout
+    from brainbuddy import cli
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        code = cli.cmd_names([])
+    ideas = [l for l in buf.getvalue().split("\n") if l.strip()]
+    check(code == 0 and len(ideas) == 2, "names prints two ideas, got %d" % len(ideas))
+    check(all(i[:1].isupper() and len(i) <= 24 for i in ideas), "both look like names")
+
+    st = state_mod.default_state()
+    c = state_mod.create(st, name="Placeholder")
+    c["name"] = "Zephyr"[:24]  # what hatch --name does before the reveal
+    state_mod.reveal(st)
+    check(c["name"] == "Zephyr" and state_mod.is_hatched(c), "a chosen name survives the reveal")
 
 
 def test_refresh_never_reverts_concurrent_writes():
@@ -997,6 +1029,7 @@ def test_migration_replaces_nulls():
 
 if __name__ == "__main__":
     test_metric()
+    test_hatch_naming()
     test_refresh_never_reverts_concurrent_writes()
     test_migration_replaces_nulls()
     test_sprite_alignment()
