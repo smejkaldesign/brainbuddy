@@ -185,13 +185,15 @@ def cmd_list(args):
         if state_mod.is_hatched(c):
             idx, stage = metric.stage_for(lvl)
             level_col = "Lv%-4d" % lvl
+            # rarity and shiny come off the seed, so an egg must not print them
+            desc = full["rarity"] + (" shiny" if full["shiny"] else "")
         else:
             idx, stage, level_col = metric.EGG_SPRITE, "unhatched", "egg   "
+            desc = ""
         flag = "*" if c["id"] == st.get("focused") else " "
-        note = " retired" if c.get("retired_at") else ""
-        print("%s %s %-10s %s %-10s %s%s%s" % (
-            flag, sprites.glyph(idx, uni), c["name"], level_col, stage,
-            full["rarity"], " shiny" if full["shiny"] else "", note))
+        note = "retired" if c.get("retired_at") else ""
+        print(("%s %s %-10s %s %-10s %s %s" % (
+            flag, sprites.glyph(idx, uni), c["name"], level_col, stage, desc, note)).rstrip())
     print("\n* = focused (the one gaining xp)")
     return 0
 

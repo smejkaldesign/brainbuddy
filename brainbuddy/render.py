@@ -218,6 +218,24 @@ def sprite_block(full, label, stage_index, tint, settings):
     return "\n" + "\n".join(rows)
 
 
+def egg_card(st, c):
+    """An egg's card. Names nothing derived from the seed, or there's no reveal left.
+
+    Species, rarity, shiny, stage and stats all come off the seed and are known
+    the moment the egg exists. Printing any of them here spoils the hatch.
+    """
+    art = sprites.sprite("Mote", metric.EGG_SPRITE, False)
+    out = [""] + ["  " + r for r in art]
+    out += [
+        "",
+        "  %s  %s" % (paint(c["name"], BOLD), paint("unhatched", DIM)),
+        "  " + paint("%d xp banked and counting" % c.get("xp_banked", 0), DIM),
+        "  " + paint("/brainbuddy-hatch to find out what it is", DIM),
+        "",
+    ]
+    return "\n".join(out)
+
+
 def card(st, xp=None, counts=None):
     """The /brainbuddy view. Multi-line, safe to be verbose, except about paths."""
     settings = st["settings"]
@@ -226,7 +244,9 @@ def card(st, xp=None, counts=None):
         xp, counts = current_xp(st)
     c = state_mod.focused(st)
     if c is None:
-        return "No buddy yet. Hatch one with: brainbuddy hatch"
+        return "No buddy yet. Lay an egg with: brainbuddy new"
+    if not state_mod.is_hatched(c):
+        return egg_card(st, c)
 
     full = creature_mod.hydrate(c)
     banked = c["xp_banked"]

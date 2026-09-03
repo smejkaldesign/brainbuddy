@@ -41,8 +41,12 @@ current buddy holds its level and stops gaining. Relay that, get a yes, then re-
 ## Naming
 
 `new` picks a name from a syllable table when none is given, because the CLI can't reach a
-model. You can. Offer 3 short names that fit the species and rarity, one line each, and
-mention `rename` exists if they want to change it later.
+model. You can, so offer 3 short ones, one line each, and mention `rename` works any time.
+
+**Don't base them on the species or rarity.** Both are derived from the seed and known the
+moment the egg exists, so suggesting "a name that suits the Ember" tells them what's inside
+before they hatch it. Suggest names that just sound good. Rename after the reveal if they want
+something that fits.
 
 ## Rules
 
