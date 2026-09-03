@@ -116,7 +116,12 @@ def glyph(stage_index, unicode_ok=True):
 def sprite(species, stage_index, shiny=False, short=False):
     """Rows for a species at a stage, padded to equal width."""
     motif, eyes = look(species)
-    if shiny:
+    if stage_index == 0:
+        # stage 0 is the egg. the species motif and shiny's `$` are both derived
+        # from the seed, so an egg drawn with either has already given away
+        # what's inside. every egg looks the same until it's opened
+        motif = SPECIES_LOOK["Mote"][0]
+    elif shiny:
         motif = motif.upper() if motif.isalpha() else "$"
     table = SHORT_TEMPLATES if short else STAGE_TEMPLATES
     rows = table[max(0, min(len(table) - 1, stage_index))]

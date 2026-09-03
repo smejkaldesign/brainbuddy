@@ -43,6 +43,15 @@ CLAUDE_SOURCES = [
     {"key": "memories", "glob": "*/memory/*.md", "weight": 3, "exclude": ["MEMORY.md", "index.md"]},
 ]
 
+# Any folder of markdown. The vault layout above keys off specific directory
+# names, so pointing it at someone else's notes counts zero and looks broken.
+# This one just walks for .md, which is the shape most note folders actually are.
+FOLDER_SOURCES = [
+    {"key": "notes", "glob": "**/*.md", "weight": 2, "exclude": ["MEMORY.md", "index.md", "README.md"]},
+]
+
+PROVIDERS = ("claude", "vault", "folder")
+
 
 def default_claude_root():
     return os.path.expanduser("~/.claude/projects")
@@ -56,7 +65,9 @@ def count_source(root, source):
     exclude = set(source.get("exclude", []))
     seen = set()
     pattern = os.path.join(root, source["glob"])
-    for path in glob.iglob(pattern):
+    # recursive so a folder provider's ** walks. glob skips dotted dirs itself,
+    # so this doesn't wander into .git
+    for path in glob.iglob(pattern, recursive=True):
         if os.path.basename(path) in exclude:
             continue
         try:

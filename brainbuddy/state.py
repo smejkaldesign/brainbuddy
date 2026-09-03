@@ -75,9 +75,39 @@ def save(state, path=STATE_PATH, own_settings=False):
 
 
 def sources_for(settings):
-    if settings.get("provider") == "vault" and settings.get("vault_root"):
-        return os.path.expanduser(settings["vault_root"]), metric.VAULT_SOURCES
+    provider = settings.get("provider")
+    root = os.path.expanduser(settings.get("vault_root") or "")
+    if provider == "vault" and root:
+        return root, metric.VAULT_SOURCES
+    if provider == "folder" and root:
+        return root, metric.FOLDER_SOURCES
     return metric.default_claude_root(), metric.CLAUDE_SOURCES
+
+
+def source_status(settings):
+    """Whether there's a memory system to count at all. Counts, never a path.
+
+    Three zeroes look identical in the statusline and mean different things: a
+    root that isn't there, a real root that's empty, and a root full of files
+    the provider's layout doesn't match. Only the middle one means "keep
+    writing", so they can't share one message.
+    """
+    root, sources = sources_for(settings)
+    if not os.path.isdir(root):
+        return {"state": "missing_root", "xp": 0, "counts": {}}
+    xp, counts = metric.measure(root, sources, settings.get("weights"))
+    if xp:
+        return {"state": "ok", "xp": xp, "counts": counts}
+    # A vault root with markdown in it that scored zero is a layout mismatch, not
+    # an empty vault, and that's the difference between "write more" and "wrong
+    # provider". Only vault can be wrong this way: it's the one keyed to specific
+    # directory names, so pointing it at a plain notes folder counts nothing.
+    if sources is metric.VAULT_SOURCES:
+        _, stray = metric.measure(root, metric.FOLDER_SOURCES)
+        found = sum(stray.values())
+        if found:
+            return {"state": "layout_mismatch", "xp": 0, "counts": counts, "stray": found}
+    return {"state": "empty", "xp": 0, "counts": counts}
 
 
 def measure_now(settings):

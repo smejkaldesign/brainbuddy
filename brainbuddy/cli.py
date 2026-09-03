@@ -28,7 +28,11 @@ USAGE = """brainbuddy - a terminal pet that evolves with your memory
   hide / show         drop the creature from the statusline, or bring it back
   simulate <xp>       preview any level without touching your real state
   refresh             recompute the xp cache (run in the background by render)
+  sources             what it can count, and what to do if that's nothing
   doctor              check what brainbuddy can see
+
+provider is claude (stock Claude Code memory), vault (a structured vault) or
+folder (any directory of markdown, set vault_root to point at it).
 """
 
 
@@ -260,6 +264,16 @@ def cmd_config(args):
             print("density must be compact, minimal, full, sprite or ruler")
             return 1
         value = raw
+    elif key == "provider":
+        if raw not in metric.PROVIDERS:
+            print("provider must be one of: %s" % ", ".join(metric.PROVIDERS))
+            return 1
+        value = raw
+    elif key == "vault_root":
+        value = raw
+        # say so now rather than letting it read as an empty vault later
+        if not os.path.isdir(os.path.expanduser(raw)):
+            print("warning: that folder isn't there yet, so nothing will be counted")
     elif key == "sprite_height":
         value = 3 if int(raw) <= 3 else 5
     elif key == "columns":
@@ -295,18 +309,46 @@ def cmd_simulate(args):
     return 0
 
 
+PROVIDER_LABEL = {
+    "claude": "stock Claude Code memory",
+    "vault": "vault layout",
+    "folder": "folder of notes",
+}
+
+
 def cmd_doctor(args):
     """Report what we can see. Counts only, never a path (R12)."""
     st = _load()
-    xp, counts = state_mod.measure_now(st["settings"])
-    print("provider: %s" % st["settings"]["provider"])
-    print("configured root: %s" % ("set" if (st["settings"]["provider"] != "vault" or st["settings"]["vault_root"]) else "MISSING"))
+    settings = st["settings"]
+    status = state_mod.source_status(settings)
+    xp, counts = status["xp"], status["counts"]
+    print("provider: %s (%s)" % (settings["provider"], PROVIDER_LABEL.get(settings["provider"], "unknown")))
+    # existence, not the path itself. "set" used to print for provider=claude
+    # whether or not the directory was actually there, which hid the real fault
+    print("root: %s" % ("missing" if status["state"] == "missing_root" else "found"))
     for k in sorted(counts):
         print("  %-10s %d" % (k, counts[k]))
-    p = metric.progress(xp, st["settings"]["xp_max"])
+    p = metric.progress(xp, settings["xp_max"])
     print("xp %d -> level %d (%s)" % (xp, p["level"], p["stage"]))
-    if xp == 0:
-        print("\nnothing found. check: brainbuddy config provider / vault_root")
+    help_text = render.no_source_help(settings, status)
+    if help_text:
+        print("\n" + help_text)
+    return 0
+
+
+def cmd_sources(args):
+    """What it can count, and what to do when that's nothing.
+
+    The installer calls this so a fresh install on a machine with no memory
+    system says so on the spot, instead of leaving a level-0 egg and no reason.
+    """
+    st = _load()
+    status = state_mod.source_status(st["settings"])
+    help_text = render.no_source_help(st["settings"], status)
+    if help_text:
+        print(help_text)
+    else:
+        print("counting %d xp of memory. `brainbuddy card` shows your buddy." % status["xp"])
     return 0
 
 
@@ -335,7 +377,7 @@ COMMANDS = {
     "render": cmd_render, "compose": cmd_compose, "refresh": cmd_refresh, "card": cmd_card,
     "new": cmd_new, "hatch": cmd_hatch, "focus": cmd_focus, "list": cmd_list,
     "rename": cmd_rename, "retire": cmd_retire, "config": cmd_config,
-    "simulate": cmd_simulate, "doctor": cmd_doctor,
+    "simulate": cmd_simulate, "doctor": cmd_doctor, "sources": cmd_sources,
     "hide": cmd_hide, "show": cmd_show,
 }
 

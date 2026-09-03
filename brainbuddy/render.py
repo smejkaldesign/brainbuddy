@@ -88,6 +88,59 @@ def current_xp(st, allow_blocking=True):
     return xp, counts
 
 
+SETUP_PROMPT = (
+    '"Set up a persistent memory system for this project: keep one markdown\n'
+    '   file per durable fact in your memory directory, an index listing them,\n'
+    '   and write to it as we work."'
+)
+
+
+def no_source_help(settings, status):
+    """What the user has to go do to earn XP. Empty string when XP is flowing.
+
+    Split by cause on purpose. "Write more notes" is useless advice when the
+    real problem is a root that doesn't exist, and "check your config" is worse
+    when the truth is they've never kept notes anywhere.
+    """
+    if status["state"] == "ok":
+        return ""
+    provider = settings.get("provider", "claude")
+
+    if status["state"] == "layout_mismatch":
+        return "\n".join([
+            "Found %d markdown files under that root, but none where the %s layout looks." % (
+                status.get("stray", 0), provider),
+            "",
+            "Count it as a plain folder of notes instead:",
+            "  brainbuddy config provider folder",
+        ])
+
+    if status["state"] == "missing_root":
+        if provider == "claude":
+            head = "Claude Code's memory directory isn't there yet, so there's nothing to count."
+        else:
+            head = "The folder brainbuddy was pointed at doesn't exist, so there's nothing to count."
+    else:
+        head = "brainbuddy levels off how much you've written down, and nothing's been written down yet."
+
+    return "\n".join([
+        head,
+        "",
+        "It counts markdown files in a memory system. Any of these will do:",
+        "",
+        "  Claude Code's own memory   brainbuddy config provider claude",
+        "  a folder of notes          brainbuddy config provider folder",
+        "                             brainbuddy config vault_root ~/notes",
+        "",
+        "Don't have one yet? Ask Claude Code to start keeping memory:",
+        "",
+        "  " + SETUP_PROMPT,
+        "",
+        "Until something lands there it sits at level 0. Nothing's broken, there's",
+        "just nothing to measure.",
+    ])
+
+
 def segment(st, xp=None, counts=None):
     """One line for the statusline. Empty string means render nothing."""
     settings = st["settings"]
@@ -105,13 +158,16 @@ def segment(st, xp=None, counts=None):
     if state_mod.is_hatched(c):
         idx, _ = metric.stage_for(level)
         label = "Lv%d" % level
+        tint = RARITY_COLOR.get(full["rarity"], "")
+        mark = full["rarity_mark"]
+        shiny = "*" if full["shiny"] else ""
     else:
-        # an unopened egg doesn't show its level. that reveal is the whole point of hatching
-        idx, label = metric.EGG_SPRITE, "egg"
+        # an unopened egg doesn't show its level. that reveal is the whole point
+        # of hatching, and rarity colour, mark and shiny are all seed-derived
+        # too, so wearing any of them tells you what's inside before you open it
+        idx, label = metric.EGG_SPRITE, "egg /brainbuddy-hatch"
+        tint, mark, shiny = DIM, "", ""
     f = sprites.face(full["species"], idx, uni)
-    tint = RARITY_COLOR.get(full["rarity"], "")
-    mark = full["rarity_mark"]
-    shiny = "*" if full["shiny"] else ""
 
     if settings.get("density") == "sprite":
         return sprite_block(full, "%s %s%s" % (full["name"], label, mark), idx, tint, settings)
@@ -187,7 +243,8 @@ def compose(st, left, xp=None, counts=None):
     level = metric.level_for(c["xp_banked"], settings["xp_max"])
     hatched = state_mod.is_hatched(c)
     idx, stage = metric.stage_for(level) if hatched else (metric.EGG_SPRITE, "egg")
-    tint = RARITY_COLOR.get(full["rarity"], "")
+    # an egg tinted with its rarity has already spoiled the reveal, same as segment
+    tint = RARITY_COLOR.get(full["rarity"], "") if hatched else DIM
 
     short = settings.get("sprite_height", 5) <= 3
     art = _trim(sprites.sprite(full["species"], idx, full["shiny"], short=short))
@@ -265,6 +322,18 @@ def sprite_block(full, label, stage_index, tint, settings):
     return "\n" + "\n".join(rows)
 
 
+def _zero_note(st, xp):
+    """One line for the card when nothing is being counted. None when it is.
+
+    Only runs on a zero, so the scan it costs never lands on a working setup.
+    """
+    if xp:
+        return None
+    if state_mod.source_status(st["settings"])["state"] == "ok":
+        return None
+    return paint("nothing to count yet. `brainbuddy doctor` says what it needs", DIM)
+
+
 def egg_card(st, c):
     """An egg's card. Names nothing derived from the seed, or there's no reveal left.
 
@@ -278,8 +347,11 @@ def egg_card(st, c):
         "  %s  %s" % (paint(c["name"], BOLD), paint("unhatched", DIM)),
         "  " + paint("%d xp banked and counting" % c.get("xp_banked", 0), DIM),
         "  " + paint("/brainbuddy-hatch to find out what it is", DIM),
-        "",
     ]
+    note = _zero_note(st, c.get("xp_banked", 0))
+    if note:
+        out += ["", "  " + note]
+    out.append("")
     return "\n".join(out)
 
 
@@ -323,6 +395,9 @@ def card(st, xp=None, counts=None):
     info.append("")
     info.append("  ".join("%s %d" % (k, v) for k, v in stats.items()))
     info.append(paint("counted: " + "  ".join("%s %d" % (k, v) for k, v in sorted(counts.items())), DIM))
+    note = _zero_note(st, xp)
+    if note:
+        info += ["", note]
 
     lines = []
     pad = max(len(r) for r in art)

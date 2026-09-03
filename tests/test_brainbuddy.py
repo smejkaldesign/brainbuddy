@@ -359,6 +359,235 @@ def test_state_roundtrip():
         shutil.rmtree(d)
 
 
+def _egg_renders(colour):
+    """Every unhatched egg's segment and column, over a spread of seeds."""
+    from brainbuddy import render
+
+    if colour:
+        os.environ.pop("NO_COLOR", None)
+    else:
+        os.environ["NO_COLOR"] = "1"
+    segs, cols, rarities = set(), set(), set()
+    for i in range(400):
+        st = state_mod.default_state()
+        c = state_mod.create(st, name="Egg")
+        c["seed"] = "seed-%d" % i
+        c["xp_banked"] = 700
+        rarities.add(creature.hydrate(c)["rarity"])
+        segs.add(render.segment(st, xp=700, counts={}))
+        cols.add(render.compose(st, "BAR", xp=700, counts={}))
+    return segs, cols, rarities
+
+
+def test_egg_reveals_nothing():
+    """An egg has to look the same no matter what's inside it.
+
+    Species motif, shiny's `$`, the rarity mark and the rarity colour all come
+    off the seed, so an egg wearing any of them answers the question hatching
+    exists to answer. Three of the four leaked into the statusline for seven
+    PRs because nothing here compared one egg against another.
+    """
+    print("\negg reveals nothing")
+    from brainbuddy import sprites
+
+    try:
+        for short in (False, True):
+            arts = set()
+            for species in sprites.SPECIES_LOOK:
+                for shiny in (False, True):
+                    arts.add(tuple(sprites.sprite(species, 0, shiny, short=short)))
+            check(len(arts) == 1, "one egg sprite across every species and shiny%s, got %d" % (
+                " (short)" if short else "", len(arts)))
+
+        for colour in (False, True):
+            segs, cols, rarities = _egg_renders(colour)
+            where = "with colour" if colour else "plain"
+            check(len(rarities) >= 3, "%s: fixture spans %d rarities" % (where, len(rarities)))
+            check(len(segs) == 1, "%s: the segment is identical for every egg, got %d" % (where, len(segs)))
+            check(len(cols) == 1, "%s: so is the composed column, got %d" % (where, len(cols)))
+            check("Lv" not in segs.pop(), "%s: and neither shows a level" % where)
+    finally:
+        os.environ.pop("NO_COLOR", None)
+
+
+def test_source_status():
+    """A zero XP reading has three causes and they need three different answers.
+
+    Doctor used to print "check provider / vault_root" for all of them, which
+    is actively wrong advice for someone who has simply never kept notes.
+    """
+    print("\nsource status")
+    from brainbuddy import render
+
+    settings = dict(state_mod.DEFAULT_SETTINGS)
+    settings["provider"] = "folder"
+    settings["vault_root"] = os.path.join(tempfile.gettempdir(), "bb-not-here-at-all")
+    check(state_mod.source_status(settings)["state"] == "missing_root", "a root that isn't there reads as missing_root")
+
+    root = tempfile.mkdtemp(prefix="bb-folder-")
+    try:
+        settings["vault_root"] = root
+        check(state_mod.source_status(settings)["state"] == "empty", "a real but empty root reads as empty")
+        check("nothing's been written down" in render.no_source_help(settings, state_mod.source_status(settings)),
+              "and the help says so rather than blaming the config")
+
+        os.makedirs(os.path.join(root, "sub"))
+        for rel in ("a.md", os.path.join("sub", "b.md"), "index.md"):
+            open(os.path.join(root, rel), "w").close()
+        s = state_mod.source_status(settings)
+        check(s["state"] == "ok" and s["counts"]["notes"] == 2,
+              "the folder provider walks subdirs and skips index.md, got %s" % s["counts"])
+        check(render.no_source_help(settings, s) == "", "a working source gets no lecture")
+
+        settings["provider"] = "vault"
+        s = state_mod.source_status(settings)
+        check(s["state"] == "layout_mismatch" and s["stray"] == 2,
+              "the vault layout over a plain folder reads as layout_mismatch, got %s" % s)
+        check("provider folder" in render.no_source_help(settings, s),
+              "and it points at the folder provider instead of 'write more notes'")
+    finally:
+        shutil.rmtree(root)
+
+
+def test_installer_wraps_any_statusline():
+    """The installer has to end up drawing the box, whatever it was handed.
+
+    Appending into the user's own script was the old mechanism. It silently did
+    nothing when that script ended in `exit`, refused outright for the two
+    commonest command shapes, and produced the inline segment rather than the
+    boxed column the README leads with. Every case here shipped broken.
+    """
+    print("\ninstaller wiring")
+    import json
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cases = [
+        ("absolute path", "%s", False),
+        ("bash prefix", "bash %s", False),
+        ("home-relative", "~/.claude/statusline.sh", False),
+        ("ends in exit", "%s", True),
+    ]
+    for label, template, exits in cases:
+        home = tempfile.mkdtemp(prefix="bb-install-")
+        try:
+            claude = os.path.join(home, ".claude")
+            os.makedirs(claude)
+            script = os.path.join(claude, "statusline.sh")
+            with open(script, "w") as f:
+                f.write('#!/bin/bash\nprintf "HOST"\n' + ("exit 0\n" if exits else ""))
+            os.chmod(script, 0o755)
+            command = template % script if "%s" in template else template
+            with open(os.path.join(claude, "settings.json"), "w") as f:
+                json.dump({"theme": "dark", "statusLine": {"type": "command", "command": command}}, f)
+
+            env = dict(os.environ, HOME=home)
+            r = subprocess.run(["bash", os.path.join(repo, "install.sh")],
+                               env=env, input="", capture_output=True, text=True)
+            check(r.returncode == 0, "%s: installer exits clean" % label)
+
+            shim = os.path.join(claude, "brainbuddy", "statusline-brainbuddy.sh")
+            out = subprocess.run(["bash", shim], env=env, input="{}",
+                                 capture_output=True, text=True).stdout
+            check("HOST" in out, "%s: the statusline it wrapped still renders" % label)
+            check("┌" in out or "+-" in out, "%s: the creature lands in its box" % label)
+            check("/brainbuddy-hatch" in out, "%s: and it says how to open the egg" % label)
+
+            # and the user's own file is left exactly as they wrote it
+            with open(script) as f:
+                check("brainbuddy" not in f.read(), "%s: their script is untouched" % label)
+
+            u = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--uninstall"],
+                               env=env, input="", capture_output=True, text=True)
+            with open(os.path.join(claude, "settings.json")) as f:
+                restored = json.load(f)
+            check(u.returncode == 0 and restored["statusLine"]["command"] == command,
+                  "%s: uninstall puts their command back" % label)
+            check(restored.get("theme") == "dark", "%s: and leaves the rest of settings.json alone" % label)
+        finally:
+            shutil.rmtree(home)
+
+    # no script at all, just a command. the old installer gave up on this one and
+    # printed instructions for the user to wire by hand.
+    home = tempfile.mkdtemp(prefix="bb-install-")
+    try:
+        claude = os.path.join(home, ".claude")
+        os.makedirs(claude)
+        with open(os.path.join(claude, "settings.json"), "w") as f:
+            json.dump({"statusLine": {"type": "command", "command": "echo HOST"}}, f)
+        env = dict(os.environ, HOME=home)
+        subprocess.run(["bash", os.path.join(repo, "install.sh")],
+                       env=env, input="", capture_output=True, text=True)
+        shim = os.path.join(claude, "brainbuddy", "statusline-brainbuddy.sh")
+        out = subprocess.run(["bash", shim], env=env, input="{}",
+                             capture_output=True, text=True).stdout
+        check("HOST" in out and ("┌" in out or "+-" in out),
+              "plain command: a bare command gets wrapped and boxed too")
+    finally:
+        shutil.rmtree(home)
+
+
+GENERATED_BLOCK = (
+    '\n# >>> brainbuddy >>>\nprintf " "\n'
+    '"$HOME/.claude/brainbuddy/statusline-brainbuddy.sh"\n'
+    "# <<< brainbuddy <<<\n"
+)
+
+
+def test_installer_respects_hand_wiring():
+    """A brainbuddy block someone has edited belongs to them, not the installer.
+
+    Wrapping a script that already calls the CLI would draw two creatures, so
+    the installer has to stop. What it must not do is delete the block to make
+    room: people edit inside the fence, and the first cut of the wrapping
+    installer silently ate a customised one on the way past.
+    """
+    print("\nhand-wired statuslines")
+    import json
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    edited = GENERATED_BLOCK.replace(
+        'printf " "',
+        'PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli compose "$MY_BAR"',
+    )
+    for label, block, survives in [("untouched block", GENERATED_BLOCK, False), ("edited block", edited, True)]:
+        home = tempfile.mkdtemp(prefix="bb-wired-")
+        try:
+            claude = os.path.join(home, ".claude")
+            os.makedirs(claude)
+            script = os.path.join(claude, "statusline.sh")
+            body = '#!/bin/bash\nprintf "HOST"\n' + block
+            with open(script, "w") as f:
+                f.write(body)
+            os.chmod(script, 0o755)
+            with open(os.path.join(claude, "settings.json"), "w") as f:
+                json.dump({"statusLine": {"type": "command", "command": script}}, f)
+
+            env = dict(os.environ, HOME=home)
+            r = subprocess.run(["bash", os.path.join(repo, "install.sh")],
+                               env=env, input="", capture_output=True, text=True)
+            check(r.returncode == 0, "%s: installer exits clean" % label)
+            with open(script) as f:
+                same = f.read() == body
+            with open(os.path.join(claude, "settings.json")) as f:
+                still_theirs = json.load(f)["statusLine"]["command"] == script
+
+            if survives:
+                check(same, "%s: their script is left exactly as they wrote it" % label)
+                check(still_theirs, "%s: and their statusline stays wired to it" % label)
+                check("two creatures" in r.stdout, "%s: and the installer says why" % label)
+            else:
+                check(not same, "%s: our own block is removed" % label)
+                check(not still_theirs, "%s: and the shim takes over" % label)
+                shim = os.path.join(claude, "brainbuddy", "statusline-brainbuddy.sh")
+                out = subprocess.run(["bash", shim], env=env, input="{}",
+                                     capture_output=True, text=True).stdout
+                check(out.count("/brainbuddy-hatch") == 1, "%s: exactly one creature renders" % label)
+        finally:
+            shutil.rmtree(home)
+
+
 if __name__ == "__main__":
     test_metric()
     test_sprite_alignment()
@@ -369,6 +598,10 @@ if __name__ == "__main__":
     test_egg_and_hatch()
     test_retire_keeps_the_record()
     test_state_roundtrip()
+    test_egg_reveals_nothing()
+    test_source_status()
+    test_installer_wraps_any_statusline()
+    test_installer_respects_hand_wiring()
     print("\n%s" % ("-" * 46))
     if FAILURES:
         print("%d FAILED" % len(FAILURES))
