@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: tests
+        run: python3 tests/test_brainbuddy.py
+
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # the pre-push hook only runs for people who set core.hooksPath, which a
+      # contributor won't have. this is the copy that actually gates a PR.
+      - name: leak guard
+        run: ./scripts/leak-guard.sh
+      - name: shell syntax
+        run: bash -n install.sh && bash -n scripts/leak-guard.sh && bash -n .githooks/pre-push
