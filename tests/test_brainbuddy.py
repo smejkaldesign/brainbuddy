@@ -359,6 +359,71 @@ def test_state_roundtrip():
         shutil.rmtree(d)
 
 
+def test_state_migration():
+    """An upgrade must never cost someone their buddy.
+
+    The state file outlives every version of the code that wrote it, so a load
+    has to bring an older one forward rather than reading it as a fresh install.
+    A de-levelled or vanished creature is the one bug with no undo: the XP is
+    gone, and the seed that made that particular creature is gone with it.
+    """
+    print("\nstate migration")
+    import json
+
+    d = tempfile.mkdtemp(prefix="bb-migrate-")
+    path = os.path.join(d, "state.json")
+    try:
+        # a file from before the stamp existed, hatched, with real banked xp
+        legacy = {
+            "high_water_xp": 624,
+            "focused": "abc123",
+            "creatures": [{
+                "id": "abc123", "seed": "seed-one", "name": "Neux",
+                "hatched_at": "2026-01-01T00:00:00Z", "xp_banked": 624, "last_stage_seen": 3,
+            }],
+            "settings": {"provider": "folder", "vault_root": "~/notes"},
+        }
+        with open(path, "w") as f:
+            json.dump(legacy, f)
+
+        st = state_mod.load(path)
+        c = st["creatures"][0]
+        check(st["version"] == state_mod.STATE_VERSION, "an unstamped file loads as the current version")
+        check(c["xp_banked"] == 624, "banked xp survives the migration, got %d" % c["xp_banked"])
+        check(metric.level_for(c["xp_banked"]) == 64, "so the buddy is still level 64 afterwards")
+        check(st["high_water_xp"] == 624, "the high water mark survives too")
+        check(state_mod.is_hatched(c) and st["focused"] == "abc123", "it's still hatched and still focused")
+        check(st["settings"]["provider"] == "folder", "their settings are kept")
+        check(st["settings"]["density"] == "compact", "and settings added since are filled in")
+        check(creature.hydrate(c)["species"] == creature.derive("seed-one")["species"],
+              "the species still comes off the same seed, so it's the same creature")
+
+        # round-trip it the way an upgraded install would: load, save, load again
+        state_mod.save(st, path)
+        again = state_mod.load(path)
+        check(again["creatures"][0]["xp_banked"] == 624, "and again after the next save")
+        check(json.load(open(path))["version"] == state_mod.STATE_VERSION, "the stamp is written to disk")
+
+        # a hand-edited or half-written creature: every read path indexes these
+        with open(path, "w") as f:
+            json.dump({"creatures": [{"seed": "seed-two"}], "focused": "gone"}, f)
+        st = state_mod.load(path)
+        c = st["creatures"][0]
+        check(c["xp_banked"] == 0 and c["last_stage_seen"] == 0, "missing creature keys are filled, not fatal")
+        check(c["id"] and c["name"], "so are the id and the name")
+        check(st["focused"] == c["id"], "a focus pointing at nothing falls back to the roster")
+
+        # a stamp from a version we don't know about is not ours to relabel
+        with open(path, "w") as f:
+            json.dump({"version": 99, "creatures": [], "focused": None}, f)
+        check(state_mod.load(path)["version"] == 99, "a newer stamp survives a downgrade")
+    finally:
+        shutil.rmtree(d)
+
+
+
+
+
 def _egg_renders(colour):
     """Every unhatched egg's segment and column, over a spread of seeds."""
     from brainbuddy import render
@@ -751,6 +816,7 @@ if __name__ == "__main__":
     test_egg_and_hatch()
     test_retire_keeps_the_record()
     test_state_roundtrip()
+    test_state_migration()
     test_egg_reveals_nothing()
     test_source_status()
     test_installer_wraps_any_statusline()

@@ -18,6 +18,10 @@ STATE_PATH = os.path.join(STATE_DIR, "state.json")
 CACHE_PATH = os.path.join(STATE_DIR, "xp.cache")
 CACHE_TTL = 60
 
+# bumped when the file's shape changes. `migrate` is what actually reads it, and
+# an upgrade that de-levels someone's buddy is the one failure with no undo
+STATE_VERSION = 2
+
 DEFAULT_SETTINGS = {
     "provider": "claude",       # "claude" | "vault"
     "vault_root": "",
@@ -38,8 +42,8 @@ SESSION_KEEP = 8
 
 
 def default_state():
-    return {"version": 1, "high_water_xp": 0, "focused": None, "creatures": [], "sessions": {},
-            "settings": dict(DEFAULT_SETTINGS)}
+    return {"version": STATE_VERSION, "high_water_xp": 0, "focused": None, "creatures": [],
+            "sessions": {}, "settings": dict(DEFAULT_SETTINGS)}
 
 
 def session_gain(state, session_id, banked):
@@ -67,18 +71,53 @@ def session_gain(state, session_id, banked):
     return banked - row["at"], False
 
 
+def migrate(data):
+    """Bring a state file of any older shape forward. Additive, never lossy.
+
+    Upgrades are the one moment a buddy can silently disappear, so this only
+    ever fills in what's missing. Nothing is dropped, including keys written by
+    a version we don't know about. Species, rarity and shiny aren't stored at
+    all, they come back off the seed, so there's nothing derived to rebuild.
+    """
+    state = default_state()
+    state.update(data)
+    settings = dict(DEFAULT_SETTINGS)
+    settings.update(data.get("settings") or {})
+    state["settings"] = settings
+
+    creatures = [c for c in (state.get("creatures") or []) if isinstance(c, dict)]
+    for i, c in enumerate(creatures):
+        # every read path indexes these directly, so one written before the key
+        # existed, or edited by hand, crashes the statusline instead of degrading
+        c.setdefault("seed", c.get("id") or "creature-%d" % i)
+        c.setdefault("id", c["seed"])
+        c.setdefault("name", creature_mod.suggest_name(c["seed"]))
+        c.setdefault("hatched_at", None)
+        c.setdefault("xp_banked", 0)
+        c.setdefault("last_stage_seen", 0)
+    state["creatures"] = creatures
+
+    if state.get("focused") not in {c["id"] for c in creatures}:
+        # a focus pointing at nothing renders as "no buddy", which reads as a
+        # wiped roster even though every creature is still sitting in the file
+        alive = [c for c in creatures if not c.get("retired_at")]
+        state["focused"] = alive[0]["id"] if alive else None
+
+    seen = state.get("version")
+    # a newer brainbuddy's stamp survives a downgrade rather than being relabelled
+    state["version"] = seen if isinstance(seen, int) and seen > STATE_VERSION else STATE_VERSION
+    return state
+
+
 def load(path=STATE_PATH):
     try:
         with open(path, "r") as f:
             data = json.load(f)
     except (OSError, ValueError):
         return default_state()
-    base = default_state()
-    base.update(data)
-    settings = dict(DEFAULT_SETTINGS)
-    settings.update(data.get("settings") or {})
-    base["settings"] = settings
-    return base
+    if not isinstance(data, dict):
+        return default_state()
+    return migrate(data)
 
 
 def save(state, path=STATE_PATH, own_settings=False):
@@ -90,6 +129,8 @@ def save(state, path=STATE_PATH, own_settings=False):
     off disk at write time.
     """
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    if not isinstance(state.get("version"), int):
+        state = dict(state, version=STATE_VERSION)
     if not own_settings:
         try:
             with open(path, "r") as f:
