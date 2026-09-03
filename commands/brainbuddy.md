@@ -61,7 +61,7 @@ An egg banks XP while closed, so hatching reveals the level it earned rather tha
 
 ## Adding a second buddy
 
-`new --add` refuses below level 100 and prints why: the new egg starts at 0 and takes focus, so the current buddy holds its level and stops gaining. Relay it, get a yes, re-run with `--yes`.
+`new --add` always asks first, at any level, and prints why: the new egg starts at 0 and takes focus, so the current buddy holds its level and stops gaining. Relay it, get a yes, re-run with `--yes`.
 
 `new --replace` retires instead of deleting. The old buddy keeps its banked XP and `focus <name>` brings it back, so say that when confirming.
 

@@ -23,7 +23,7 @@ It measures how much you've written down. Not how long you've used it, not a str
 └───────────┘
 ```
 
-The creature is a fixed-width column on the left of whatever your statusline already prints, so your terminal can be any size and the art still lands whole. It sizes your memory by **counting files and never reading them** — see [It never opens your memories](#it-never-opens-your-memories).
+The creature is a fixed-width column on the left of whatever your statusline already prints, so your terminal can be any size and the art still lands whole. It sizes your memory by **counting files and never reading them** (see [It never opens your memories](#it-never-opens-your-memories)).
 
 ---
 
@@ -99,7 +99,7 @@ $ brainbuddy hatch
   Lv0 Hatchling
 ```
 
-**Eggs bank XP while closed**, so waiting costs nothing. On a fresh install the first egg inherits the memory you already have and usually hatches several forms in rather than as a blank — install, see an egg, open it, meet something that already reflects how much you've written. A buddy added *later* with `--add` starts at 0 and does hatch as a Hatchling, because XP banks per creature.
+**Eggs bank XP while closed**, so waiting costs nothing. On a fresh install the first egg inherits the memory you already have and usually hatches several forms in rather than as a blank. Install, see an egg, open it, meet something that already reflects how much you've written. A buddy added *later* with `--add` starts at 0 and does hatch as a Hatchling, because XP banks per creature.
 
 ---
 
@@ -110,7 +110,7 @@ Six sprites: the egg, then five forms, gaining detail at every step.
 ```
      ___             _^_             _^_             \|/            .\|/.          *.\|/.*
     /   \          ( ' ' )         ( ' ' )         ( ' ' )         ( ' ' )        \( ' ' )/
-   ( +++ )          /+++\          <|+++|>         <|+++|>         /|+++|\         /|+++|\
+   ( ooo )          /+++\          <|+++|>         <|+++|>         /|+++|\         /|+++|\
     \___/            ^ ^            /   \           /|_|\           |___|          =|___|=
                                     ^   ^           ^   ^          /     \         ^     ^
 
@@ -145,13 +145,13 @@ Rarity is rolled from the seed, with a mark that carries the tier without relyin
 | Epic | 4% | `**` |
 | Legendary | 1% | `***` |
 
-All of it is a pure function of the seed, so hand-editing `state.json` can't promote a Common into a shiny Legendary — `hydrate` recomputes the bones on every load and derived values win.
+All of it is a pure function of the seed, so hand-editing `state.json` can't promote a Common into a shiny Legendary; `hydrate` recomputes the bones on every load and derived values win.
 
 ---
 
 ## Where XP comes from
 
-XP is a weighted count of markdown files in a memory system, so brainbuddy needs one to point at. Three providers, set with `brainbuddy config provider <name>`:
+XP is a weighted count of markdown files in a memory system, so brainbuddy needs one to point at. Three providers, set with `/brainbuddy config provider <name>`:
 
 | Provider | Counts | Point it somewhere |
 |---|---|---|
@@ -164,20 +164,20 @@ XP is a weighted count of markdown files in a memory system, so brainbuddy needs
 ```
 $ brainbuddy doctor
 provider: folder (folder of notes)
-root: found
+root: ~/notes (found)
   notes      9
 xp 18 -> level 10 (Hatchling)
 ```
 
 A zero reading has three different causes, and `doctor` names the one you've got rather than telling everyone to check their config:
 
-- **the root isn't there** — wrong path, or Claude Code hasn't written memory yet
-- **the root is real but empty** — nothing to do but write things down
-- **the root has markdown the provider's layout doesn't match** — pointing `vault` at a plain notes folder does this, and the fix is `provider folder`
+- **the root isn't there**: wrong path, or Claude Code hasn't written memory yet
+- **the root is real but empty**: nothing to do but write things down
+- **the root has markdown the provider's layout doesn't match**: pointing `vault` at a plain notes folder does this, and the fix is `provider folder`
 
 **No memory system at all?** Then there's nothing to count and your buddy sits at level 0, which is a fair reading rather than a bug. The installer and `doctor` both hand you a prompt for it:
 
-> "Set up a persistent memory system for this project: keep one markdown file per durable fact in your memory directory, an index listing them, and write to it as we work."
+> "Set up a persistent memory system for this project: one markdown file per durable fact in your memory directory, an index listing them, and write to it as we work."
 
 XP follows on the next render once files start landing there.
 
@@ -277,7 +277,7 @@ $ brainbuddy list
 
 That's why `/brainbuddy-new` asks before it acts: `--replace` retires the current buddy and focuses a new egg, `--add` keeps it active and focuses a new egg.
 
-**Neither one deletes anything.** `--replace` retires, which drops it out of the active roster while keeping its banked XP; `focus <name>` brings it back. `--add` states the tradeoff and asks for `--yes`, since a new egg takes focus and the current buddy stops gaining. There's **no level requirement** — the tradeoff is identical at level 12 and level 99, so it's a decision to make rather than a gate to clear.
+**Neither one deletes anything.** `--replace` retires, which drops it out of the active roster while keeping its banked XP; `focus <name>` brings it back. `--add` states the tradeoff and asks for `--yes`, since a new egg takes focus and the current buddy stops gaining. There's **no level requirement**, since the tradeoff is identical at level 12 and level 99, so it's a decision to make rather than a gate to clear.
 
 New creatures start at 0, always, because XP banks per creature rather than deriving from your total memory size.
 
@@ -304,6 +304,14 @@ brainbuddy refresh           recompute the xp cache
 ```
 
 Five are slash commands in Claude Code, so plain language reaches them without the CLI: `/brainbuddy`, `/brainbuddy-new`, `/brainbuddy-hatch`, `/brainbuddy-hide`, `/brainbuddy-show`.
+
+There's no `brainbuddy` on your PATH: the library is imported by the statusline, not installed as a binary. The five slash commands above reach everything you'd normally want. For the rest, alias it:
+
+```bash
+alias brainbuddy='PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli'
+```
+
+The `brainbuddy ...` examples in this README assume that alias.
 
 | Setting | Values | Default |
 |---|---|---|
@@ -342,7 +350,7 @@ Only two steps need you: hatching the egg, and eventually starting another. Leve
 
 brainbuddy sizes your memory system by **counting files**. `glob` and `stat`, and that's all: it never calls `open()`, never reads a byte of content, never parses frontmatter. That isn't a promise about what it does with your data, it's a statement that it never has your data.
 
-Two tests enforce it — a runtime trap that patches every file-reading builtin and asserts none fire during a measurement, and a static pass that tokenizes `metric.py` and fails if a reader appears in the code at all.
+Two tests enforce it: a runtime trap that patches every file-reading builtin and asserts none fire during a measurement, and a static pass that tokenizes `metric.py` and fails if a reader appears in the code at all.
 
 No network calls either: no telemetry, no update check, no analytics. And it never prints a path it matched, in any mode including `doctor`, because filenames alone leak more than people expect.
 
@@ -358,7 +366,7 @@ No network calls either: no telemetry, no update check, no analytics. And it nev
 
 **The high-water mark is the anti-punishment mechanism.** New XP is credited as the delta above the highest total ever seen, so deleting notes can't take a level away, and a render before your first hatch can't burn the XP waiting for it.
 
-**State lives at `~/.claude/brainbuddy/`** — the roster, settings, and the XP cache.
+**State lives at `~/.claude/brainbuddy/`** holds the roster, settings, and the XP cache.
 
 ---
 

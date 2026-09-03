@@ -328,8 +328,8 @@ def cmd_doctor(args):
     status = state_mod.source_status(settings)
     xp, counts = status["xp"], status["counts"]
     print("provider: %s (%s)" % (settings["provider"], PROVIDER_LABEL.get(settings["provider"], "unknown")))
-    # the root the user typed, home-relative. R12 is about the memory files we
-    # matched, and "why is it zero" is unanswerable without the path itself
+    # the root the user typed, home-relative. R12 covers the memory files we match,
+    # and "why is it zero" can't be answered without this
     root = state_mod.sources_for(settings)[0]
     home = os.path.expanduser("~")
     if root.startswith(home):

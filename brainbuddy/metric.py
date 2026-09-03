@@ -43,8 +43,7 @@ CLAUDE_SOURCES = [
     {"key": "memories", "glob": "*/memory/*.md", "weight": 3, "exclude": ["MEMORY.md", "index.md"]},
 ]
 
-# the vault layout keys off specific directory names, so pointing it at someone
-# else's notes counts zero. this one just walks for .md.
+# the vault layout keys off directory names, so it counts zero on anyone else's notes
 FOLDER_SOURCES = [
     {"key": "notes", "glob": "**/*.md", "weight": 2, "exclude": ["MEMORY.md", "index.md", "README.md"]},
 ]
@@ -63,8 +62,7 @@ def count_source(root, source):
     exclude = set(source.get("exclude", []))
     seen = set()
     pattern = os.path.join(root, source["glob"])
-    # recursive so a folder provider's ** walks. glob skips dotted dirs itself,
-    # so this doesn't wander into .git
+    # glob skips dotted dirs itself, so ** doesn't wander into .git
     for path in glob.iglob(pattern, recursive=True):
         if os.path.basename(path) in exclude:
             continue

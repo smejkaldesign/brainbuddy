@@ -498,7 +498,6 @@ def test_installer_wraps_any_statusline():
             check("┌" in out or "+-" in out, "%s: the creature lands in its box" % label)
             check("/brainbuddy-hatch" in out, "%s: and it says how to open the egg" % label)
 
-            # and the user's own file is left exactly as they wrote it
             with open(script) as f:
                 check("brainbuddy" not in f.read(), "%s: their script is untouched" % label)
 
@@ -512,8 +511,7 @@ def test_installer_wraps_any_statusline():
         finally:
             shutil.rmtree(home)
 
-    # no script at all, just a command. the old installer gave up on this one and
-    # printed instructions for the user to wire by hand.
+    # no script at all, just a command
     home = tempfile.mkdtemp(prefix="bb-install-")
     try:
         claude = os.path.join(home, ".claude")

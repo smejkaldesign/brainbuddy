@@ -249,7 +249,6 @@ def compose(st, left, xp=None, counts=None):
     level = metric.level_for(c["xp_banked"], settings["xp_max"])
     hatched = state_mod.is_hatched(c)
     idx, stage = metric.stage_for(level) if hatched else (metric.EGG_SPRITE, "egg")
-    # an egg tinted with its rarity has already spoiled the reveal, same as segment
     tint = RARITY_COLOR.get(full["rarity"], "") if hatched else DIM
 
     short = settings.get("sprite_height", 5) <= 3
@@ -369,7 +368,12 @@ def card(st, xp=None, counts=None):
         xp, counts = current_xp(st)
     c = state_mod.focused(st)
     if c is None:
-        return "No buddy yet. Lay an egg with: brainbuddy new"
+        # a retired buddy isn't "no buddy". this used to assert the roster was
+        # empty and drop the one command that gets them back
+        parked = [x["name"] for x in st.get("creatures", [])]
+        if parked:
+            return "Nothing focused. `/brainbuddy focus %s` brings it back, or /brainbuddy-new lays a fresh egg." % parked[0]
+        return "No buddy yet. /brainbuddy-new lays an egg."
     if not state_mod.is_hatched(c):
         return egg_card(st, c)
 
