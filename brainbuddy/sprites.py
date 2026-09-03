@@ -18,7 +18,7 @@ STAGE_TEMPLATES = [
     ],
     # 1 Hatchling
     [
-        "    ___    ",
+        "    _^_    ",
         "   ( {e} )   ",
         "   /{m}{m}{m}\\   ",
         "    ^ ^    ",
@@ -26,7 +26,7 @@ STAGE_TEMPLATES = [
     ],
     # 2 Fledgling
     [
-        "    ___    ",
+        "    _^_    ",
         "   ( {e} )   ",
         "  <|{m}{m}{m}|>  ",
         "   /   \\   ",
