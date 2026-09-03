@@ -50,6 +50,16 @@ That's why it works with a statusline it can't parse: `bash ~/statusline.sh`, a 
 
 Re-running it is safe and is how you pick up new commands. It won't wrap itself twice and it leaves an existing buddy alone. If you installed a version before wrapping existed, re-running strips the block it appended to your script.
 
+**Project-level statuslines need one manual step.** The installer only reads and writes `~/.claude/settings.json`. If a repo sets its own `statusLine` in `<repo>/.claude/settings.json`, that wins inside the repo and the installer never sees it. Wrap it explicitly, then point the project at the shim:
+
+```bash
+./install.sh --statusline "/path/to/repo/.claude/statusline.sh"
+# then in <repo>/.claude/settings.json:
+#   "statusLine": { "type": "command", "command": "~/.claude/brainbuddy/statusline-brainbuddy.sh" }
+```
+
+`wrapped-command` is a single file, so one command gets wrapped for every repo. Pick the statusline you want everywhere.
+
 It lays your first egg, then tells you how to open it:
 
 ```
