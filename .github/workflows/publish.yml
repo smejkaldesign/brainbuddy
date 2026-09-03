@@ -7,14 +7,23 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: read
+
 jobs:
+  # the same floor-to-ceiling matrix as ci, because ci does not run on tags and
+  # a release is the one build that must not skip the 3.9 floor
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
       - run: python3 tests/test_brainbuddy.py
       - run: bash scripts/leak-guard.sh
 
@@ -57,4 +66,6 @@ jobs:
         with:
           name: dist
           path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      # pinned to a commit: this job holds id-token write, and a mutable branch
+      # ref would let that action change under us
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
