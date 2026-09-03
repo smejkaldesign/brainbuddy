@@ -15,6 +15,21 @@ Run commands as:
 PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli <command>
 ```
 
+## If nothing is wired up yet
+
+Installing the plugin delivers these commands but can't set `statusLine`, so on a fresh
+plugin install there is no library and no creature. If `~/.claude/brainbuddy/lib` is missing,
+don't run a subcommand. Say the statusline isn't wired yet, offer to do it, and on a yes run:
+
+```bash
+"$(cat ~/.claude/brainbuddy/plugin-root)/install.sh" --no-commands
+```
+
+It wraps whatever statusline they already have rather than replacing it, and ends on the egg.
+Relay its output, then point at `/brainbuddy-hatch`. `--no-commands` matters: without it the
+installer copies these same five files into `~/.claude/commands`, and every one of them shows
+up twice in the picker.
+
 ## No arguments
 
 Show the card:

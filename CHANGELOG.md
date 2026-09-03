@@ -10,6 +10,8 @@ Notable changes, newest first. Versions follow semver; the version lives in
 - Release workflow: tagging `vX.Y.Z` tests, builds, and publishes to PyPI via
   trusted publishing.
 - `brainbuddy doctor` reports the installed version.
+- Installable as a Claude Code plugin: a `SessionStart` hook notices an unwired
+  install and offers `install.sh --no-commands`, which ends on the same egg.
 
 ## 0.1.0
 
