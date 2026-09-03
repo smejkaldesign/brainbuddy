@@ -53,7 +53,10 @@ def test_metric():
         check(counts["memories"] == 130, "MEMORY.md excluded from the count")
         check(counts["knowledge"] == 66, "index.md excluded from the count")
         check(xp == 624, "weighted xp is 624, got %d" % xp)
-        check(metric.level_for(624) == 35, "624 xp is level 35 (the calibration target)")
+        check(metric.level_for(624) == 64, "624 xp is level 64 on the fast curve, got %d" % metric.level_for(624))
+        # the point of the recalibration: a nearly empty vault still moves
+        check(metric.level_for(3) >= 4, "3 xp already reads as a level, got %d" % metric.level_for(3))
+        check(metric.level_for(60) >= 19, "60 xp is nearly the first evolution, got %d" % metric.level_for(60))
 
         for lvl in (0, 19, 20, 39, 40, 59, 60, 79, 80, 100):
             need = metric.xp_for_level(lvl)
@@ -65,7 +68,8 @@ def test_metric():
         check(metric.stage_for(35)[1] == "Fledgling", "level 35 is a Fledgling")
         check(metric.stage_for(100)[1] == "Ascendant", "level 100 is Ascendant")
         check(metric.stage_for(250)[1] == "Ascendant", "past 100 stays Ascendant, evolution caps")
-        check(metric.level_for(20000) > 100, "level itself keeps climbing past 100")
+        check(metric.level_for(20000) == 100, "level caps at 100 rather than climbing forever")
+        check(metric.level_for(metric.XP_MAX_DEFAULT) == 100, "xp_max is exactly level 100")
         check(metric.next_stage_level(85) is None, "no next form after Ascendant")
     finally:
         shutil.rmtree(root)
@@ -166,7 +170,7 @@ def test_banking():
     first = _hatched(st, name="Alpha")
     state_mod.sync(st, 624)
     check(first["xp_banked"] == 624, "first creature inherits the existing memory")
-    check(metric.level_for(first["xp_banked"]) == 35, "which puts it at level 35")
+    check(metric.level_for(first["xp_banked"]) == 64, "which puts it at level 64")
 
     second = _hatched(st, name="Beta")
     check(second["xp_banked"] == 0, "a second creature starts at zero, not at 35")
@@ -252,7 +256,7 @@ def test_state_roundtrip():
         state_mod.save(st, path)
         back = state_mod.load(path)
         check(back["creatures"][0]["name"] == "Delta", "roster survives a save/load")
-        check(back["settings"]["xp_max"] == 5000, "settings default correctly")
+        check(back["settings"]["xp_max"] == metric.XP_MAX_DEFAULT, "settings default correctly")
         check(back["settings"]["hidden"] is False, "the creature is visible out of the box")
         back["settings"]["hidden"] = True
         state_mod.save(back, path, own_settings=True)
