@@ -113,12 +113,13 @@ def cmd_new(args):
         print("  brainbuddy new --add       keep %s in the roster, start a new egg" % cur["name"])
         return 1
 
-    if mode == "add" and cur is not None:
+    if mode == "add" and cur is not None and "--yes" not in args:
+        # no level threshold any more. the tradeoff is the same at 12 as at 99,
+        # so state it and let them decide instead of gating on a number
         lvl = metric.level_for(cur["xp_banked"], st["settings"]["xp_max"])
-        if lvl < 100 and "--yes" not in args:
-            print("%s is level %d. A new egg starts at 0 and takes focus, so %s holds its level and stops gaining." % (cur["name"], lvl, cur["name"]))
-            print("Run: brainbuddy new --add --yes")
-            return 1
+        print("%s is level %d. A new egg starts at 0 and takes focus, so %s holds its level and stops gaining." % (cur["name"], lvl, cur["name"]))
+        print("Run: brainbuddy new --add --yes")
+        return 1
 
     if mode == "replace":
         lvl = metric.level_for(cur["xp_banked"], st["settings"]["xp_max"])

@@ -9,7 +9,11 @@ import glob
 import math
 import os
 
-XP_MAX_DEFAULT = 5000
+# calibrated so an established vault (~650 xp of durable notes) sits around 65,
+# leaving real headroom without the early levels crawling. 5000 was slow enough
+# that a new user saw almost nothing move, which is how a pet like this dies
+XP_MAX_DEFAULT = 1500
+LEVEL_MAX = 100
 STAGE_SPAN = 20
 
 # sprite 0 is the egg, which is now the unhatched state rather than a level
@@ -81,14 +85,14 @@ def measure(root, sources, weights=None):
 def level_for(xp, xp_max=XP_MAX_DEFAULT):
     """Square root curve: early memories move the needle, later ones don't.
 
-    Uncapped on purpose. Level keeps climbing past 100; it's evolution that
-    stops at Ascendant.
+    Capped at LEVEL_MAX. 100 is fully grown, and the answer to "what now" is a
+    new egg rather than a number that climbs forever with nothing attached.
     """
     if xp <= 0:
         return 0
     if xp_max <= 0:
         return 0
-    return int(math.floor(100 * math.sqrt(xp / float(xp_max))))
+    return min(LEVEL_MAX, int(math.floor(100 * math.sqrt(xp / float(xp_max)))))
 
 
 def xp_for_level(level, xp_max=XP_MAX_DEFAULT):
