@@ -1,0 +1,55 @@
+# tag vX.Y.Z -> test, build, publish to PyPI via trusted publishing (no stored token).
+# the pypi environment name is part of the trusted-publisher registration; renaming
+# either side silently breaks the handshake.
+name: publish
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 tests/test_brainbuddy.py
+      - run: bash scripts/leak-guard.sh
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: verify tag matches package version
+        run: |
+          PKG=$(python3 -c "import brainbuddy; print(brainbuddy.__version__)")
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "tag v$TAG does not match brainbuddy.__version__ $PKG" >&2
+            exit 1
+          fi
+      - run: python3 -m pip install build
+      - run: python3 -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

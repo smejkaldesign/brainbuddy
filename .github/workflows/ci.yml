@@ -20,6 +20,22 @@ jobs:
       - name: tests
         run: python3 tests/test_brainbuddy.py
 
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # catches packaging breaks on the PR instead of on release day
+      - run: python3 -m pip install build
+      - run: python3 -m build
+      - name: entry point works from the wheel
+        run: |
+          python3 -m pip install dist/*.whl
+          brainbuddy simulate 100 >/dev/null
+          brainbuddy doctor | head -1 | grep -q "^brainbuddy "
+
   guard:
     runs-on: ubuntu-latest
     steps:

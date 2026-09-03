@@ -8,6 +8,7 @@ import json
 import os
 import sys
 
+from . import __version__
 from . import creature as creature_mod
 from . import metric, render, sprites
 from . import state as state_mod
@@ -380,6 +381,7 @@ def cmd_doctor(args):
     settings = st["settings"]
     status = state_mod.source_status(settings)
     xp, counts = status["xp"], status["counts"]
+    print("brainbuddy %s" % __version__)
     print("provider: %s (%s)" % (settings["provider"], PROVIDER_LABEL.get(settings["provider"], "unknown")))
     # the root the user typed, home-relative. R12 covers the memory files we match,
     # and "why is it zero" can't be answered without this
