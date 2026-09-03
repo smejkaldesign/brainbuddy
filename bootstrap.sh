@@ -3,7 +3,18 @@
 
 # pipefail is a bashism, so bash has to be confirmed before it gets set
 if [ -z "${BASH_VERSION:-}" ]; then
-  echo "this shell isn't bash, and the installer it runs is. pipe it to bash instead of sh." >&2
+  # windows has two shells that work and no bash of its own, so name both rather
+  # than telling someone on cmd or powershell to "use bash" and leaving it there
+  case "$(uname -s 2>/dev/null || echo unknown)" in
+    MINGW*|MSYS*|CYGWIN*|Windows*)
+      echo "this needs bash, and this shell isn't it. two routes work on windows: WSL, or Git Bash," >&2
+      echo "which comes with git for windows. open either one and run this again." >&2
+      ;;
+    *)
+      echo "this shell isn't bash, and the installer it runs is. pipe it to bash instead of sh." >&2
+      echo "on windows that means WSL or Git Bash; there's no powershell version." >&2
+      ;;
+  esac
   exit 1
 fi
 set -euo pipefail

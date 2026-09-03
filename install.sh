@@ -1,5 +1,21 @@
 #!/bin/bash
 # brainbuddy installer. wraps an existing statusline, never replaces it.
+
+# every line below this is bash, pipefail included, so bash gets confirmed first.
+# windows has no bash of its own but two shells that are one, so name both.
+if [ -z "${BASH_VERSION:-}" ]; then
+  case "$(uname -s 2>/dev/null || echo unknown)" in
+    MINGW*|MSYS*|CYGWIN*|Windows*)
+      echo "this installer is bash, and this shell isn't. two routes work on windows: WSL, or Git Bash," >&2
+      echo "which comes with git for windows. open either one and run ./install.sh again." >&2
+      ;;
+    *)
+      echo "this installer is bash. run 'bash install.sh' rather than sh." >&2
+      echo "on windows that means WSL or Git Bash; there's no powershell version." >&2
+      ;;
+  esac
+  exit 1
+fi
 set -euo pipefail
 
 usage() {
