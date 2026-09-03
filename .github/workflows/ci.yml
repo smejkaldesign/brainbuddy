@@ -45,4 +45,4 @@ jobs:
       - name: leak guard
         run: ./scripts/leak-guard.sh
       - name: shell syntax
-        run: bash -n install.sh && bash -n scripts/leak-guard.sh && bash -n .githooks/pre-push
+        run: bash -n install.sh && bash -n scripts/leak-guard.sh && bash -n scripts/plugin-session-start.sh && bash -n .githooks/pre-push

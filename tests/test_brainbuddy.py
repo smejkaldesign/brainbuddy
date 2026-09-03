@@ -537,6 +537,58 @@ GENERATED_BLOCK = (
 )
 
 
+def test_plugin_wiring():
+    """A plugin install ships the commands and can't set statusLine.
+
+    So the installer has to be able to do the wiring half without copying a
+    second set of command files over the plugin's, and the SessionStart hook
+    has to tell those two states apart. A hook that cried "not wired" at a
+    wired user would nag them once a session, forever.
+    """
+    print("\nplugin wiring")
+    import json
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    hook = os.path.join(repo, "scripts", "plugin-session-start.sh")
+    home = tempfile.mkdtemp(prefix="bb-plugin-")
+    try:
+        claude = os.path.join(home, ".claude")
+        os.makedirs(os.path.join(claude, "commands"))
+        env = dict(os.environ, HOME=home, CLAUDE_PLUGIN_ROOT=repo)
+
+        before = subprocess.run(["bash", hook], env=env, capture_output=True, text=True)
+        check("not wired up yet" in before.stdout, "unwired: the hook says so")
+        check(json.loads(before.stdout)["hookSpecificOutput"]["hookEventName"] == "SessionStart",
+              "unwired: and says it in the shape a SessionStart hook returns")
+        check("--no-commands" in before.stdout, "unwired: naming the flag that avoids double-listing")
+        with open(os.path.join(claude, "brainbuddy", "plugin-root")) as f:
+            check(f.read().strip() == repo, "the plugin root is recorded for the command to find")
+
+        r = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--no-commands"],
+                           env=env, input="", capture_output=True, text=True)
+        check(r.returncode == 0, "--no-commands: installer exits clean")
+        check(os.listdir(os.path.join(claude, "commands")) == [],
+              "--no-commands: the plugin's five commands aren't copied over a second time")
+        check("/brainbuddy-hatch" in r.stdout, "--no-commands: still ends on the egg")
+
+        after = subprocess.run(["bash", hook], env=env, capture_output=True, text=True)
+        check(after.stdout.strip() == "", "wired: the hook goes quiet")
+
+        # wired library, but a statusline pointing somewhere else. half-wired is
+        # unwired, or the creature is nowhere and nothing says why
+        with open(os.path.join(claude, "settings.json"), "w") as f:
+            json.dump({"statusLine": {"type": "command", "command": "~/other.sh"}}, f)
+        half = subprocess.run(["bash", hook], env=env, capture_output=True, text=True)
+        check("not wired up yet" in half.stdout, "a statusline pointing elsewhere still counts as unwired")
+
+        u = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--no-commands", "--uninstall"],
+                           env=env, input="", capture_output=True, text=True)
+        check(u.returncode == 0, "--no-commands: uninstall exits clean")
+    finally:
+        shutil.rmtree(home)
+
+
 def test_installer_respects_hand_wiring():
     """A brainbuddy block someone has edited belongs to them, not the installer.
 
@@ -702,6 +754,7 @@ if __name__ == "__main__":
     test_egg_reveals_nothing()
     test_source_status()
     test_installer_wraps_any_statusline()
+    test_plugin_wiring()
     test_installer_respects_hand_wiring()
     test_hatch_from_zero()
     test_session_xp_counter()
