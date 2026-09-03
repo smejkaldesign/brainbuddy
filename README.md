@@ -2,8 +2,22 @@
 
 A terminal creature that lives in your Claude Code statusline, hatches from an egg, and evolves through five forms as your memory system grows.
 
+Compact, inline in your statusline:
+
 ```
-◔+ Lv35
+◔+ Lv35     ->  <><> Lv35
+```
+
+Or the full creature on its own rows, right-aligned (`density sprite`):
+
+```
+████░░░░░░  eric-brain ⎇ main
+                                                  ___
+                                                ( > < )
+                                                <|///|>
+                                                 /   \
+                                                 ^   ^
+                                                Drain Lv35
 ```
 
 ```
@@ -80,6 +94,25 @@ A square root curve, so early memories move the needle and later ones don't. Lev
 
 Level keeps climbing past 100. Evolution stops at Ascendant.
 
+## Display modes
+
+`density` picks how much room it takes:
+
+| mode | looks like | notes |
+|---|---|---|
+| `minimal` | `◔` | one glyph |
+| `compact` | `<><> Lv35` | default, ~10 columns inline |
+| `full` | `<><> Drain Lv35 +` | adds name and rarity mark |
+| `sprite` | the 5-row creature | its own rows, gains detail each evolution |
+
+`sprite_height 3` cuts the creature to three rows. It keeps the evolution beats but **drops detail**: the head-top and the feet come off, so the Fledgling loses its `___` and `^   ^`. Use it when vertical space matters more than the full silhouette.
+
+`sprite` right-aligns to the `columns` setting, which has to be declared rather than measured. A statusline script is handed nothing that is a terminal: stdin is the JSON pipe, stdout is captured, stderr isn't a tty either, and `/dev/tty` isn't attached. To find the number, `density ruler` prints a column ruler as the statusline, so read the last digit you can see and pass it to `config columns <n>`.
+
+`compose "<text>"` is the other way in, and the one the statusline shim uses. It merges your own statusline text with the creature as a **left column**, sharing row one with your first row so it reads as a column starting at the top. Left rather than right on purpose: a fixed-width column needs no measurement at all, so the host's box can be any width and the art still lands whole.
+
+In `sprite` mode put the call at the **end** of your statusline script, since it emits its own rows.
+
 ## The roster
 
 At level 100 you can hatch another egg. New creatures **start at 0**, always.
@@ -97,11 +130,16 @@ brainbuddy focus <name>      choose who banks new xp
 brainbuddy list              the roster
 brainbuddy rename <old> <new>
 brainbuddy retire <name>
-brainbuddy config [key val]  provider, vault_root, xp_max, density, unicode
+brainbuddy hide              drop it from the statusline, keeps banking xp
+brainbuddy show              put it back
+brainbuddy config [key val]  provider, vault_root, xp_max, density, columns, unicode, hidden
 brainbuddy simulate <xp>     preview any level without touching real state
 brainbuddy doctor            what can it see, and why is it zero
 brainbuddy render            the statusline segment
+brainbuddy compose "<text>"  your statusline text, creature as a left column
 ```
+
+`/brainbuddy-hide` and `/brainbuddy-show` are also their own slash commands, so "hide my brainbuddy" reaches them without going through `/brainbuddy`.
 
 ## Provenance
 

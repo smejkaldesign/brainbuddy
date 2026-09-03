@@ -91,16 +91,122 @@ def segment(st, xp=None, counts=None):
 
     level = metric.level_for(c["xp_banked"], settings["xp_max"])
     idx, _ = metric.stage_for(level)
-    g = sprites.glyph(idx, uni)
+    f = sprites.face(full["species"], idx, uni)
     tint = RARITY_COLOR.get(full["rarity"], "")
     mark = full["rarity_mark"]
     shiny = "*" if full["shiny"] else ""
 
+    if settings.get("density") == "sprite":
+        return sprite_block(full, level, idx, tint, settings)
     if settings.get("density") == "minimal":
-        return paint("%s%s" % (g, shiny), tint)
+        return paint(sprites.glyph(idx, uni) + shiny, tint)
     if settings.get("density") == "full":
-        return "%s %s %s" % (paint(g + shiny, tint), paint(full["name"], BOLD), paint("Lv%d %s" % (level, mark), DIM))
-    return "%s %s" % (paint(g + shiny + mark, tint), paint("Lv%d" % level, DIM))
+        return "%s %s %s" % (paint(f + shiny, tint), paint(full["name"], BOLD), paint("Lv%d %s" % (level, mark), DIM))
+    return "%s %s" % (paint(f + shiny + mark, tint), paint("Lv%d" % level, DIM))
+
+
+
+
+def ruler(width=200):
+    """Width ruler for the statusline. There's no terminal width on stdin and
+    no tty, so the only way to learn it is to print a ruler and read where the
+    terminal cuts it off.
+    """
+    out = []
+    for i in range(1, width + 1):
+        if i % 10 == 0:
+            out.append(str((i // 10) % 10))
+        elif i % 5 == 0:
+            out.append("+")
+        else:
+            out.append("-")
+    return "".join(out)
+
+
+# the old 2 sat on top of whatever side padding the sprite happened to carry, so
+# the real gap was ~5. now that the art is trimmed this is the whole gap
+GUTTER = 3
+
+
+def compose(st, left, xp=None, counts=None):
+    """Merge a caller's statusline text with the creature as a left column.
+
+    The creature's first row shares row one with the bar, so it reads as a
+    column starting at the top rather than a block hanging underneath. Left
+    rather than right because a fixed-width column needs no measurement: the
+    host's box can be any width and the art still lands whole.
+    """
+    settings = st["settings"]
+    if settings.get("density") == "ruler":
+        return ruler()
+    uni = unicode_ok(settings)
+    if xp is None:
+        xp, counts = current_xp(st, allow_blocking=False)
+    c = state_mod.focused(st)
+    if c is None:
+        return left
+
+    full = creature_mod.hydrate(c)
+    level = metric.level_for(c["xp_banked"], settings["xp_max"])
+    idx, stage = metric.stage_for(level)
+    tint = RARITY_COLOR.get(full["rarity"], "")
+
+    short = settings.get("sprite_height", 5) <= 3
+    art = sprites.sprite(full["species"], idx, full["shiny"], short=short)
+    # trim both ends: a blank row at the top reads as a gap between the creature
+    # and whatever the host draws above it
+    while art and not art[-1].strip():
+        art.pop()
+    while art and not art[0].strip():
+        art.pop(0)
+
+    banked = c["xp_banked"]
+    lo = metric.xp_for_level(level, settings["xp_max"])
+    hi = metric.xp_for_level(level + 1, settings["xp_max"])
+    frac = (banked - lo) / float(hi - lo) if hi > lo else 0.0
+    # the caption is a statusline row, not part of the sprite block, so it lines up
+    # under the caller's own rows instead of hanging off the bottom of the art
+    caption = "%s · %s · Lv%d %s" % (full["name"], stage, level, sprites.bar(frac, 6, uni))
+
+    # the sprites carry side padding, which held the column off the left edge
+    indent = min(len(r) - len(r.lstrip()) for r in art if r.strip())
+    art = [r[indent:].rstrip() for r in art]
+    block = max(len(r) for r in art)
+    art = [r.ljust(block) for r in art]
+
+    # fixed-width column, so nothing here needs the terminal width
+    left_lines = left.split("\n") if left else []
+    left_lines.append(paint(caption, DIM))
+
+    rows = []
+    for i in range(max(len(left_lines), len(art))):
+        l = left_lines[i] if i < len(left_lines) else ""
+        cell = art[i] if i < len(art) else " " * block
+        body = paint(cell, tint) if i < len(art) else cell
+        rows.append((body + " " * GUTTER + l).rstrip())
+    return "\n".join(rows)
+
+
+def sprite_block(full, level, stage_index, tint, settings):
+    """Full creature on its own rows, for multi-line statuslines.
+
+    Right-aligns to settings["columns"] because a statusline script can't learn
+    the real terminal width. There's no field for it on stdin and /dev/tty
+    isn't attached, so the width has to be declared rather than measured.
+    """
+    art = sprites.sprite(full["species"], stage_index, full["shiny"], short=settings.get("sprite_height", 5) <= 3)
+    while art and not art[-1].strip():
+        art.pop()
+    label = "%s Lv%d%s" % (full["name"], level, full["rarity_mark"])
+    cols = settings.get("columns") or 0
+
+    rows = []
+    for row in art:
+        pad = " " * max(0, cols - len(row))
+        rows.append(pad + paint(row, tint))
+    pad = " " * max(0, cols - len(label))
+    rows.append(pad + paint(label, DIM))
+    return "\n" + "\n".join(rows)
 
 
 def card(st, xp=None, counts=None):

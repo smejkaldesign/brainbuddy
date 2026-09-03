@@ -84,9 +84,11 @@ echo "installing brainbuddy"
 mkdir -p "$LIB" "$CMDS" "$HOME/.claude/brainbuddy"
 rm -rf "$LIB/brainbuddy"
 cp -R "$SRC/brainbuddy" "$LIB/brainbuddy"
-[ -f "$SRC/commands/brainbuddy.md" ] && cp "$SRC/commands/brainbuddy.md" "$CMDS/brainbuddy.md"
+for cmd in brainbuddy brainbuddy-hide brainbuddy-show; do
+  [ -f "$SRC/commands/$cmd.md" ] && cp "$SRC/commands/$cmd.md" "$CMDS/$cmd.md"
+done
 echo "  library  -> $LIB"
-echo "  command  -> $CMDS/brainbuddy.md  (/brainbuddy)"
+echo "  commands -> $CMDS  (/brainbuddy, /brainbuddy-hide, /brainbuddy-show)"
 
 cat > "$SHIM" <<'EOF'
 #!/bin/bash
@@ -111,7 +113,10 @@ if [ "$WIRE" = 1 ]; then
   else
     EXISTING="$(resolve_statusline)"; TARGET="${EXISTING%% *}"
   fi
-  if [ -n "$TARGET" ] && [ -f "$TARGET" ] && head -1 "$TARGET" | grep -q '^#!'; then
+  if [ "$TARGET" = "$SHIM" ]; then
+    # already the statusline. appending here would make the shim call itself
+    echo "  statusline already points at brainbuddy, nothing to wire"
+  elif [ -n "$TARGET" ] && [ -f "$TARGET" ] && head -1 "$TARGET" | grep -q '^#!'; then
     if grep -q "$BEGIN" "$TARGET" 2>/dev/null; then
       echo "  statusline already wired, leaving it alone"
     else

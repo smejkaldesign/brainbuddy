@@ -58,26 +58,54 @@ STAGE_TEMPLATES = [
     ],
 ]
 
-# motif char, eye pair (3 chars wide)
+# motif char, eye pair (3 wide, for sprites), compact eyes (2 wide, for the statusline)
 SPECIES_LOOK = {
-    "Mote":    ("o", "o o"),
-    "Wisp":    ("~", "- -"),
-    "Ember":   ("*", "^ ^"),
-    "Pip":     (".", ". ."),
-    "Fen":     ("=", "o o"),
-    "Bramble": ("#", "x x"),
-    "Nim":     ("+", "' '"),
-    "Quill":   ("/", "> <"),
+    "Mote":    ("o", "o o", "oo"),
+    "Wisp":    ("~", "- -", "--"),
+    "Ember":   ("*", "^ ^", "^^"),
+    "Pip":     (".", ". .", ".."),
+    "Fen":     ("=", "o o", "°°"),
+    "Bramble": ("#", "x x", "xx"),
+    "Nim":     ("+", "' '", "''"),
+    "Quill":   ("/", "> <", "><"),
 }
 
+# The statusline gets ~5 columns, so the creature has to be a face. A bare
+# progress glyph there read as a spinner, not a pet.
+FACE_WRAP_UNICODE = ["(·)", "(%s)", "<%s>", "«%s»", "{%s}", "*%s*"]
+FACE_WRAP_ASCII = ["(.)", "(%s)", "<%s>", "[%s]", "{%s}", "*%s*"]
+
 SPRITE_WIDTH = 13
+
+# Three-row cut of the same arc, for when the statusline shouldn't push the
+# footer half a screen down. Same evolution beats, less vertical space.
+SHORT_TEMPLATES = [
+    ["  ___  ", " ({m}{m}{m}) ", "  \\_/  "],
+    [" ({e}) ", " /{m}{m}{m}\\ ", "  ^ ^  "],
+    [" ({e}) ", "<|{m}{m}{m}|>", " /   \\ "],
+    ["  \\|/  ", " ({e}) ", "<|{m}{m}{m}|>"],
+    [" .\\|/. ", " ({e}) ", "/|{m}{m}{m}|\\"],
+    ["*.\\|/.*", "\\({e})/", "/|{m}{m}{m}|\\"],
+]
 
 GLYPHS_UNICODE = ["\u25cc", "\u25cb", "\u25d4", "\u25d1", "\u25d5", "\u25cf"]
 GLYPHS_ASCII = [".", "o", "c", "C", "O", "@"]
 
 
 def look(species):
-    return SPECIES_LOOK.get(species, SPECIES_LOOK["Mote"])
+    return SPECIES_LOOK.get(species, SPECIES_LOOK["Mote"])[:2]
+
+
+def face(species, stage_index, unicode_ok=True):
+    """Tiny creature for the statusline. Eyes come from the species, the
+    bracket grows with the stage, and an egg has no eyes yet.
+    """
+    eyes = SPECIES_LOOK.get(species, SPECIES_LOOK["Mote"])[2]
+    if not unicode_ok and any(ord(c) > 127 for c in eyes):
+        eyes = "oo"
+    table = FACE_WRAP_UNICODE if unicode_ok else FACE_WRAP_ASCII
+    wrap = table[max(0, min(len(table) - 1, stage_index))]
+    return wrap if "%s" not in wrap else wrap % eyes
 
 
 def glyph(stage_index, unicode_ok=True):
@@ -85,16 +113,17 @@ def glyph(stage_index, unicode_ok=True):
     return table[max(0, min(len(table) - 1, stage_index))]
 
 
-def sprite(species, stage_index, shiny=False):
-    """Return the 5 rows for a species at a stage, padded to equal width."""
+def sprite(species, stage_index, shiny=False, short=False):
+    """Rows for a species at a stage, padded to equal width."""
     motif, eyes = look(species)
     if shiny:
         motif = motif.upper() if motif.isalpha() else "$"
-    rows = STAGE_TEMPLATES[max(0, min(len(STAGE_TEMPLATES) - 1, stage_index))]
+    table = SHORT_TEMPLATES if short else STAGE_TEMPLATES
+    rows = table[max(0, min(len(table) - 1, stage_index))]
     out = [r.replace("{m}", motif).replace("{e}", eyes) for r in rows]
     # Pad to a fixed width across every stage and species, otherwise the card's
     # right-hand column shifts as the creature evolves.
-    width = max(SPRITE_WIDTH, max(len(r) for r in out))
+    width = max(len(r) for r in out) if short else max(SPRITE_WIDTH, max(len(r) for r in out))
     return [r.center(width) if r.strip() else " " * width for r in out]
 
 
