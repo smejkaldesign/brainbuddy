@@ -7,7 +7,7 @@ It measures how much you've written down. Not how long you've used it, not a str
 ```
 ┌───────────┐
 │    ___    │  ████░░░░░░  my-brain ⎇ main
-│   /   \   │  Zask · egg · /brainbuddy-hatch
+│   /   \   │  🥚 Zask · egg · /brainbuddy-hatch
 │  ( ooo )  │
 │   \___/   │
 └───────────┘
@@ -16,7 +16,7 @@ It measures how much you've written down. Not how long you've used it, not a str
 ```
 ┌───────────┐
 │   .\|/.   │  ████░░░░░░  my-brain ⎇ main
-│  ( o o )  │  Drain · Sage · Lv65 █████░
+│  ( o o )  │  🥚 Drain · Sage Lv65 █████░
 │  /|ooo|\  │
 │   |___|   │
 │  /     \  │
@@ -197,8 +197,8 @@ The column is boxed in dark grey by default. `config border false` drops the box
 
 ```
 ┌───────────┐                                    .\|/.    ████░░░░░░  my-brain ⎇ main
-│   .\|/.   │  ████░░░░░░  my-brain ⎇ main      ( o o )   Drain · Sage · Lv65 █████░
-│  ( o o )  │  Drain · Sage · Lv65 █████░       /|ooo|\
+│   .\|/.   │  ████░░░░░░  my-brain ⎇ main      ( o o )   🥚 Drain · Sage Lv65 █████░
+│  ( o o )  │  🥚 Drain · Sage Lv65 █████░       /|ooo|\
 │  /|ooo|\  │                                    |___|
 │   |___|   │                                   /     \
 │  /     \  │

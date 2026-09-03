@@ -151,10 +151,16 @@ def test_compose_column():
         check(all(r.startswith("│") for r in boxed[1:-1]), "every creature row is walled")
         check("BAR" in boxed[1], "the caller's first row sits beside the head, not the lid")
 
+        caption = boxed[2]
+        check(render.EGG_ICON in caption, "the caption is marked with the egg icon")
+        check(caption.count("·") == 1, "one separator only, none between stage and level")
+        check("Sage Lv" in caption, "stage and level read as one phrase")
+
         st["settings"].update({"border": True, "unicode": False})
         ascii_box = render.compose(st, "BAR", xp=700, counts={}).split("\n")
         check(ascii_box[0].startswith("+-") and ascii_box[1].startswith("|"), "ascii terminals get +- and |")
         check(not any(ch in "".join(ascii_box) for ch in "┌─│└"), "no box-drawing leaks into ascii mode")
+        check(render.EGG_ICON not in "".join(ascii_box), "no emoji leaks into ascii mode either")
     finally:
         os.environ.pop("NO_COLOR", None)
 

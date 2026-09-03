@@ -29,6 +29,11 @@ BOX_UNICODE = ("┌", "─", "┐", "│", "└", "┘")
 BOX_ASCII = ("+", "-", "+", "|", "+", "+")
 BOX_PAD = 1
 
+# marks the segment as brainbuddy's. it sits in the right-hand column, so the two
+# cells an emoji takes can't push the boxed art out of alignment
+EGG_ICON = "🥚"
+EGG_ICON_ASCII = "o"
+
 
 def color_ok():
     return os.environ.get("NO_COLOR") is None and os.environ.get("TERM") != "dumb"
@@ -193,11 +198,12 @@ def compose(st, left, xp=None, counts=None):
     frac = (banked - lo) / float(hi - lo) if hi > lo else 0.0
     # the caption is a statusline row, not part of the sprite block, so it lines up
     # under the caller's own rows instead of hanging off the bottom of the art
+    icon = EGG_ICON if uni else EGG_ICON_ASCII
     if hatched:
-        caption = "%s · %s · Lv%d %s" % (full["name"], stage, level, sprites.bar(frac, 6, uni))
+        caption = "%s %s · %s Lv%d %s" % (icon, full["name"], stage, level, sprites.bar(frac, 6, uni))
     else:
         # no level and no progress bar, or the reveal is spoiled before you open it
-        caption = "%s · egg · /brainbuddy-hatch" % full["name"]
+        caption = "%s %s · egg · /brainbuddy-hatch" % (icon, full["name"])
 
     # pin the column to the widest form this creature will ever reach, so the text
     # beside it doesn't jump two columns the day it evolves into an Ascendant
@@ -209,7 +215,9 @@ def compose(st, left, xp=None, counts=None):
 
     # fixed-width column, so nothing here needs the terminal width
     left_lines = left.split("\n") if left else []
-    left_lines.append(paint(caption, DIM))
+    # BOLD, not DIM: this row reads as a peer of the repo name the host prints
+    # above it, and the host uses \033[1m for that
+    left_lines.append(paint(caption, BOLD))
 
     if settings.get("border", True):
         tl, h, tr, v, bl, br = BOX_UNICODE if uni else BOX_ASCII
