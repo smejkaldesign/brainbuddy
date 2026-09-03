@@ -221,7 +221,7 @@ Eight species. The eyes and the body motif come from the species, so a Bramble i
      Mote           Wisp          Ember           Pip            Fen          Bramble          Nim           Quill
 ```
 
-Rarity is rolled from the seed, with a mark that carries the tier without relying on colour, so it still reads on a mono terminal or to a colour-blind user. On top of that, a **1% shiny** roll swaps the body motif for `$` (`<|+++|>` becomes `<|$$$|>`).
+Rarity is rolled from the seed, with a mark that carries the tier without relying on colour, so it still reads on a mono terminal or to a colour-blind user. On top of that, a **1% shiny** roll remakes the body motif: symbols become `$` (`<|+++|>` becomes `<|$$$|>`) and letters go uppercase (`<|ooo|>` becomes `<|OOO|>`).
 
 | Rarity | Odds | Mark |
 |---|---|---|
@@ -386,7 +386,7 @@ brainbuddy simulate <xp>     preview any level without touching real state
 brainbuddy sources           what it can count, and what to do if that's nothing
 brainbuddy doctor            what can it see, and why is it zero
 brainbuddy doctor --check    the same, plus how your version compares to the latest
-brainbuddy update            fetch and install the newest release
+brainbuddy update            ask pypi whether there's a newer brainbuddy
 brainbuddy render            the one-line statusline segment
 brainbuddy compose "<text>"  your statusline text, creature as a left column
 brainbuddy refresh           recompute the xp cache

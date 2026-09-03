@@ -5,6 +5,14 @@ Notable changes, newest first. Versions follow semver; the version lives in
 
 ## Unreleased
 
+- Fixed: a background refresh no longer writes back the roster it loaded before
+  the scan, which could silently revert an egg laid or hatched while it ran.
+- Fixed: the leak guard no longer skips files whose names contain spaces, and it
+  now catches capitalized and `/home/` paths too.
+- Fixed: `--uninstall` recognizes a statusline that names the shim through `~`
+  instead of deleting the shim and leaving the statusline pointing at it.
+- Fixed: a non-numeric `config xp_max`/`columns`/`sprite_height` or `simulate`
+  argument gets a one-line answer instead of a traceback carrying a home path.
 - Upgrades keep your buddy. `state.json` carries a schema version, and a file
   written by any earlier version is brought forward on load: nothing is dropped,
   missing fields are filled, and a focus pointing at a creature that isn't there
