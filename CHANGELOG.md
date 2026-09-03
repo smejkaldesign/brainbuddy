@@ -3,6 +3,14 @@
 Notable changes, newest first. Versions follow semver; the version lives in
 `brainbuddy/__init__.py` and each release is the matching `v*` tag.
 
+## Unreleased
+
+- An egg renders as Unhatched everywhere, never as a name. The name is chosen
+  at the hatch: two ideas from the new `brainbuddy names`, your own via
+  `hatch --name <n>`, or let it name itself and find out at the reveal.
+- The session counter (`+N XP`) moved to the right of the progress bar, so the
+  caption reads level, bar, then what this session added.
+
 ## 1.0.0
 
 The first public release: install it with one command, and the owner's costs
