@@ -88,13 +88,20 @@ def migrate(data):
     creatures = [c for c in (state.get("creatures") or []) if isinstance(c, dict)]
     for i, c in enumerate(creatures):
         # every read path indexes these directly, so one written before the key
-        # existed, or edited by hand, crashes the statusline instead of degrading
-        c.setdefault("seed", c.get("id") or "creature-%d" % i)
-        c.setdefault("id", c["seed"])
-        c.setdefault("name", creature_mod.suggest_name(c["seed"]))
+        # existed, or edited by hand, crashes the statusline instead of degrading.
+        # setdefault isn't enough: a hand-edited "name": null has the key and
+        # still crashes every command that lowercases it
+        if c.get("seed") is None:
+            c["seed"] = c.get("id") or "creature-%d" % i
+        if c.get("id") is None:
+            c["id"] = c["seed"]
+        if c.get("name") is None:
+            c["name"] = creature_mod.suggest_name(c["seed"])
         c.setdefault("hatched_at", None)
-        c.setdefault("xp_banked", 0)
-        c.setdefault("last_stage_seen", 0)
+        if c.get("xp_banked") is None:
+            c["xp_banked"] = 0
+        if c.get("last_stage_seen") is None:
+            c["last_stage_seen"] = 0
     state["creatures"] = creatures
 
     if state.get("focused") not in {c["id"] for c in creatures}:

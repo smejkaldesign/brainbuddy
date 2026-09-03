@@ -60,7 +60,11 @@ def spawn_refresh():
 
     try:
         os.makedirs(state_mod.STATE_DIR, exist_ok=True)
-        open(state_mod.CACHE_PATH, "a").close()
+        # the claim has to be a cache read_cache accepts. an empty file reads as
+        # no cache at all, so every render before the scan finished spawned
+        # another scan
+        if state_mod.read_cache() is None:
+            state_mod.write_cache(0, {})
         os.utime(state_mod.CACHE_PATH, None)
         subprocess.Popen(
             [sys.executable, "-m", "brainbuddy.cli", "refresh"],

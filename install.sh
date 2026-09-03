@@ -217,6 +217,11 @@ if [ "$MODE" = uninstall ]; then
   PREVIOUS=""
   if [ -s "$WRAPPED" ]; then PREVIOUS="$(cat "$WRAPPED")"; fi
   CURRENT="$(read_statusline)"
+  # a hand-wired settings.json can name the shim through ~, and an exact string
+  # compare would then delete the shim while leaving statusLine pointing at it
+  case "$CURRENT" in
+    "$SHIM"|"~/.claude/brainbuddy/statusline-brainbuddy.sh"|"\$HOME/.claude/brainbuddy/statusline-brainbuddy.sh") CURRENT="$SHIM" ;;
+  esac
   if [ "$CURRENT" = "$SHIM" ]; then
     write_statusline "$PREVIOUS"
     if [ -n "$PREVIOUS" ]; then
