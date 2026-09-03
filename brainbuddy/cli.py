@@ -221,7 +221,9 @@ def cmd_hatch(args):
     # --from-zero lands on Lv0 too, but that one was chosen and says so itself
     empty = not from_zero and not xp
     print(render.hatch_ceremony(st, c))
-    print(render.card(st, xp=0 if from_zero else xp, counts=counts, hungry_note=not empty))
+    # art=False: the ceremony just showed the sprite and the name. showing the
+    # identical creature again ten lines later dilutes the one reveal it gets
+    print(render.card(st, xp=0 if from_zero else xp, counts=counts, hungry_note=not empty, art=False))
     if from_zero:
         # the stats still read the live vault, so say why the level doesn't
         print("\n  %d xp of existing notes baselined. new ones count from here." % xp)
@@ -322,7 +324,7 @@ def cmd_config(args):
         try:
             value = int(raw)
         except ValueError:
-            print("xp_max takes a number, not %r" % raw)
+            print("xp_max takes a number, not %r. try: config xp_max 1500" % raw)
             return 1
         if value < 1:
             print("xp_max must be positive")
@@ -353,13 +355,13 @@ def cmd_config(args):
         try:
             value = 3 if int(raw) <= 3 else 5
         except ValueError:
-            print("sprite_height takes a number, not %r" % raw)
+            print("sprite_height takes a number, not %r. it's 3 or 5" % raw)
             return 1
     elif key == "columns":
         try:
             value = int(raw)
         except ValueError:
-            print("columns takes a number, not %r" % raw)
+            print("columns takes a number, not %r. try: config columns 40" % raw)
             return 1
         if value < 0:
             print("columns can't be negative")
@@ -380,7 +382,7 @@ def cmd_simulate(args):
     try:
         xp = int(args[0])
     except ValueError:
-        print("simulate takes an xp number, not %r" % args[0])
+        print("simulate takes an xp number, not %r. try: simulate 300" % args[0])
         return 1
     st = state_mod.default_state()
     c = state_mod.create(st, name=(args[1] if len(args) > 1 else None))
@@ -489,7 +491,9 @@ def cmd_doctor(args):
     for k in sorted(counts):
         print("  %-10s %d" % (k, counts[k]))
     p = metric.progress(xp, settings["xp_max"])
-    print("source xp %d -> level %d" % (xp, p["level"]))
+    # the buddy's banked line below is the real level; this one is what the
+    # source would feed a fresh egg, and on a broken root they diverge
+    print("source xp %d -> level %d (what a new egg would bank)" % (xp, p["level"]))
     # the two diverge whenever a creature was hatched --from-zero, so one line
     # claiming to be both would be wrong for anyone who chose that
     c = state_mod.focused(st)
@@ -578,8 +582,11 @@ def main(argv=None):
         return 0
     fn = COMMANDS.get(argv[0])
     if fn is None:
-        print("unknown command %s\n" % argv[0])
-        print(USAGE)
+        # the full usage after a typo is a wall. one guess or one pointer
+        import difflib
+        close = difflib.get_close_matches(argv[0], COMMANDS, n=1)
+        hint = "did you mean %s?" % close[0] if close else "brainbuddy -h lists what there is"
+        print("unknown command %s. %s" % (argv[0], hint))
         return 1
     return fn(argv[1:])
 

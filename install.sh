@@ -348,10 +348,20 @@ if bb sources >/dev/null 2>&1; then HAS_SOURCE=1; else HAS_SOURCE=0; SOURCE_HELP
 # `new` exits 1 when a buddy exists, which is the re-install path: leave it be
 if ! bb new >/dev/null 2>&1; then bb list; echo; fi
 
+# homework first, egg last: the door closes on the one action left to take,
+# not on a config recipe
+if [ -n "$SOURCE_HELP" ]; then echo "$SOURCE_HELP"; echo; fi
+
 # prompt off the roster, not off whether we just laid it, or a reinstall never
 # re-offers the one action the user still has to take
 if bb list 2>/dev/null | grep -q '^\*.*unhatched'; then
-  echo "there's an egg in your statusline, and it's hungry. open it:"
+  if [ "$WIRE" = 1 ] || [ -n "${HANDWIRED:-}" ]; then
+    echo "there's an egg in your statusline, and it's hungry. open it:"
+  else
+    # --no-wire promised "wire it yourself"; this is the how
+    echo "there's an egg waiting, and it's hungry. it shows up once statusLine.command"
+    echo "points at ~/.claude/brainbuddy/statusline-brainbuddy.sh. open it either way:"
+  fi
   echo "  /brainbuddy-hatch"
   if [ "$HAS_SOURCE" = 1 ]; then
     echo "it hatches at whatever level your memories have already fed it."
@@ -359,5 +369,3 @@ if bb list 2>/dev/null | grep -q '^\*.*unhatched'; then
     echo "it'll open at level 0 for now, and grow once there are memories to feed on."
   fi
 fi
-
-if [ -n "$SOURCE_HELP" ]; then echo; echo "$SOURCE_HELP"; fi

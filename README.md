@@ -99,7 +99,7 @@ git clone https://github.com/smejkaldesign/brainbuddy && cd brainbuddy
 
 **As a Claude Code plugin**, coming soon; the manifest ships in this repo and the marketplace listing follows.
 
-**From PyPI** (`pipx install brainbuddy`) you get the CLI and nothing else. It does not wire your statusline, which is most of what brainbuddy is. Use it if you want the commands on your PATH; run `install.sh` or the bootstrap if you want a creature.
+**From PyPI**, once the first release is tagged (`pipx install brainbuddy`): you get the CLI and nothing else. It does not wire your statusline, which is most of what brainbuddy is. Use it if you want the commands on your PATH; run `install.sh` or the bootstrap if you want a creature.
 
 **Behind a mirror, or offline?** `BRAINBUDDY_TARBALL` is the bootstrap's escape hatch. Set it to a URL or to a tarball already on disk, and it installs from that instead of reaching for a release.
 
@@ -194,14 +194,14 @@ $ brainbuddy card
 Six sprites: the egg, then five forms, gaining detail at every step.
 
 ```
-     ___             _^_             _^_             \|/            .\|/.          *.\|/.*
-    /   \          ( ' ' )         ( ' ' )         ( ' ' )         ( ' ' )        \( ' ' )/
-   ( ooo )          /+++\          <|+++|>         <|+++|>         /|+++|\         /|+++|\
-    \___/            ^ ^            /   \           /|_|\           |___|          =|___|=
-                                    ^   ^           ^   ^          /     \         ^     ^
+    ___        _^_        _^_        \|/       .\|/.     *.\|/.*
+   /   \     ( ' ' )    ( ' ' )    ( ' ' )    ( ' ' )   \( ' ' )/
+  ( ooo )     /+++\     <|+++|>    <|+++|>    /|+++|\    /|+++|\
+   \___/       ^ ^       /   \      /|_|\      |___|     =|___|=
+                         ^   ^      ^   ^     /     \    ^     ^
 
-     egg          Hatchling       Fledgling         Adept            Sage         Ascendant
-  unhatched          0-19           20-39           40-59           60-79           80-100
+    egg     Hatchling  Fledgling    Adept       Sage    Ascendant
+ unhatched     0-19      20-39      40-59      60-79     80-100
 ```
 
 Sprite 0 is the egg, so level stages start at sprite 1. That numbering is what let existing creatures survive the egg change without a migration.
@@ -213,12 +213,19 @@ Sprite 0 is the egg, so level stages start at sprite 1. That numbering is what l
 Eight species. The eyes and the body motif come from the species, so a Bramble is recognisable at a glance.
 
 ```
-     _^_            _^_            _^_            _^_            _^_            _^_            _^_            _^_
-   ( o o )        ( - - )        ( ^ ^ )        ( . . )        ( o o )        ( x x )        ( ' ' )        ( > < )
-   <|ooo|>        <|~~~|>        <|***|>        <|...|>        <|===|>        <|###|>        <|+++|>        <|///|>
-    /   \          /   \          /   \          /   \          /   \          /   \          /   \          /   \
-    ^   ^          ^   ^          ^   ^          ^   ^          ^   ^          ^   ^          ^   ^          ^   ^
-     Mote           Wisp          Ember           Pip            Fen          Bramble          Nim           Quill
+     _^_            _^_            _^_            _^_
+   ( o o )        ( - - )        ( ^ ^ )        ( . . )
+   <|ooo|>        <|~~~|>        <|***|>        <|...|>
+    /   \          /   \          /   \          /   \
+    ^   ^          ^   ^          ^   ^          ^   ^
+     Mote           Wisp          Ember           Pip
+
+     _^_            _^_            _^_            _^_
+   ( o o )        ( v v )        ( ' ' )        ( > < )
+   <|===|>        <|###|>        <|+++|>        <|///|>
+    /   \          /   \          /   \          /   \
+    ^   ^          ^   ^          ^   ^          ^   ^
+     Fen          Bramble          Nim           Quill
 ```
 
 Rarity is rolled from the seed, with a mark that carries the tier without relying on colour, so it still reads on a mono terminal or to a colour-blind user. On top of that, a **1% shiny** roll remakes the body motif: symbols become `$` (`<|+++|>` becomes `<|$$$|>`) and letters go uppercase (`<|ooo|>` becomes `<|OOO|>`).
@@ -333,13 +340,19 @@ Want it slower? `brainbuddy config xp_max 5000` triples the distance. It's your 
 The column is boxed in dark grey by default. `config border false` drops the box and gets **two rows of height back**:
 
 ```
-┌───────────┐                                    .\|/.    ████░░░░░░  my-brain ⎇ main
-│   .\|/.   │  ████░░░░░░  my-brain ⎇ main      ( o o )   🥚 Drain · Sage Lv65 █████░
-│  ( o o )  │  🥚 Drain · Sage Lv65 █████░       /|ooo|\
-│  /|ooo|\  │                                    |___|
-│   |___|   │                                   /     \
+┌───────────┐
+│   .\|/.   │  ████░░░░░░  my-brain ⎇ main
+│  ( o o )  │  🥚 Drain · Sage Lv65 █████░
+│  /|ooo|\  │
+│   |___|   │
 │  /     \  │
 └───────────┘
+
+  .\|/.    ████░░░░░░  my-brain ⎇ main
+ ( o o )   🥚 Drain · Sage Lv65 █████░
+ /|ooo|\
+  |___|
+ /     \
 ```
 
 Either way the column is pinned to the creature's **widest** form, so your text doesn't shift sideways the day it evolves into an Ascendant.
@@ -385,7 +398,7 @@ brainbuddy config [key val]  see settings, or set one
 brainbuddy simulate <xp>     preview any level without touching real state
 brainbuddy sources           what it can count, and what to do if that's nothing
 brainbuddy doctor            what can it see, and why is it zero
-brainbuddy doctor --check    the same, plus how your version compares to the latest
+brainbuddy doctor --check    the same, plus a version check against pypi
 brainbuddy update            ask pypi whether there's a newer brainbuddy
 brainbuddy render            the one-line statusline segment
 brainbuddy compose "<text>"  your statusline text, creature as a left column
