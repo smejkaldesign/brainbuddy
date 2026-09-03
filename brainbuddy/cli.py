@@ -378,6 +378,75 @@ PROVIDER_LABEL = {
     "folder": "folder of notes",
 }
 
+SHIM = "~/.claude/brainbuddy/statusline-brainbuddy.sh"
+USER_SETTINGS = os.path.expanduser("~/.claude/settings.json")
+
+
+def _statusline_command(path):
+    """statusLine.command out of a settings file, or "". Reads, never writes."""
+    try:
+        with open(path, "r") as f:
+            return (json.load(f).get("statusLine") or {}).get("command") or ""
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
+def _project_settings():
+    """The .claude/settings.json this directory would actually use, or None.
+
+    The working directory first, then the repo root, because a statusline set at
+    the root applies to every directory under it and doctor is usually run from
+    somewhere deeper.
+    """
+    # realpath both sides: /tmp and /home are symlinks on plenty of machines, so
+    # comparing what getcwd returns against what ~ expands to misses otherwise
+    here = os.path.realpath(os.getcwd())
+    home = os.path.realpath(os.path.expanduser("~"))
+    candidates, d = [here], here
+    while d != home:
+        if os.path.isdir(os.path.join(d, ".git")):
+            candidates.append(d)
+            break
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    for c in candidates:
+        path = os.path.join(c, ".claude", "settings.json")
+        # a repo checked out at $HOME would otherwise report the user's own file
+        # as a project overriding itself
+        if os.path.isfile(path) and os.path.realpath(path) != os.path.realpath(USER_SETTINGS):
+            return path
+    return None
+
+
+def _project_override():
+    """Named when a project's own statusline is what runs here. None otherwise.
+
+    The installer only ever touches ~/.claude/settings.json. A project that sets
+    statusLine wins inside that project, so the install is correct, the creature
+    is nowhere, and nothing on either side says why.
+    """
+    if "statusline-brainbuddy.sh" not in _statusline_command(USER_SETTINGS):
+        return None
+    path = _project_settings()
+    if path is None:
+        return None
+    command = _statusline_command(path)
+    if not command or "statusline-brainbuddy.sh" in command:
+        return None
+    home = os.path.realpath(os.path.expanduser("~"))
+    shown = "~" + path[len(home):] if path.startswith(home) else path
+    return "\n".join([
+        "this project sets its own statusline in %s, so that one runs here and your buddy doesn't." % shown,
+        "the installer only wires ~/.claude/settings.json, and a project's own file wins inside the project.",
+        "",
+        "wrap theirs, then point the project at the shim:",
+        '  ./install.sh --statusline "%s"' % command,
+        '  then in that file: "statusLine": { "type": "command", "command": "%s" }' % SHIM,
+    ])
+
+
 def cmd_doctor(args):
     """Report what we can see. Counts only, never a path (R12)."""
     st = _load()
@@ -405,6 +474,9 @@ def cmd_doctor(args):
         bp = metric.progress(banked, settings["xp_max"])
         stage = bp["stage"] if state_mod.is_hatched(c) else "egg"
         print("%s banked %d -> level %d (%s)" % (c["name"], banked, bp["level"], stage))
+    override = _project_override()
+    if override:
+        print("\n" + override)
     help_text = render.no_source_help(settings, status)
     if help_text:
         print("\n" + help_text)

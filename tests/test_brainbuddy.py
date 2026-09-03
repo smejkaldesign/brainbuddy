@@ -475,6 +475,55 @@ def test_version_check_is_explicit_only():
         shutil.rmtree(home)
 
 
+def test_project_statusline_override():
+    """A project's own statusLine wins, and doctor is the only place that can say so.
+
+    Everything looks installed: the library is there, the shim is wired, the
+    creature is correct. It just never draws inside that repo, and the installer
+    can't fix it because it only ever touches ~/.claude/settings.json.
+    """
+    print("\nproject statusline override")
+    import json
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    home = tempfile.mkdtemp(prefix="bb-project-")
+    try:
+        project = os.path.join(home, "work", "app")
+        os.makedirs(os.path.join(project, ".claude"))
+        os.makedirs(os.path.join(project, ".git"))
+        os.makedirs(os.path.join(home, ".claude"))
+        env = dict(os.environ, HOME=home)
+        subprocess.run(["bash", os.path.join(repo, "install.sh")],
+                       env=env, input="", capture_output=True, text=True)
+
+        def doctor(cwd):
+            return subprocess.run([sys.executable, "-m", "brainbuddy.cli", "doctor"],
+                                  env=dict(env, PYTHONPATH=repo), cwd=cwd,
+                                  capture_output=True, text=True).stdout
+
+        check("sets its own statusline" not in doctor(project), "a project with no settings of its own is quiet")
+
+        theirs = {"statusLine": {"type": "command", "command": "~/repo/bar.sh"}}
+        settings = os.path.join(project, ".claude", "settings.json")
+        with open(settings, "w") as f:
+            json.dump(theirs, f)
+
+        out = doctor(project)
+        check("sets its own statusline" in out, "doctor names the state")
+        check('--statusline "~/repo/bar.sh"' in out, "and hands back the fix with their own command in it")
+        check("statusline-brainbuddy.sh" in out, "pointing the project at the shim")
+        check("~/work/app/.claude/settings.json" in out, "the file is named home-relative, not as a full path")
+        with open(settings) as f:
+            check(json.load(f) == theirs, "and their settings file is not written to")
+
+        deep = os.path.join(project, "src", "web")
+        os.makedirs(deep)
+        check("sets its own statusline" in doctor(deep), "found from a subdirectory, via the repo root")
+        check("sets its own statusline" not in doctor(home), "and not claimed for the home directory itself")
+    finally:
+        shutil.rmtree(home)
+
 
 
 def _egg_renders(colour):
@@ -871,6 +920,7 @@ if __name__ == "__main__":
     test_state_roundtrip()
     test_state_migration()
     test_version_check_is_explicit_only()
+    test_project_statusline_override()
     test_egg_reveals_nothing()
     test_source_status()
     test_installer_wraps_any_statusline()
