@@ -139,4 +139,8 @@ def bar(fraction, width=10, unicode_ok=True):
     full = "\u2588" if unicode_ok else "="
     empty = "\u2591" if unicode_ok else "."
     n = int(round(fraction * width))
+    # any real progress gets a block. rounding to zero made a fresh level look
+    # like no progress at all, same complaint as the context bar in the statusline
+    if fraction > 0:
+        n = max(1, n)
     return full * n + empty * (width - n)

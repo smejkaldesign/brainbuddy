@@ -57,10 +57,10 @@ Using a vault layout instead of stock Claude Code memory:
 ./install.sh --vault ~/dev/my-brain/MyBrain
 ```
 
-Then hatch:
+The installer leaves an egg in your statusline. Open it:
 
 ```bash
-/brainbuddy
+/brainbuddy-hatch
 ```
 
 ## How levelling works
@@ -85,14 +85,21 @@ A square root curve, so early memories move the needle and later ones don't. Lev
 
 | Level | Form |
 |---|---|
-| 0 | Egg |
-| 1-19 | Hatchling |
+| 0-19 | Hatchling |
 | 20-39 | Fledgling |
 | 40-59 | Adept |
 | 60-79 | Sage |
 | 80+ | Ascendant |
 
 Level keeps climbing past 100. Evolution stops at Ascendant.
+
+## The egg is a state, not a level
+
+A buddy is an **egg** until you hatch it, whatever level it is. The statusline shows egg art and no level, `/brainbuddy-hatch` opens it, and only then do you see what you got. Level 0 is a Hatchling, a baby with a face, not an egg.
+
+Eggs bank XP while closed. So on a fresh install the first egg inherits the memory you already have, and hatching reveals a buddy several forms in rather than a level 0 blank. That reveal is the point of the zero state: install, see an egg, open it, meet something that already reflects how much you've written.
+
+A buddy added later with `/brainbuddy-new --add` starts at 0 and does hatch as a Hatchling, because XP banks per creature.
 
 ## Display modes
 
@@ -125,11 +132,12 @@ Deleting memories never de-levels anyone. The high-water mark only rises, becaus
 
 ```
 brainbuddy card              the full creature card
-brainbuddy hatch [name]      new egg, starts at 0, takes focus
+brainbuddy new [name]        lay an egg (--replace or --add)
+brainbuddy hatch             open the egg, revealing the level it earned
 brainbuddy focus <name>      choose who banks new xp
 brainbuddy list              the roster
 brainbuddy rename <old> <new>
-brainbuddy retire <name>
+brainbuddy retire <name>     retires, keeps the record and its xp
 brainbuddy hide              drop it from the statusline, keeps banking xp
 brainbuddy show              put it back
 brainbuddy config [key val]  provider, vault_root, xp_max, density, columns, unicode, hidden
@@ -139,7 +147,7 @@ brainbuddy render            the statusline segment
 brainbuddy compose "<text>"  your statusline text, creature as a left column
 ```
 
-`/brainbuddy-hide` and `/brainbuddy-show` are also their own slash commands, so "hide my brainbuddy" reaches them without going through `/brainbuddy`.
+`/brainbuddy-new`, `/brainbuddy-hatch`, `/brainbuddy-hide` and `/brainbuddy-show` are also their own slash commands, so "hatch it" or "hide my brainbuddy" reaches them without going through `/brainbuddy`.
 
 ## Provenance
 

@@ -131,25 +131,74 @@ def sync(state, current_xp):
 
     level = metric.level_for(c["xp_banked"], state["settings"]["xp_max"])
     idx, name = metric.stage_for(level)
+    # an egg still banks xp, it just doesn't announce evolutions nobody can see.
+    # the hatch ceremony is the reveal, so don't burn the beat before it
+    if not is_hatched(c):
+        return None
     if idx > c.get("last_stage_seen", 0):
         c["last_stage_seen"] = idx
         return {"creature": c["name"], "stage_index": idx, "stage": name, "level": level}
     return None
 
 
-def hatch(state, name=None, focus=True):
-    """New creatures always start at zero banked XP."""
-    c = creature_mod.new_creature(name=name, hatched_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+def create(state, name=None, focus=True):
+    """Add a creature as an unhatched egg. New creatures start at zero banked XP.
+
+    hatched_at stays None until `reveal`, which is what makes the egg a state
+    rather than a level band.
+    """
+    c = creature_mod.new_creature(name=name)
     state.setdefault("creatures", []).append(c)
     if focus or state.get("focused") is None:
         state["focused"] = c["id"]
     return c
 
 
-def focus(state, ident):
-    """Focus by id or name (case-insensitive). Returns the creature or None."""
+def is_hatched(c):
+    return bool(c and c.get("hatched_at"))
+
+
+def reveal(state):
+    """Hatch the focused egg. Returns the creature, or None if there's nothing to open."""
+    c = focused(state)
+    if c is None or is_hatched(c):
+        return None
+    c["hatched_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    # the reveal shows whatever stage the egg banked its way to, so record it
+    # here or the next sync fires an evolution notice for a stage just displayed
+    level = metric.level_for(c.get("xp_banked", 0), state["settings"]["xp_max"])
+    c["last_stage_seen"] = metric.stage_for(level)[0]
+    return c
+
+
+def active(state):
+    return [c for c in state.get("creatures", []) if not c.get("retired_at")]
+
+
+def retire(state, ident):
+    """Retire by id or name. Keeps the record and its banked XP; focus can undo it."""
+    c = find(state, ident)
+    if c is None:
+        return None
+    c["retired_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if state.get("focused") == c["id"]:
+        rest = active(state)
+        state["focused"] = rest[0]["id"] if rest else None
+    return c
+
+
+def find(state, ident):
     for c in state.get("creatures", []):
         if c["id"] == ident or c["name"].lower() == str(ident).lower():
-            state["focused"] = c["id"]
             return c
     return None
+
+
+def focus(state, ident):
+    """Focus by id or name (case-insensitive). Un-retires. Returns the creature or None."""
+    c = find(state, ident)
+    if c is None:
+        return None
+    c.pop("retired_at", None)
+    state["focused"] = c["id"]
+    return c

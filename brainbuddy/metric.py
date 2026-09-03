@@ -12,9 +12,12 @@ import os
 XP_MAX_DEFAULT = 5000
 STAGE_SPAN = 20
 
-STAGES = [
-    (0, 0, "Egg"),
-    (1, 19, "Hatchling"),
+# sprite 0 is the egg, which is now the unhatched state rather than a level
+# band. so level stages start at sprite 1 and a level-0 buddy is a baby, not an egg
+EGG_SPRITE = 0
+
+LEVEL_STAGES = [
+    (0, 19, "Hatchling"),
     (20, 39, "Fledgling"),
     (40, 59, "Adept"),
     (60, 79, "Sage"),
@@ -96,19 +99,23 @@ def xp_for_level(level, xp_max=XP_MAX_DEFAULT):
 
 
 def stage_for(level):
-    """Return (stage_index, stage_name)."""
-    for i, (lo, hi, name) in enumerate(STAGES):
+    """Return (sprite_index, stage_name) for a hatched creature.
+
+    Offset by one because sprite 0 is the egg. Keeping the sprite numbering
+    stable is what lets last_stage_seen survive this change unmigrated.
+    """
+    for i, (lo, hi, name) in enumerate(LEVEL_STAGES):
         if level >= lo and (hi is None or level <= hi):
-            return i, name
-    return 0, STAGES[0][2]
+            return i + 1, name
+    return 1, LEVEL_STAGES[0][2]
 
 
 def next_stage_level(level):
     """First level of the next evolution, or None at Ascendant."""
-    idx, _ = stage_for(level)
-    if idx >= len(STAGES) - 1:
+    band = stage_for(level)[0] - 1
+    if band >= len(LEVEL_STAGES) - 1:
         return None
-    return STAGES[idx + 1][0]
+    return LEVEL_STAGES[band + 1][0]
 
 
 def progress(xp, xp_max=XP_MAX_DEFAULT):

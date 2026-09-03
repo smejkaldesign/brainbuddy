@@ -59,7 +59,9 @@ def test_metric():
             need = metric.xp_for_level(lvl)
             check(metric.level_for(need) == lvl, "level %d round-trips through xp_for_level" % lvl)
 
-        check(metric.stage_for(0)[1] == "Egg", "level 0 is an Egg")
+        check(metric.stage_for(0)[1] == "Hatchling", "level 0 is a baby, not an egg")
+        check("Egg" not in [s[1] for s in metric.LEVEL_STAGES], "no level band is an Egg any more")
+        check(metric.stage_for(0)[0] == metric.EGG_SPRITE + 1, "level stages start one past the egg sprite")
         check(metric.stage_for(35)[1] == "Fledgling", "level 35 is a Fledgling")
         check(metric.stage_for(100)[1] == "Ascendant", "level 100 is Ascendant")
         check(metric.stage_for(250)[1] == "Ascendant", "past 100 stays Ascendant, evolution caps")
@@ -142,6 +144,13 @@ def test_creature():
     check(set(stats) == {"Recall", "Depth", "Drive", "Streak", "Ferment"}, "the five stats are present")
 
 
+def _hatched(st, name=None):
+    """create + reveal, since most tests predate the egg being a real state."""
+    c = state_mod.create(st, name=name)
+    state_mod.reveal(st)
+    return c
+
+
 def test_banking():
     print("\nxp banking")
     # a render before the first hatch used to burn all the earned xp,
@@ -149,17 +158,17 @@ def test_banking():
     empty = state_mod.default_state()
     state_mod.sync(empty, 624)
     check(empty["high_water_xp"] == 0, "no creature means the high water mark does not move")
-    c0 = state_mod.hatch(empty, name="Late")
+    c0 = _hatched(empty, name="Late")
     state_mod.sync(empty, 624)
     check(c0["xp_banked"] == 624, "so the first creature still inherits it, got %d" % c0["xp_banked"])
 
     st = state_mod.default_state()
-    first = state_mod.hatch(st, name="Alpha")
+    first = _hatched(st, name="Alpha")
     state_mod.sync(st, 624)
     check(first["xp_banked"] == 624, "first creature inherits the existing memory")
     check(metric.level_for(first["xp_banked"]) == 35, "which puts it at level 35")
 
-    second = state_mod.hatch(st, name="Beta")
+    second = _hatched(st, name="Beta")
     check(second["xp_banked"] == 0, "a second creature starts at zero, not at 35")
     check(st["focused"] == second["id"], "hatching moves focus")
 
@@ -177,7 +186,7 @@ def test_banking():
     check(first["xp_banked"] == 724, "so nobody de-levels for tidying up")
 
     st2 = state_mod.default_state()
-    c = state_mod.hatch(st2, name="Gamma")
+    c = _hatched(st2, name="Gamma")
     c["xp_banked"] = metric.xp_for_level(19)
     c["last_stage_seen"] = 1
     st2["high_water_xp"] = c["xp_banked"]
@@ -186,13 +195,60 @@ def test_banking():
     check(state_mod.sync(st2, metric.xp_for_level(20)) is None, "the same evolution does not fire twice")
 
 
+def test_egg_and_hatch():
+    print("\negg and hatch")
+    st = state_mod.default_state()
+    c = state_mod.create(st, name="Shell")
+    check(not state_mod.is_hatched(c), "a new creature starts as an unhatched egg")
+    check(st["focused"] == c["id"], "the egg takes focus so it banks xp")
+
+    # the whole point: an egg banks while closed, so hatching opens at your real level
+    state_mod.sync(st, 624)
+    check(c["xp_banked"] == 624, "an egg still banks xp while closed, got %d" % c["xp_banked"])
+    check(state_mod.sync(st, 700) is None, "but it announces no evolution nobody can see")
+
+    revealed = state_mod.reveal(st)
+    check(revealed is c, "reveal returns the creature it opened")
+    check(state_mod.is_hatched(c), "and it is hatched afterwards")
+    lvl = metric.level_for(c["xp_banked"])
+    check(lvl > 0, "it opens at the level it banked to, not zero (Lv%d)" % lvl)
+    check(c["last_stage_seen"] == metric.stage_for(lvl)[0], "the reveal absorbs the stage it just showed")
+    check(state_mod.sync(st, c["xp_banked"]) is None, "so hatching does not fire a stale evolution notice")
+    check(state_mod.reveal(st) is None, "hatching twice is a no-op")
+
+
+def test_retire_keeps_the_record():
+    print("\nretire")
+    st = state_mod.default_state()
+    old = _hatched(st, name="Keeper")
+    state_mod.sync(st, 624)
+    banked = old["xp_banked"]
+
+    new = state_mod.create(st, name="Fresh")
+    state_mod.retire(st, "Keeper")
+    check(len(st["creatures"]) == 2, "retiring keeps the record instead of deleting it")
+    check(old["xp_banked"] == banked, "and keeps its banked xp, got %d" % old["xp_banked"])
+    check(old.get("retired_at"), "the retirement is recorded")
+    check([c["name"] for c in state_mod.active(st)] == ["Fresh"], "retired creatures drop out of the active roster")
+    check(st["focused"] == new["id"], "focus moves off the retired one")
+
+    back = state_mod.focus(st, "Keeper")
+    check(back is old and not old.get("retired_at"), "focusing a retired creature brings it back")
+
+    st2 = state_mod.default_state()
+    solo = _hatched(st2, name="Only")
+    state_mod.retire(st2, "Only")
+    check(st2["focused"] is None, "retiring the last creature leaves nothing focused")
+    check(solo in st2["creatures"], "but the record survives")
+
+
 def test_state_roundtrip():
     print("\nstate file")
     d = tempfile.mkdtemp(prefix="bb-state-")
     path = os.path.join(d, "state.json")
     try:
         st = state_mod.default_state()
-        state_mod.hatch(st, name="Delta")
+        _hatched(st, name="Delta")
         state_mod.save(st, path)
         back = state_mod.load(path)
         check(back["creatures"][0]["name"] == "Delta", "roster survives a save/load")
@@ -214,6 +270,8 @@ if __name__ == "__main__":
     test_no_content_reads()
     test_creature()
     test_banking()
+    test_egg_and_hatch()
+    test_retire_keeps_the_record()
     test_state_roundtrip()
     print("\n%s" % ("-" * 46))
     if FAILURES:
