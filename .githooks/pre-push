@@ -4,16 +4,19 @@
 set -euo pipefail
 ROOT=$(git rev-parse --show-toplevel)
 
-RANGE_FILES=""
+# collected null-delimited into an array: a filename with a space used to split
+# into two paths the guard couldn't open, and the guard skipped both
+FILES=()
 while read -r _local_ref local_sha _remote_ref remote_sha; do
   [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
   if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
-    RANGE_FILES="$RANGE_FILES $(git diff --name-only "$(git merge-base "$local_sha" origin/main 2>/dev/null || echo "$local_sha")" "$local_sha" 2>/dev/null || true)"
+    BASE="$(git merge-base "$local_sha" origin/main 2>/dev/null || echo "$local_sha")"
   else
-    RANGE_FILES="$RANGE_FILES $(git diff --name-only "$remote_sha" "$local_sha" 2>/dev/null || true)"
+    BASE="$remote_sha"
   fi
+  while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git diff --name-only -z "$BASE" "$local_sha" 2>/dev/null || true)
 done
 
 # no refs on stdin (manual run) or nothing resolved: fall back to the whole tree
-if [ -z "$(echo "$RANGE_FILES" | tr -d '[:space:]')" ]; then exec "$ROOT/scripts/leak-guard.sh"; fi
-exec "$ROOT/scripts/leak-guard.sh" $RANGE_FILES
+if [ "${#FILES[@]}" -eq 0 ]; then exec "$ROOT/scripts/leak-guard.sh"; fi
+exec "$ROOT/scripts/leak-guard.sh" "${FILES[@]}"
