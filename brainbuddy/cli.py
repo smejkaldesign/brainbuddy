@@ -119,9 +119,12 @@ def cmd_compose(args):
 
 
 def cmd_refresh(args):
-    st = _load()
-    xp, counts = state_mod.measure_now(st["settings"])
+    # measure before taking the snapshot that gets written back. the scan takes
+    # as long as the vault is big, and a roster held across it would revert any
+    # egg laid or hatched meanwhile
+    xp, counts = state_mod.measure_now(state_mod.load()["settings"])
     state_mod.write_cache(xp, counts)
+    st = _load()
     event = state_mod.sync(st, xp)
     state_mod.save(st)
     if event:
@@ -316,7 +319,11 @@ def cmd_config(args):
         print("unknown setting %s. known: %s" % (key, ", ".join(sorted(state_mod.DEFAULT_SETTINGS))))
         return 1
     if key == "xp_max":
-        value = int(raw)
+        try:
+            value = int(raw)
+        except ValueError:
+            print("xp_max takes a number, not %r" % raw)
+            return 1
         if value < 1:
             print("xp_max must be positive")
             return 1
@@ -343,9 +350,17 @@ def cmd_config(args):
         print("weights isn't settable from the CLI, edit state.json")
         return 1
     elif key == "sprite_height":
-        value = 3 if int(raw) <= 3 else 5
+        try:
+            value = 3 if int(raw) <= 3 else 5
+        except ValueError:
+            print("sprite_height takes a number, not %r" % raw)
+            return 1
     elif key == "columns":
-        value = int(raw)
+        try:
+            value = int(raw)
+        except ValueError:
+            print("columns takes a number, not %r" % raw)
+            return 1
         if value < 0:
             print("columns can't be negative")
             return 1
@@ -362,7 +377,11 @@ def cmd_simulate(args):
     if not args:
         print("brainbuddy simulate <xp>")
         return 1
-    xp = int(args[0])
+    try:
+        xp = int(args[0])
+    except ValueError:
+        print("simulate takes an xp number, not %r" % args[0])
+        return 1
     st = state_mod.default_state()
     c = state_mod.create(st, name=(args[1] if len(args) > 1 else None))
     state_mod.reveal(st)

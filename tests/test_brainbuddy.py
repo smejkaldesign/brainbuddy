@@ -939,8 +939,66 @@ def test_session_xp_counter():
         os.environ.pop("NO_COLOR", None)
 
 
+def test_refresh_never_reverts_concurrent_writes():
+    """A background refresh must not hold a roster snapshot across the scan.
+
+    render spawns a refresh whenever the cache goes stale, so the scan window
+    overlaps the exact moment a new user lays and hatches their first egg. The
+    refresh has to write back the world as it is after the scan, not the copy
+    it held before.
+    """
+    print("\nrefresh vs concurrent writes")
+    import json
+    import subprocess
+
+    home = tempfile.mkdtemp(prefix="bb-race-")
+    try:
+        vault = os.path.join(home, "notes")
+        os.makedirs(vault)
+        open(os.path.join(vault, "a.md"), "w").close()
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        script = (
+            "import sys\n"
+            "sys.path.insert(0, %r)\n"
+            "from brainbuddy import cli, state as sm\n"
+            "st = sm.load(); sm.create(st, name='Alpha'); sm.save(st)\n"
+            "real = sm.measure_now\n"
+            "def slow(settings):\n"
+            "    out = real(settings)\n"
+            "    st2 = sm.load(); sm.create(st2, name='Beta'); sm.save(st2)\n"
+            "    return out\n"
+            "sm.measure_now = slow\n"
+            "raise SystemExit(cli.cmd_refresh([]))\n"
+        ) % repo
+        env = dict(os.environ, HOME=home)
+        r = subprocess.run([sys.executable, "-c", script], env=env,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        check(r.returncode == 0, "refresh exits clean, stderr: %s" % r.stderr.decode()[:120])
+        with open(os.path.join(home, ".claude", "brainbuddy", "state.json")) as f:
+            names = [c.get("name") for c in json.load(f)["creatures"]]
+        check("Beta" in names, "an egg laid during the scan survives the refresh, roster: %s" % names)
+    finally:
+        shutil.rmtree(home)
+
+
+def test_migration_replaces_nulls():
+    """A hand-edited null has the key, so setdefault used to keep it and every
+    command that lowercases the name crashed instead of degrading."""
+    print("\nmigration vs hand-edited nulls")
+    st = state_mod.migrate({
+        "creatures": [{"id": "x", "seed": "s", "name": None, "xp_banked": None, "last_stage_seen": None}],
+        "focused": "x", "settings": {},
+    })
+    c = st["creatures"][0]
+    check(isinstance(c["name"], str) and bool(c["name"]), "a null name migrates to a real one")
+    check(c["xp_banked"] == 0, "a null xp_banked migrates to 0")
+    check(c["last_stage_seen"] == 0, "a null last_stage_seen migrates to 0")
+
+
 if __name__ == "__main__":
     test_metric()
+    test_refresh_never_reverts_concurrent_writes()
+    test_migration_replaces_nulls()
     test_sprite_alignment()
     test_compose_column()
     test_no_content_reads()
