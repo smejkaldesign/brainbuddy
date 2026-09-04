@@ -2,12 +2,12 @@
   <img src="site/assets/terminalcreature-logo.svg" width="247" alt="TERMINAL CREATURE" />
 </p>
 
-<h3 align="center">Feed your terminal creature memories and watch it evolve.</h3>
+<h3 align="center">A small creature lives in your statusline. It is always hungry.</h3>
 
 <p align="center">
-  There's an egg in your Claude Code statusline. Every note you write feeds it.<br />
-  Write enough and it hatches, then grows through five forms, each one earned by what you've actually remembered.<br />
-  It counts your files and never reads them.
+  An egg sits in your Claude Code statusline, and it eats what you remember.<br />
+  Every note you write is a meal, every meal is XP. Keep it fed and it hatches, then grows through five forms<br />
+  across eight species, with a one-in-a-hundred shiny. It counts your files and never reads them. How rare is yours?
 </p>
 
 <br />
