@@ -3,7 +3,7 @@
 Notable changes, newest first. Versions follow semver; the version lives in
 `brainbuddy/__init__.py` and each release is the matching `v*` tag.
 
-## Unreleased
+## 1.2.0
 
 - Opt-in update alert: `config update_check true` lets the background refresh
   ask pypi once a day for the latest version number, and a yellow `⬆ update`
