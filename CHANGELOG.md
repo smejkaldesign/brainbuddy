@@ -3,6 +3,38 @@
 Notable changes, newest first. Versions follow semver; the version lives in
 `terminalcreature/__init__.py` and each release is the matching `v*` tag.
 
+## 3.2.0 (2026-09-04)
+
+Auto-wire. Nobody picks hosts any more: the installer wires every agent it
+finds on the machine, and whatever agent you launch shows the creature if it
+can.
+
+### Added
+
+- `terminalcreature install` with no `--host` wires every detected host, one
+  line per host, and `uninstall` with no `--host` puts back every host that is
+  wired, whether or not its config dir is still there. `--host <name>` still
+  does one. `install.sh` ends by running the sweep after Claude Code is wired,
+  so the bootstrap does too; `--claude-only` (or `--host claude`) stops after
+  Claude Code, and `--uninstall` unwires the other hosts as well. Re-running
+  the installer refreshes every host's shim.
+- `hosts.detected()`, the one detection list: `(key, label, tier)` for every
+  host and prompt surface on the machine, tier `statusline`, `card` or
+  `prompt`, in table order. `install`, `uninstall`, `doctor` and the new table
+  all read it, and every registry entry carries a `detect` note saying what
+  finds it. The prompt tier (tmux, Starship, zsh, fish, oh-my-posh, WezTerm)
+  is informational: nothing wires it, `snippet` hands out its config.
+- `terminalcreature hosts`, the support table: host, tier, how it is
+  detected, and `wired`, `not wired` or `not found`, with the rule for a new
+  host at the bottom. `doctor` names the prompt surfaces it found.
+- README: "How a host gets supported", the three tiers and the rule for each.
+
+### Changed
+
+- `./install.sh --host all` with `--statusline` used to hand that command to
+  every host; the sweep now takes `--inline` only, since the command names
+  Claude Code's statusline. A single `--host` still takes both.
+
 ## 3.1.0 (2026-09-04)
 
 The turn-end card. Six agents with no statusline get the creature anyway: a

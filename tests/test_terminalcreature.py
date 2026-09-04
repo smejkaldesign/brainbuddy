@@ -2009,6 +2009,138 @@ def test_host_adapters():
         shutil.rmtree(home)
 
 
+def test_autowire():
+    """install with no --host wires every host found here, uninstall with none
+    puts back every host that's wired, and detected() is the one list that
+    install, uninstall, doctor and the hosts table all read.
+    """
+    print("\nautowire")
+    import json
+    import subprocess
+
+    from terminalcreature import hosts
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+
+    def run(env, argv):
+        return subprocess.run(cmd + argv, env=env, capture_output=True, text=True)
+
+    def host_lines(out):
+        return [line for line in out.splitlines() if line.startswith("  ")]
+
+    def names(out):
+        return [line.split()[0] for line in host_lines(out)]
+
+    # three hosts, one of each kind, and no --host: all three get wired
+    home = tempfile.mkdtemp(prefix="bb-auto-")
+    env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+    try:
+        os.makedirs(os.path.join(home, ".qwen"))
+        with open(os.path.join(home, ".qwen", "settings.json"), "w") as f:
+            f.write(HOST_SEEDS["qwen"][0])
+        os.makedirs(os.path.join(home, ".codex"))
+        os.makedirs(os.path.join(home, ".config", "opencode"))
+        r = run(env, ["install"])
+        check(r.returncode == 0 and len(host_lines(r.stdout)) == 3, "install with no host prints one line per host found, got %d" % len(host_lines(r.stdout)))
+        check(names(r.stdout) == ["qwen", "codex", "opencode"], "in catalogue order: statusline, hook, plugin")
+        check("claude" not in r.stdout, "and says nothing about claude, which isn't here")
+        with open(os.path.join(home, ".qwen", "settings.json")) as f:
+            check("statusline-terminalcreature-qwen.sh" in f.read(), "qwen is wired")
+        check(os.path.exists(os.path.join(home, ".codex", "hooks.json")), "codex is wired")
+        oc = os.path.join(home, ".config", "opencode", "plugins", "terminalcreature.js")
+        check(os.path.exists(oc), "opencode is wired")
+
+        # a fourth host shows up unwired and codex gets unwired by hand: uninstall
+        # with no host touches only what's still wired
+        os.makedirs(os.path.join(home, ".factory"))
+        run(env, ["uninstall", "--host", "codex"])
+        u = run(env, ["uninstall"])
+        check(u.returncode == 0 and names(u.stdout) == ["qwen", "opencode"], "uninstall with no host unwires only the wired hosts, got %r" % names(u.stdout))
+        with open(os.path.join(home, ".qwen", "settings.json")) as f:
+            check(f.read() == HOST_SEEDS["qwen"][0], "qwen is back byte for byte")
+        check(not os.path.exists(oc), "opencode's plugin file is gone")
+        u2 = run(env, ["uninstall"])
+        check(u2.returncode == 0 and "nothing to undo" in u2.stdout, "a second uninstall says there's nothing left")
+
+        # the hosts table: every host and surface, found or not, wired or not, no path
+        run(env, ["install", "--host", "qwen"])
+        t = run(env, ["hosts"])
+        rows = {line.split()[0]: line.rstrip() for line in host_lines(t.stdout)[1:]}
+        check(t.returncode == 0 and set(rows) == set(k for k, _, _, _ in hosts.catalogue()), "hosts lists every host and surface")
+        check(re.search(r"statusline .*\s{2,}wired$", rows["qwen"]) is not None, "a wired host reads wired with its tier")
+        check(rows["droid"].endswith("not wired"), "a host that's here but not wired says so")
+        check(rows["gemini"].endswith("not found") and "~/.gemini" in rows["gemini"], "an absent host reads not found with what would find it")
+        check("prompt" in rows["tmux"] and "detected by" in t.stdout, "prompt surfaces are in the table, under the header")
+        check(home not in t.stdout, "the table carries no path")
+        check("open an issue" in t.stdout, "and says how a new host qualifies")
+        d = run(env, ["doctor"])
+        check("qwen     Qwen Code           native, wired" in d.stdout and "droid    Factory Droid       native, not wired" in d.stdout,
+              "doctor reads the same detection")
+    finally:
+        shutil.rmtree(home)
+
+    # an empty home: nothing to wire, and that's not an error
+    empty = tempfile.mkdtemp(prefix="bb-auto-")
+    try:
+        r = run(dict(os.environ, HOME=empty, PYTHONPATH=repo), ["install"])
+        check(r.returncode == 0 and "nothing to wire beyond claude" in r.stdout and "terminalcreature hosts" in r.stdout,
+              "an empty home says nothing to wire beyond claude and exits 0")
+    finally:
+        shutil.rmtree(empty)
+
+    # detected() in-process, with HOME and PATH swapped for the call so the
+    # machine's own tmux or starship can't leak into the answer
+    home = tempfile.mkdtemp(prefix="bb-auto-")
+    saved = {k: os.environ.get(k) for k in ("HOME", "PATH")}
+    try:
+        for d in (".qwen", ".codex", ".config/opencode"):
+            os.makedirs(os.path.join(home, d))
+        open(os.path.join(home, ".config", "starship.toml"), "w").close()
+        os.environ["HOME"] = home
+        os.environ["PATH"] = os.path.join(home, "no-bin")
+        found = hosts.detected()
+        check(found == [("qwen", "Qwen Code", "statusline"), ("codex", "Codex CLI", "card"),
+                        ("opencode", "opencode", "card"), ("starship", "Starship", "prompt")],
+              "detected() is (key, label, tier) in catalogue order, got %r" % (found,))
+        check(all(tier in hosts.TIERS and note for _, _, tier, note in hosts.catalogue()), "every catalogue row has a tier and a detect note")
+        check(hosts.wired("qwen") is False and hosts.wired("starship") is False, "nothing is wired in a fresh home, prompt surfaces never are")
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        shutil.rmtree(home)
+
+    # install.sh: claude first, then the cursor it found; --claude-only stops after claude
+    for flags, sweeps in (([], True), (["--claude-only"], False)):
+        home = tempfile.mkdtemp(prefix="bb-auto-")
+        env = dict(os.environ, HOME=home, NO_COLOR="1")
+        label = "install.sh %s" % (" ".join(flags) if flags else "with no flags")
+        try:
+            os.makedirs(os.path.join(home, ".cursor"))
+            cursor = os.path.join(home, ".cursor", "cli-config.json")
+            with open(cursor, "w") as f:
+                f.write(HOST_SEEDS["cursor"][0])
+            r = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--no-commands"] + flags,
+                               env=env, input="", capture_output=True, text=True)
+            with open(os.path.join(home, ".claude", "settings.json")) as f:
+                check(r.returncode == 0 and "statusline-terminalcreature.sh" in json.load(f)["statusLine"]["command"], "%s wires claude" % label)
+            with open(cursor) as f:
+                wired = "statusline-terminalcreature-cursor.sh" in f.read()
+            check(wired == sweeps and ("  cursor" in r.stdout) == sweeps, "%s %s the cursor it found" % (label, "wires" if sweeps else "leaves alone"))
+            if sweeps:
+                check("hosts    ->" in r.stdout and "  claude   already wired" in r.stdout, "and the summary lists claude as already wired under the hosts line")
+                u = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--no-commands", "--uninstall"],
+                                   env=env, input="", capture_output=True, text=True)
+                with open(cursor) as f:
+                    check(u.returncode == 0 and f.read() == HOST_SEEDS["cursor"][0] and "  cursor" in u.stdout, "install.sh --uninstall puts cursor back too")
+                check("nothing to undo" not in u.stdout, "and doesn't echo the adapters' nothing-to-undo line")
+        finally:
+            shutil.rmtree(home)
+
+
 def test_snippets():
     """Every surface gets a paste-in config that calls the installed binary with
     the format its host can show, and no snippet ever carries an expanded home.
@@ -2936,6 +3068,7 @@ if __name__ == "__main__":
     test_width_cap()
     test_host_stdin()
     test_host_adapters()
+    test_autowire()
     test_host_settings_edge_cases()
     test_plugin_hosts()
     test_box_flag()

@@ -105,9 +105,9 @@ One creature, any terminal, any agent. It lives in an agent's own statusline whe
 | aider | – | – | ✓ | – |
 | Warp | – | – | ✓ | – |
 
-**Native statusline** means `install --host <name>` wires it and the session counter works. The Cursor and Copilot contracts were read off the shipped CLI bundles and exercised live; Qwen's comes from its docs. Droid's is docs-only and has not been run against a real install, so treat it as a first draft and file a bug if it misbehaves.
+**Native statusline** means the installer wires it when it finds the agent, and the session counter works. The Cursor and Copilot contracts were read off the shipped CLI bundles and exercised live; Qwen's comes from its docs. Droid's is docs-only and has not been run against a real install, so treat it as a first draft and file a bug if it misbehaves.
 
-**Turn-end card** means the agent has no statusline but does have a documented turn-end hook or plugin channel, so `install --host <name>` gives it a one-line creature card after each turn instead. All six contracts were read from the hosts' docs as of September 2026; see [the turn-end card](#codex-gemini-vibe-auggie-opencode-amp-the-turn-end-card) for what each one writes.
+**Turn-end card** means the agent has no statusline but does have a documented turn-end hook or plugin channel, so the installer gives it a one-line creature card after each turn instead. All six contracts were read from the hosts' docs as of September 2026; see [the turn-end card](#codex-gemini-vibe-auggie-opencode-amp-the-turn-end-card) for what each one writes.
 
 **Prompt or tmux** means the creature sits in your prompt or tmux bar next to the agent, which works with every one of them.
 
@@ -126,6 +126,18 @@ One creature, any terminal, any agent. It lives in an agent's own statusline whe
 | Kitty, Zellij, iTerm2 | manual: call `render --format plain` from their status hooks |
 | Ghostty, Alacritty, Windows Terminal | no status area of their own; use the prompt or tmux inside them |
 
+### How a host gets supported
+
+Nobody picks hosts. The installer wires every agent it finds on the machine, and an agent gets the creature through whichever of three channels it has:
+
+| Tier | The rule | What you get |
+| :--- | :--- | :--- |
+| **Statusline** | the host runs a user command on every redraw and shows its stdout; session JSON on stdin is optional | the creature in the agent's own statusline, wrapping whatever command was there |
+| **Card** | the host shows a string that a turn-end hook (or plugin) returns | a one-line creature card after each turn |
+| **Prompt** | no host chrome at all; your shell prompt or tmux carries it | `terminalcreature snippet <surface>`, a paste-in config |
+
+Detection is the contract: a host is "here" when its config dir exists (Cursor also needs `cli-config.json` or `agent` on PATH, since the IDE shares `~/.cursor`). `terminalcreature hosts` prints the whole table, host by host, with how each is detected and whether it's here and wired. `install` wires every statusline and card host it detects; `install --host <name>` does one. A new host qualifies as soon as it offers either channel: [open an issue](https://github.com/smejkaldesign/terminalcreature/issues/new?template=feature.md) with a link to its statusline or hook docs, and the adapter is a registry entry.
+
 ---
 
 ## Quick Start
@@ -134,13 +146,13 @@ One creature, any terminal, any agent. It lives in an agent's own statusline whe
 curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash
 ```
 
-Then, in Claude Code:
+Then run any agent. In Claude Code, open the egg:
 
 ```
 /creature-hatch
 ```
 
-That's it. The installer wraps whatever statusline you already have rather than replacing it, lays your first egg, and tells you how to open it. The hatch is a short guided setup the first time: it looks for your notes, offers what it found with a file count each, and opens the egg at whatever level your writing has already earned.
+That's it. One command wires Claude Code and every other agent it finds on the machine, wrapping whatever statusline each already has rather than replacing it, lays your first egg, and tells you how to open it. The hatch is a short guided setup the first time: it looks for your notes, offers what it found with a file count each, and opens the egg at whatever level your writing has already earned.
 
 Point it at your notes in the same breath; the bootstrap passes flags straight through to the installer:
 
@@ -186,25 +198,26 @@ Later eggs inherit the first two answers. The name is asked for every egg.
 | `--inline` | one-line segment after your statusline instead of the boxed column |
 | `--no-wire` | install the library and commands only, wire it yourself |
 | `--no-commands` | skip the slash commands, when something else already ships them |
-| `--uninstall` | unwire, restore your old statusline, remove the commands |
-| `--host <name>` | wire `cursor`, `copilot`, `qwen`, `droid` or `all` instead of Claude Code; a card host (`codex`, `gemini`, `vibe`, `auggie`, `opencode`, `amp`) passes through to the CLI |
+| `--claude-only` | wire Claude Code and leave the other agents alone |
+| `--host <name>` | wire one host instead of Claude Code: `cursor`, `copilot`, `qwen`, `droid`, or a card host (`codex`, `gemini`, `vibe`, `auggie`, `opencode`, `amp`), which passes through to the CLI |
+| `--uninstall` | unwire every wired host, restore the old statuslines, remove the commands; with `--host <name>`, just that one |
 
-The CLI's own `install` takes the same `--host`, `--inline` and `--statusline`, plus `--box` for the reverse of `--inline` on the hosts that default to inline. The two are opposites, so passing both is an error.
+With no `--host` the installer wires Claude Code, then runs `terminalcreature install`, which wires every other statusline and card host it detects and prints one line per host. The CLI's own `install` takes the same `--host`, `--inline` and `--statusline`, plus `--box` for the reverse of `--inline` on the hosts that default to inline. The two are opposites, so passing both is an error.
 
-Re-running is safe and is how you pick up new commands. It won't wrap itself twice and it leaves an existing buddy alone.
+Re-running is safe and is how you pick up new commands. It won't wrap itself twice, it refreshes every host's shim, and it leaves an existing buddy alone.
 
 ### Cursor, Copilot, Qwen, Droid
 
-The bootstrap above installs the library and wires Claude Code. The same installer wires the other native hosts, one at a time or all at once:
+The bootstrap above wires every one of these it finds. To do one by hand, or one that was installed after terminalcreature was:
 
 ```bash
 ./install.sh --host cursor       # or copilot, qwen, droid
-./install.sh --host all          # every host that's installed on this machine
 ```
 
-Once the library is in place the CLI does the same without the installer, and undoes it:
+Once the library is in place the CLI does the same without the installer, and undoes it. With no `--host`, `install` wires every detected host and `uninstall` puts back every wired one:
 
 ```bash
+terminalcreature install                       # every host found here
 terminalcreature install --host copilot [--inline|--box] [--statusline <cmd>]
 terminalcreature uninstall --host copilot
 ```
@@ -215,11 +228,11 @@ Each host gets its own shim and its own backup of its settings file, so wiring C
 - **Cursor says how wide it is.** It hands the shim a `render_width_chars`, and the segment is capped to it when no `--width` is given, so the creature never wraps the footer.
 - **Copilot's settings file is JSONC.** Comments are tolerated on read, the file is written back as plain JSON, and the backup keeps the commented original. `uninstall` restores that backup byte for byte when nothing else has changed since.
 
-`terminalcreature doctor` lists every host it knows, whether it's installed, and whether it's wired.
+`terminalcreature doctor` lists every host it knows, whether it's installed, and whether it's wired; `terminalcreature hosts` adds the tier and how each one is detected.
 
 ### Codex, Gemini, Vibe, auggie, opencode, Amp: the turn-end card
 
-These six have no statusline to wire, but each has a documented channel that shows a line to you when a turn ends. `install --host <name>` uses it: one hook entry for Codex CLI, Gemini CLI, Mistral Vibe and Augment auggie, one small plugin file for opencode and Amp. `--host all` covers every card host whose config dir exists, plugin hosts included.
+These six have no statusline to wire, but each has a documented channel that shows a line to you when a turn ends. The installer uses it for every one it finds: one hook entry for Codex CLI, Gemini CLI, Mistral Vibe and Augment auggie, one small plugin file for opencode and Amp. To do one by hand:
 
 ```bash
 terminalcreature install --host codex        # or gemini, vibe, auggie
@@ -395,10 +408,21 @@ hosts:
   auggie   Augment auggie      not installed
   opencode opencode            card, wired (runtime bun or node not found)
   amp      Amp                 not installed
-prompt surfaces (tmux, starship, shells): see `terminalcreature snippet`
+prompt surfaces (tmux, zsh found): see `terminalcreature snippet <surface>`
 ```
 
-The hosts block runs statusline hosts first, then the card hosts, then the plugin hosts, with a note when a plugin host's runtime is missing.
+The hosts block runs statusline hosts first, then the card hosts, then the plugin hosts, with a note when a plugin host's runtime is missing. `terminalcreature hosts` is the same list as a support table, every host and prompt surface with its tier, how it's detected, and `wired`, `not wired` or `not found`:
+
+```
+$ terminalcreature hosts
+  host                         tier       detected by                                  status
+  claude   Claude Code         statusline ~/.claude                                    wired
+  cursor   Cursor CLI          statusline ~/.cursor/cli-config.json, or agent on PATH  not wired
+  copilot  GitHub Copilot CLI  statusline ~/.copilot                                   not found
+  codex    Codex CLI           card       ~/.codex                                     wired
+  tmux     tmux                prompt     tmux on PATH                                 found, `terminalcreature snippet tmux`
+  ...
+```
 
 A zero reading has three causes, and `doctor` names the one you've got:
 
@@ -542,16 +566,17 @@ terminalcreature simulate <xp>     preview any level without touching real state
 terminalcreature sources           what it can count, and what to do if that's nothing
 terminalcreature doctor            what can it see, and why is it zero
 terminalcreature doctor --check    the same, plus a version check against pypi
+terminalcreature hosts             the support table: every host, its tier, how it's detected, wired or not
 terminalcreature update            ask pypi whether there's a newer terminalcreature
 terminalcreature update --apply    and install it if there is, keeping your creature
 terminalcreature render            the one-line statusline segment
 terminalcreature compose "<text>"  your statusline text, creature as a left column
     render, compose and card take --format ansi|tmux|plain and --width <n>
 terminalcreature snippet <surface> paste-in config for tmux, starship, zsh, fish, omp or wezterm
-terminalcreature install --host <h>   wire a host's statusline: claude, cursor, copilot, qwen, droid or all
-    --inline puts the creature after the host's text, --box on the left as a column
-terminalcreature install --host <h>   a turn-end card instead: codex, gemini, vibe, auggie, opencode or amp
-terminalcreature uninstall --host <h> put that host back and drop its shim or plugin file
+terminalcreature install           wire every host found here: a statusline for claude, cursor, copilot,
+                                   qwen and droid, a turn-end card for codex, gemini, vibe, auggie, opencode and amp
+terminalcreature install --host <h>   one host. --inline puts the creature after the host's text, --box on the left
+terminalcreature uninstall [--host <h>] put every wired host back, or one, dropping its shim or plugin file
 terminalcreature hookcard --host <h>  what a card host's hook runs: reads its JSON on stdin, prints the card
 terminalcreature refresh           recompute the xp cache
 ```
