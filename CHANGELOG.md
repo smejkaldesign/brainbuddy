@@ -3,14 +3,15 @@
 Notable changes, newest first. Versions follow semver; the version lives in
 `terminalcreature/__init__.py` and each release is the matching `v*` tag.
 
-## Unreleased
+## 2.1.0
 
 - The creature blinks: a closed-eye beat for 0.4s out of every 5, on the
   clock, so the statusline's own redraw timing doesn't matter. When the
   session counter rises it holds a happy face for two seconds. Eyes only:
   the art never changes width, and an egg has no eyes to move.
 - Site: updated wordmark, ASCII-creature favicon, social image rendered
-  from the wordmark for link previews, story lede, more room in the hero.
+  from the wordmark for link previews, story-led hero copy in the always-hungry
+  voice, more room in the hero.
 
 ## 2.0.0
 
