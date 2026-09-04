@@ -130,9 +130,10 @@ def parse_session(raw_text):
         "workspace": _first(data, fields["workspace"], str),
         "context_used_pct": _first(data, fields["context_used_pct"], float),
     }
-    # width is columns, so a whole number or nothing; most hosts never send one
+    # width is columns, so a whole number or nothing; most hosts never send one.
+    # json reads Infinity and NaN, and int() of either raises, so both mean none
     width = _first(data, fields.get("width", ()), float)
-    out["width"] = int(width) if width is not None and width >= 1 else None
+    out["width"] = int(width) if width is not None and 1 <= width < float("inf") else None
     return out
 
 
