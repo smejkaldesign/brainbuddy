@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>terminalcreature</title>
-<meta name="description" content="A small creature lives in your Claude Code statusline, and it is always hungry. Feed it what you remember: every note is a meal, every meal is XP. Keep it fed and it hatches, evolves, and stays beside you. It counts your files and never reads them.">
+<title>terminalcreature: any terminal, any agent</title>
+<meta name="description" content="A small creature lives in your terminal, and it is always hungry. It hatches in your Claude Code statusline and follows you into Cursor, Copilot, Qwen, Droid, tmux and your shell prompt: one creature, one XP number. Feed it what you remember: every memory file from every agent is a meal, every meal is XP. It counts your files and never reads them.">
 <meta property="og:title" content="terminalcreature">
-<meta property="og:description" content="An egg in your Claude Code statusline, always hungry for what you remember. Feed it notes, watch it hatch and evolve. How rare is yours?">
+<meta property="og:description" content="An egg in your statusline, always hungry for what you remember. One creature that follows you from Claude Code into Cursor, Copilot, tmux and your prompt. Feed it memories, watch it hatch and evolve. How rare is yours?">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://terminalcreature.com/">
 <meta property="og:image" content="https://terminalcreature.com/assets/og.png">
@@ -14,7 +14,7 @@
 <meta property="og:image:height" content="622">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="terminalcreature">
-<meta name="twitter:description" content="Always hungry. Feed it your memories and see what hatches.">
+<meta name="twitter:description" content="Always hungry. Any terminal, any agent, one creature. Feed it your memories and see what hatches.">
 <meta name="twitter:image" content="https://terminalcreature.com/assets/og.png">
 <meta name="theme-color" content="#000000">
 <link rel="icon" type="image/png" sizes="128x128" href="assets/favicon.png">
@@ -330,16 +330,18 @@
 
     <h1><img class="logo" src="assets/terminalcreature-logo.svg" width="247" height="82" alt="TERMINAL CREATURE"></h1>
 
-    <div class="pill">Small. Loyal. <b>Always hungry.</b></div>
+    <div class="pill">Any terminal. Any agent. <b>Always hungry.</b></div>
 
     <p class="lede">
-      Something small is waiting at the edge of your Terminal window. An egg, quiet, patient, and
-      <b>ravenously hungry for memories</b>. It wants to be your new best friend, but also eat everything your
-      second brain remembers. As your second brain grows, so does your creature, gaining XP as it treats itself
-      to your notes. But don't fret, your creature wants your trust, so it <b>never reads the content of your files</b>.
-      Instead, it eats the whole thing in one bite, growing with each new file added to your memory system.
-      Creatures evolve into five forms, across eight species, each with a different level of rarity.
-      1 in 100 chance for a shiny roll! So... <b>ready to meet your terminal creature?</b>
+      Something small is waiting at the edge of your terminal window. An egg, quiet, patient, and
+      <b>ravenously hungry for memories</b>. It hatches in your Claude Code statusline, then follows you into
+      Cursor, Copilot, Qwen, Droid, tmux and your shell prompt: <b>one creature, one roster, one XP number</b>,
+      wherever you happen to be coding. It wants to be your new best friend, but also to eat everything your
+      agents remember, Claude, Codex, Gemini, Copilot and the rest. Don't fret, your creature wants your trust,
+      so it <b>never reads the content of your files</b>. It eats each one whole, in a single bite, and grows
+      with every new file that lands in any memory system on the machine. Creatures evolve into five forms,
+      across eight species, each with a different level of rarity. 1 in 100 chance for a shiny roll!
+      So... <b>ready to meet your terminal creature?</b>
     </p>
 
     <div class="install">
@@ -460,8 +462,9 @@
       <div class="step">
         <div class="n">1</div>
         <h3>Install lays an egg</h3>
-        <p>The installer wraps whatever statusline you already have instead of replacing it, then leaves an egg in it. The egg banks XP from the moment it exists, including everything you'd written before.</p>
+        <p>The installer wraps whatever statusline you already have instead of replacing it, then leaves an egg in it. Claude Code is the default; <code>install --host</code> does the same for Cursor, Copilot, Qwen and Droid, and <code>snippet</code> hands tmux and your prompt a paste-in. The egg banks XP from the moment it exists, including everything you'd written before.</p>
         <span class="say cmd">curl -fsSL …/bootstrap.sh | bash</span>
+        <span class="say cmd">terminalcreature install --host all</span>
       </div>
       <div class="step">
         <div class="n">2</div>
@@ -473,7 +476,7 @@
       <div class="step">
         <div class="n">3</div>
         <h3>Write notes, watch it evolve</h3>
-        <p>Every durable note is XP. The caption shows what it ate this session, and the sprite changes shape at levels 20, 40, 60 and 80. Deleting notes never de-levels anyone: the high-water mark only rises.</p>
+        <p>Every durable memory is XP, from whichever agent wrote it. The caption shows what it ate this session, and the sprite changes shape at levels 20, 40, 60 and 80. Deleting notes never de-levels anyone: the high-water mark only rises.</p>
         <span class="say">🥚 Zask · Adept Lv44 ███░░░ +12 XP</span>
       </div>
       <div class="step">
@@ -490,11 +493,13 @@
   <div class="wrap">
     <p class="label">Built for the statusline</p>
     <h2>Light, quiet, and easy to remove</h2>
-    <p class="desc">It runs every time your statusline redraws, so it stays small: plain Python and one cached read.</p>
+    <p class="desc">It runs every time a statusline or prompt redraws, so it stays small: plain Python and one cached read, whichever host is asking.</p>
     <div class="features">
-      <div class="feature"><div class="icon">┌┐</div><div><h3>Never edits your statusline</h3><p>Your existing statusline keeps running as it is. The creature is drawn beside it. One command puts everything back.</p></div></div>
+      <div class="feature"><div class="icon">┌┐</div><div><h3>Never edits your statusline</h3><p>Your existing statusline keeps running as it is, in every host. The creature is drawn beside it, and <code>--uninstall</code> puts the original settings back byte for byte.</p></div></div>
+      <div class="feature"><div class="icon">≡</div><div><h3>One roster everywhere</h3><p>Claude Code, Cursor, Copilot, Qwen, Droid, tmux and your prompt all read the same state. Level up in one, and the same creature is that level in the others.</p></div></div>
       <div class="feature"><div class="icon">py</div><div><h3>Nothing to install but Python</h3><p>Python 3.9 or newer and bash. No packages, no accounts. macOS, Linux, and Windows through WSL or Git Bash.</p></div></div>
       <div class="feature"><div class="icon">▲</div><div><h3>XP only goes up</h3><p>Deleting or merging notes never lowers your creature's level. It remembers the most you have ever had.</p></div></div>
+      <div class="feature"><div class="icon">ms</div><div><h3>Fast enough for a prompt</h3><p>The render reads one cached line and never measures on the hot path, so it fits inside Starship's 500 ms budget and Qwen's 5 s cutoff with room to spare.</p></div></div>
       <div class="feature"><div class="icon">⬆</div><div><h3>Updates are opt-in</h3><p>Say yes once and a small chip appears when a new version is out. Say no and it never touches the network.</p></div></div>
     </div>
   </div>
@@ -507,7 +512,7 @@
     <p class="desc">Short enough to check yourself, and every line is enforced by a test that fails the build.</p>
     <div class="ledger">
       <div class="ledger-row"><div></div><div>Promise</div><div class="proof">What enforces it</div></div>
-      <div class="ledger-row"><div class="tick">✓</div><div class="promise">Counts your files without opening them<small>The only filesystem calls are <code>glob</code> and <code>stat</code>. It never reads a byte of a note or parses frontmatter.</small></div><div class="proof">A runtime trap patches every file-reading builtin and asserts none fire during a measurement. A static pass tokenizes <code>metric.py</code> and fails if a reader appears at all.</div></div>
+      <div class="ledger-row"><div class="tick">✓</div><div class="promise">Counts your files without opening them<small>The only filesystem calls are <code>glob</code> and <code>stat</code>, for every agent's memory it counts. It never reads a byte of a note, a session log, or a rules file, and never parses frontmatter.</small></div><div class="proof">A runtime trap patches every file-reading builtin and asserts none fire during a measurement. A static pass tokenizes <code>metric.py</code> and fails if a reader appears at all.</div></div>
       <div class="ledger-row"><div class="tick">✓</div><div class="promise">Never prints a path it matched<small>Even <code>doctor</code> reports a home-relative root and counts, not filenames.</small></div><div class="proof">A leak guard runs in CI and as a pre-push hook, failing if an absolute home path or a vault-shaped filename reaches the repo.</div></div>
       <div class="ledger-row"><div class="tick">✓</div><div class="promise">All state is local<small>The roster, your settings, and the XP cache live at <code>~/.claude/terminalcreature/</code>. Nothing else, nowhere else.</small></div><div class="proof">No accounts, no sync, no server. Tiny per-user JSON, by design.</div></div>
       <div class="ledger-row"><div class="tick">✓</div><div class="promise">The render never opens a socket<small>No telemetry, no analytics, no phone-home.</small></div><div class="proof">A socket guard covers the render and every background process it spawns. Opted out, an aged cache plus a render produces zero network from any process.</div></div>
@@ -520,7 +525,7 @@
 <section class="cta">
   <div class="wrap">
     <h2>Ready to hatch?</h2>
-    <p class="desc">One command. Wraps the statusline you already have, lays an egg, and tells you how to open it.</p>
+    <p class="desc">One command for Claude Code. Wraps the statusline you already have, lays an egg, and tells you how to open it. Every other host is <a href="#install">one tab away</a>.</p>
     <div class="install">
       <code id="cta-cmd">curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash</code>
       <button class="copy" data-copy="#cta-cmd" aria-label="Copy install command">copy</button>
