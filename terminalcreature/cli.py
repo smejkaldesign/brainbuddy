@@ -182,7 +182,12 @@ def cmd_refresh(args):
     # as long as the vault is big, and a roster held across it would revert any
     # egg laid or hatched meanwhile
     xp, counts = state_mod.measure_now(state_mod.load()["settings"])
+    before = state_mod.read_cache()
     state_mod.write_cache(xp, counts)
+    if before is None or before[0] != xp:
+        # tmux otherwise waits out status-interval to show the new level
+        from . import snippets
+        snippets.poke_tmux()
     st = _load()
     event = state_mod.sync(st, xp)
     state_mod.save(st)

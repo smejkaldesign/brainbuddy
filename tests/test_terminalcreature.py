@@ -1939,10 +1939,63 @@ def test_tmux_plugin():
         t("kill-server")
 
 
+def test_refresh_pokes_tmux():
+    """After the cache changes, refresh asks tmux to redraw, and only then.
+    tmux is a stub on PATH that logs what it was asked, so nothing real is poked.
+    """
+    print("\nrefresh pokes tmux")
+    import subprocess
+    import time as _t
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    home = tempfile.mkdtemp(prefix="bb-poke-")
+    stub_dir = os.path.join(home, "bin")
+    os.makedirs(stub_dir)
+    log = os.path.join(home, "tmux.log")
+    stub = os.path.join(stub_dir, "tmux")
+    with open(stub, "w") as f:
+        f.write("#!/bin/sh\necho \"$@\" >> %s\n" % log)
+    os.chmod(stub, 0o755)
+
+    def refresh(tmux, cached):
+        if os.path.exists(log):
+            os.remove(log)
+        child = "from terminalcreature import cli, state as sm\n"
+        if cached is not None:
+            child += "sm.write_cache(%d, {})\n" % cached
+        child += "cli.main(['refresh'])\n"
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo, PATH=stub_dir + os.pathsep + os.environ.get("PATH", ""))
+        env.pop("TMUX", None)
+        if tmux:
+            env["TMUX"] = "/tmp/fake,0,0"
+        r = subprocess.run([sys.executable, "-c", child], env=env, capture_output=True, text=True)
+        deadline = _t.time() + 5
+        while _t.time() < deadline and not os.path.exists(log):
+            _t.sleep(0.1)
+        _t.sleep(0.2)
+        lines = open(log).read().splitlines() if os.path.exists(log) else []
+        return r.returncode, lines
+
+    try:
+        # an empty fabricated home measures 0 xp, so a cache of 999 is a change
+        rc, lines = refresh(True, 999)
+        check(rc == 0 and lines == ["refresh-client -S"], "xp changed under tmux: one refresh-client -S, got %r" % lines)
+        rc, lines = refresh(True, None)
+        check(rc == 0 and lines == [], "same xp again: no poke, got %r" % lines)
+        rc, lines = refresh(False, 999)
+        check(rc == 0 and lines == [], "xp changed outside tmux: no poke, got %r" % lines)
+        os.chmod(stub, 0o644)
+        rc, lines = refresh(True, 999)
+        check(rc == 0 and lines == [], "a tmux that can't run is silent, refresh still exits 0")
+    finally:
+        shutil.rmtree(home)
+
+
 if __name__ == "__main__":
     test_metric()
     test_snippets()
     test_tmux_plugin()
+    test_refresh_pokes_tmux()
     test_agents_provider()
     test_render_formats()
     test_width_cap()
