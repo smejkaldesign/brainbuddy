@@ -1,3 +1,8 @@
+> **brainbuddy is now [terminalcreature](https://github.com/smejkaldesign/terminalcreature).**
+> This package is kept only so existing installs hear about the rename. Re-run the bootstrap you
+> installed with, or `pipx install terminalcreature`; your creature, roster, and settings move over
+> in place. Nothing below is maintained under this name any more.
+
 <p align="center">
   <img src="site/assets/terminalcreature-logo.png" width="247" alt="TERMINAL CREATURE" />
 </p>
