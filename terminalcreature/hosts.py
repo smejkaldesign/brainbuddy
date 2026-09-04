@@ -9,6 +9,7 @@ renders without a session, it never breaks the prompt.
 
 import json
 import os
+import shlex
 import shutil
 
 HOSTS = ("claude", "cursor", "copilot", "qwen", "droid")
@@ -263,10 +264,17 @@ def shim_text(host, inline):
     return SHIM_PROLOGUE % {"wrapped": spec["wrapped"]} + (SHIM_INLINE if inline else SHIM_COMPOSE)
 
 
+def shim_command(host):
+    """The shim path as the hosts run it, through a shell: quoted only when a
+    space or the like in home would otherwise split it.
+    """
+    return shlex.quote(shim_path(host))
+
+
 def is_ours(command, host):
     """Whether a settings command names our shim, however ~ was spelled."""
     rel = STATE_DIR + "/" + REGISTRY[host]["shim"]
-    return command in (shim_path(host), rel, "$HOME" + rel[1:])
+    return command in (shim_path(host), shim_command(host), rel, "$HOME" + rel[1:])
 
 
 def _strip_jsonc(text):
@@ -450,7 +458,7 @@ def wire(host, inline=None, statusline=None):
         return True, "already wired, shim refreshed"
     with open(wrapped_path(host), "w") as f:
         f.write(existing)
-    set_command(data, host, shim_path(host))
+    set_command(data, host, shim_command(host))
     write_settings(host, data, raw)
     how = "segment after it" if inline else "creature on the left"
     if existing:
