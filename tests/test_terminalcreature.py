@@ -2166,6 +2166,47 @@ def test_refresh_pokes_tmux():
         shutil.rmtree(home)
 
 
+def test_host_settings_edge_cases():
+    """The bytes hosts and editors actually produce: a byte order mark, a comma
+    inside a string value, a private file mode. None of them may refuse the
+    install, corrupt a value, or loosen the file.
+    """
+    print("\nhost settings edge cases")
+    import json
+    import stat
+    import subprocess
+
+    from terminalcreature import hosts
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+
+    check(hosts._strip_jsonc('{"u": "a,}", "l": [1,], /* c */ "k": 1, // t\n}') == '{"u": "a,}", "l": [1],  "k": 1 \n}',
+          "a trailing comma goes only outside strings, and past comments")
+    check(json.loads(hosts._strip_jsonc('{"a": 1, /* x */ }')) == {"a": 1}, "a comment between comma and closer still counts as trailing")
+
+    home = tempfile.mkdtemp(prefix="bb-host-")
+    env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+    try:
+        path = os.path.join(home, ".copilot", "settings.json")
+        os.makedirs(os.path.dirname(path))
+        seed = b'\xef\xbb\xbf{"url": "http://x/a,}", "statusLine": {"type": "command", "command": "echo COP"},}\r\n'
+        with open(path, "wb") as f:
+            f.write(seed)
+        os.chmod(path, 0o600)
+        r = subprocess.run(cmd + ["install", "--host", "copilot"], env=env, capture_output=True, text=True)
+        check(r.returncode == 0 and "wrapping" in r.stdout, "a file with a byte order mark and CRLF wires")
+        with open(path) as f:
+            data = json.load(f)
+        check(data["url"] == "http://x/a,}", "a comma before a brace inside a string survives")
+        check(stat.S_IMODE(os.stat(path).st_mode) == 0o600, "a 0600 settings file is still 0600 after the write")
+        u = subprocess.run(cmd + ["uninstall", "--host", "copilot"], env=env, capture_output=True, text=True)
+        with open(path, "rb") as f:
+            check(u.returncode == 0 and f.read() == seed, "uninstall puts the mark and the CRLF back")
+    finally:
+        shutil.rmtree(home)
+
+
 if __name__ == "__main__":
     test_metric()
     test_snippets()
@@ -2176,6 +2217,7 @@ if __name__ == "__main__":
     test_width_cap()
     test_host_stdin()
     test_host_adapters()
+    test_host_settings_edge_cases()
     test_update_chip()
     test_hatch_naming()
     test_refresh_never_reverts_concurrent_writes()

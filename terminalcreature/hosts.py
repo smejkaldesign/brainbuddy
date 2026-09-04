@@ -9,7 +9,6 @@ renders without a session, it never breaks the prompt.
 
 import json
 import os
-import re
 import shutil
 
 HOSTS = ("claude", "cursor", "copilot", "qwen", "droid")
@@ -259,7 +258,8 @@ def is_ours(command, host):
 
 def _strip_jsonc(text):
     """Comments out, strings untouched. Trailing commas go too, since files that
-    allow one usually allow the other.
+    allow one usually allow the other. Both are decided outside strings only,
+    so a value like "a,}" keeps its comma.
     """
     out, i, n, in_str = [], 0, len(text), False
     while i < n:
@@ -285,14 +285,35 @@ def _strip_jsonc(text):
             j = text.find("*/", i + 2)
             i = n if j < 0 else j + 2
             continue
+        elif c == "," and text[_skip_blank(text, i + 1):_skip_blank(text, i + 1) + 1] in ("}", "]"):
+            # trailing: only whitespace or comments sit between it and the closer
+            i += 1
+            continue
         else:
             out.append(c)
         i += 1
-    return re.sub(r",(\s*[}\]])", r"\1", "".join(out))
+    return "".join(out)
+
+
+def _skip_blank(text, i):
+    n = len(text)
+    while i < n:
+        if text[i].isspace():
+            i += 1
+        elif text.startswith("//", i):
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+        else:
+            break
+    return i
 
 
 def _parse(host, raw):
-    text = raw.decode("utf-8")
+    # utf-8-sig: an editor that writes a byte order mark is not a broken file
+    text = raw.decode("utf-8-sig")
     if REGISTRY[host]["jsonc"]:
         text = _strip_jsonc(text)
     data = json.loads(text) if text.strip() else {}
@@ -364,6 +385,11 @@ def _atomic_write(path, data_bytes):
     tmp = path + ".tmp-terminalcreature"
     with open(tmp, "wb") as f:
         f.write(data_bytes)
+    try:
+        # a private settings file (0600) stays private after the swap
+        os.chmod(tmp, os.stat(path).st_mode & 0o777)
+    except OSError:
+        pass
     os.replace(tmp, path)
 
 
