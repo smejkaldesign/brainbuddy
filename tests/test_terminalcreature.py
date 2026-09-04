@@ -2166,6 +2166,35 @@ def test_autowire():
         finally:
             shutil.rmtree(home)
 
+    # install.sh runs under set -e, so a host the sweep can't wire used to end the
+    # script there: no egg, no closing lines. now it carries on and exits 1 at the
+    # end; --uninstall carries on past a host it can't read the same way
+    home = tempfile.mkdtemp(prefix="bb-auto-")
+    env = dict(os.environ, HOME=home, NO_COLOR="1")
+    try:
+        os.makedirs(os.path.join(home, ".cursor"))
+        cursor = os.path.join(home, ".cursor", "cli-config.json")
+        with open(cursor, "w") as f:
+            f.write(HOST_SEEDS["cursor"][0])
+        os.makedirs(os.path.join(home, ".qwen"))
+        with open(os.path.join(home, ".qwen", "settings.json"), "w") as f:
+            f.write("{broken")
+        r = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--no-commands"], env=env, input="", capture_output=True, text=True)
+        check(r.returncode == 1 and "~/.qwen/settings.json isn't valid JSON" in r.stdout and "Traceback" not in r.stdout + r.stderr,
+              "install.sh names the host it couldn't wire and exits 1")
+        with open(cursor) as f:
+            check("statusline-terminalcreature-cursor.sh" in f.read() and "  cursor" in r.stdout, "the host after it is still wired")
+        check(os.path.exists(os.path.join(home, ".claude", "terminalcreature", "state.json")) and "/creature-hatch" in r.stdout,
+              "and the egg is still laid, with the closing lines")
+        check(r.stdout.rstrip().endswith("run 'terminalcreature install' again"), "the last line says one host is left to fix")
+        with open(cursor, "w") as f:
+            f.write("{broken")
+        u = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--no-commands", "--uninstall"], env=env, input="", capture_output=True, text=True)
+        check(u.returncode == 1 and "~/.cursor/cli-config.json isn't valid JSON" in u.stdout and "uninstalled." in u.stdout,
+              "--uninstall names the host it couldn't read, still says uninstalled, exits 1")
+    finally:
+        shutil.rmtree(home)
+
 
 def test_snippets():
     """Every surface gets a paste-in config that calls the installed binary with

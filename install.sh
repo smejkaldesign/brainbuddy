@@ -59,6 +59,9 @@ STATUSLINE=""
 # empty means claude here, then every other agent the adapters detect
 HOST=""
 CLAUDE_ONLY=0
+# set when a host adapter reports a failure: the script carries on past it,
+# since the hosts after it and the egg still want doing, and exits 1 at the end
+HOSTFAIL=0
 
 # shift 2 with nothing to shift trips set -e, so a missing value used to exit 1
 # with no output at all
@@ -319,11 +322,11 @@ if [ "$MODE" = uninstall ]; then
   # claude is already back, so the adapters see only the other wired hosts.
   # their "nothing wired" line is noise under the summary, everything else is not
   if [ "$CLAUDE_ONLY" = 0 ]; then
-    OTHERS="$(hostbb uninstall)"
+    OTHERS="$(hostbb uninstall)" || HOSTFAIL=1
     case "$OTHERS" in "no host is wired"*) ;; *) echo "$OTHERS" ;; esac
   fi
   echo "uninstalled. state kept at ~/.claude/terminalcreature/state.json (delete it yourself for a clean slate)"
-  exit 0
+  exit "$HOSTFAIL"
 fi
 
 echo "installing terminalcreature"
@@ -378,7 +381,7 @@ fi
 
 HOSTWIRED=0
 if [ "$WIRE" = 1 ] && [ -n "$HOST" ]; then
-  hostbb install "${HOSTARGS[@]}"
+  hostbb install "${HOSTARGS[@]}" || HOSTFAIL=1
   HOSTWIRED=1
   WIRE=0
 fi
@@ -431,7 +434,7 @@ if [ "$WIRE" = 1 ]; then
   # wired above and the adapters say so
   if [ "$CLAUDE_ONLY" = 0 ]; then
     echo "  hosts    -> every agent found here (--claude-only skips this)"
-    sweep_hosts
+    sweep_hosts || HOSTFAIL=1
     HOSTWIRED=1
   fi
 fi
@@ -465,4 +468,11 @@ if bb list 2>/dev/null | grep -q '^\*.*unhatched'; then
   else
     echo "it'll open at level 0 for now, and grow once there are memories to feed on."
   fi
+fi
+
+# the host that failed said why above; the exit code says so too
+if [ "$HOSTFAIL" = 1 ]; then
+  echo
+  echo "one host above wasn't wired. fix its file and run 'terminalcreature install' again"
+  exit 1
 fi
