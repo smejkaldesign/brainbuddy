@@ -1,7 +1,7 @@
 # terminalcreature as a Claude Code plugin
 
 This repo is installable as a plugin. `.claude-plugin/plugin.json` is the manifest;
-`commands/` and `hooks/hooks.json` are picked up by auto-discovery, so the five slash
+`commands/` and `hooks/hooks.json` are picked up by auto-discovery, so the six slash
 commands are listed once and live in one place.
 
 Schemas verified against:
@@ -33,7 +33,7 @@ user's file. Both paths end where the clone path ends: an egg in the statusline 
 `/creature-hatch`.
 
 `install.sh --no-commands` is the plugin-side flag. Without it the installer copies the same
-five command files into `~/.claude/commands`, and each one appears twice in the picker.
+six command files into `~/.claude/commands`, and each one appears twice in the picker.
 Uninstall respects it too and leaves the plugin's copies alone.
 
 ## Beyond Claude Code
