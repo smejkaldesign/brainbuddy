@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>terminalcreature: any terminal, any agent</title>
-<meta name="description" content="A small creature lives in your terminal, and it is always hungry. It hatches in your Claude Code statusline and follows you into Cursor, Copilot, Qwen, Droid, tmux and your shell prompt: one creature, one XP number. Feed it what you remember: every memory file from every agent is a meal, every meal is XP. It counts your files and never reads them.">
+<meta name="description" content="Always hungry, never reads a file. It hatches in your Claude Code statusline, follows you into Cursor, Copilot, tmux and your prompt, and grows on every memory you write.">
 <meta property="og:title" content="terminalcreature">
-<meta property="og:description" content="An egg in your statusline, always hungry for what you remember. One creature that follows you from Claude Code into Cursor, Copilot, tmux and your prompt. Feed it memories, watch it hatch and evolve. How rare is yours?">
+<meta property="og:description" content="An egg in your statusline, always hungry for what you remember. It follows you from Claude Code into Cursor, Copilot, tmux and your prompt. Feed it memories and see what hatches.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://terminalcreature.com/">
 <meta property="og:image" content="https://terminalcreature.com/assets/og.png">
@@ -152,8 +152,10 @@
   }
   .copy:hover { background: rgba(255,255,255,.12); color: #fff; }
   .copy.copied { color: var(--xp); border-color: var(--xp); }
+  /* the stone keeps the hero width whichever tab is up, so nothing below it moves */
+  #host-panel { width: 100%; min-height: 70px; }
   .alt { font-family: var(--mono); font-size: 13px; color: var(--dim); margin: 36px 0 0; }
-  .alt code { background: none; border: 0; padding: 0; color: var(--gold); }
+  .alt code { background: none; border: 0; padding: 0; color: var(--gold); white-space: nowrap; }
   .alt .then { color: var(--muted); }
 
   /* ---------- terminal ---------- */
@@ -333,6 +335,8 @@
     .ledger-row:first-child .proof { display: none; }
     .install { flex-wrap: wrap; justify-content: center; padding: 12px 14px; font-size: 12.5px; }
     .terminal-body { font-size: 12px; }
+    /* the demo's tmux bar drops its window list so the creature stays in frame */
+    .t-tmux .win { display: none; }
     /* the tables scroll sideways here; the host name stays put so a tick is never orphaned */
     .matrix th:first-child, .matrix td:first-child { position: sticky; left: 0; z-index: 1; background: var(--card); border-right: 1px solid var(--line); }
     .matrix th:first-child { background: var(--card-2); }
