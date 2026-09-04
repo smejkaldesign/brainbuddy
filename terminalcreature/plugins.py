@@ -22,17 +22,18 @@ HEADER = "// %s. safe to delete, reinstalling restores it.\n" % MARKER
 # how long a handler may wait on the cli before giving up on this turn
 TIMEOUT_MS = 5000
 
-# dir: the host's config dir, its presence is "installed". file: our plugin,
-# relative to dir. owned: a directory under dir that is entirely ours, removed
-# on unwire when empty. runtimes: any one of these on PATH runs the plugin.
+# dir: the host's config dir, its presence is "installed", and detect says so
+# for the hosts table. file: our plugin, relative to dir. owned: a directory
+# under dir that is entirely ours, removed on unwire when empty. runtimes: any
+# one of these on PATH runs the plugin.
 REGISTRY = {
     "opencode": {
-        "label": "opencode", "dir": "~/.config/opencode",
+        "label": "opencode", "dir": "~/.config/opencode", "detect": "~/.config/opencode",
         "file": "plugins/terminalcreature.js", "owned": None,
         "runtimes": ("bun", "node"),
     },
     "amp": {
-        "label": "Amp", "dir": "~/.config/amp",
+        "label": "Amp", "dir": "~/.config/amp", "detect": "~/.config/amp",
         "file": "plugins/terminalcreature/index.js", "owned": "plugins/terminalcreature",
         "runtimes": ("bun",),
     },

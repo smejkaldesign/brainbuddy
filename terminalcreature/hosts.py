@@ -165,11 +165,13 @@ BACKUP_SUFFIX = ".pre-terminalcreature.bak"
 # extras: siblings the host wants set alongside the command, added only when absent.
 # inline: default to the one-line segment. probe: files or binaries, any one of
 # which proves the cli is here when the dir alone doesn't (the cursor ide shares
-# ~/.cursor). shim and wrapped are filenames under the state dir.
+# ~/.cursor). detect: the same rule in words, for the hosts table and the readme.
+# shim and wrapped are filenames under the state dir.
 REGISTRY = {
     "claude": {
         "label": "Claude Code", "dir": "~/.claude", "settings": "~/.claude/settings.json",
         "key": "statusLine", "typed": True, "extras": {}, "jsonc": False, "inline": False, "probe": (),
+        "detect": "~/.claude",
         "shim": "statusline-terminalcreature.sh", "wrapped": "wrapped-command",
     },
     # the cli-config schema in the 2026.09 bundle: statusLine {type, command,
@@ -179,6 +181,7 @@ REGISTRY = {
         "label": "Cursor CLI", "dir": "~/.cursor", "settings": "~/.cursor/cli-config.json",
         "key": "statusLine", "typed": True, "extras": {}, "jsonc": False, "inline": True,
         "probe": ("~/.cursor/cli-config.json", "agent", "cursor-agent"),
+        "detect": "~/.cursor/cli-config.json, or agent on PATH",
         "shim": "statusline-terminalcreature-cursor.sh", "wrapped": "wrapped-command-cursor",
     },
     # jsonc: comments are allowed in the file, so reads strip them and the
@@ -186,21 +189,39 @@ REGISTRY = {
     "copilot": {
         "label": "GitHub Copilot CLI", "dir": "~/.copilot", "settings": "~/.copilot/settings.json",
         "key": "statusLine", "typed": True, "extras": {}, "jsonc": True, "inline": False, "probe": (),
+        "detect": "~/.copilot",
         "shim": "statusline-terminalcreature-copilot.sh", "wrapped": "wrapped-command-copilot",
     },
     # two lines at most and a 5 s timeout, so inline. the hot path only reads the cache
     "qwen": {
         "label": "Qwen Code", "dir": "~/.qwen", "settings": "~/.qwen/settings.json",
         "key": "ui.statusLine", "typed": True, "extras": {"respectUserColors": True}, "jsonc": False,
-        "inline": True, "probe": (),
+        "inline": True, "probe": (), "detect": "~/.qwen",
         "shim": "statusline-terminalcreature-qwen.sh", "wrapped": "wrapped-command-qwen",
     },
     # {command, padding?, maxRows?}, no type field
     "droid": {
         "label": "Factory Droid", "dir": "~/.factory", "settings": "~/.factory/settings.json",
         "key": "statusLine", "typed": False, "extras": {}, "jsonc": False, "inline": False, "probe": (),
+        "detect": "~/.factory",
         "shim": "statusline-terminalcreature-droid.sh", "wrapped": "wrapped-command-droid",
     },
+}
+
+# the three ways a creature reaches the screen. statusline and card are wired by
+# install; prompt is a surface outside any agent that `snippet` hands a config for
+TIERS = ("statusline", "card", "prompt")
+
+# surfaces with no agent chrome, in the order snippets lists them. probe works
+# like a host's: a path, or a binary on PATH. nothing here is ever written to
+PROMPT_SURFACES = ("tmux", "starship", "zsh", "fish", "omp", "wezterm")
+PROMPT_REGISTRY = {
+    "tmux": {"label": "tmux", "probe": ("tmux",), "detect": "tmux on PATH"},
+    "starship": {"label": "Starship", "probe": ("~/.config/starship.toml", "starship"), "detect": "~/.config/starship.toml, or starship on PATH"},
+    "zsh": {"label": "zsh", "probe": ("~/.zshrc",), "detect": "~/.zshrc"},
+    "fish": {"label": "fish", "probe": ("~/.config/fish",), "detect": "~/.config/fish"},
+    "omp": {"label": "oh-my-posh", "probe": ("oh-my-posh",), "detect": "oh-my-posh on PATH"},
+    "wezterm": {"label": "WezTerm", "probe": ("~/.wezterm.lua", "~/.config/wezterm"), "detect": "~/.wezterm.lua, or ~/.config/wezterm"},
 }
 
 # one prologue for every host, or a bug in it has five places to live. same
@@ -242,6 +263,17 @@ def wrapped_path(host):
     return os.path.join(os.path.expanduser(STATE_DIR), REGISTRY[host]["wrapped"])
 
 
+def _probe_hit(probes):
+    """Any one probe: a path that exists, or a binary on PATH."""
+    for p in probes:
+        if "/" in p:
+            if os.path.exists(os.path.expanduser(p)):
+                return True
+        elif shutil.which(p):
+            return True
+    return False
+
+
 def installed(host):
     """The host's settings dir is here, and for hosts whose dir is shared with
     something else, one of the probes hit too.
@@ -249,15 +281,7 @@ def installed(host):
     spec = REGISTRY[host]
     if not os.path.isdir(os.path.expanduser(spec["dir"])):
         return False
-    if not spec["probe"]:
-        return True
-    for p in spec["probe"]:
-        if "/" in p:
-            if os.path.exists(os.path.expanduser(p)):
-                return True
-        elif shutil.which(p):
-            return True
-    return False
+    return not spec["probe"] or _probe_hit(spec["probe"])
 
 
 def shim_text(host, inline):
@@ -525,14 +549,123 @@ def status(host):
     return "native, wired" if wired else "native, not wired"
 
 
-def doctor_lines():
-    lines = ["hosts:"]
-    for host in HOSTS:
-        lines.append("  %-8s %-19s %s" % (host, REGISTRY[host]["label"], status(host)))
-    lines += hook_doctor_lines()
+# ---------------------------------------------------------------------------
+# detection: one list of everything the creature can draw in, and which of it
+# is on this machine. install, uninstall, doctor and the hosts table all read it,
+# so a host can't be wired by one and unknown to another.
+
+def catalogue():
+    """Every host and surface in table order: (key, label, tier, detect note).
+    Statusline hosts, then the card hosts (hooks, then plugins), then the
+    prompt surfaces.
+    """
     from . import plugins
-    lines += plugins.doctor_lines()
-    lines.append("prompt surfaces (tmux, starship, shells): see `terminalcreature snippet`")
+    rows = [(h, REGISTRY[h]["label"], "statusline", REGISTRY[h]["detect"]) for h in HOSTS]
+    rows += [(h, HOOK_REGISTRY[h]["label"], "card", HOOK_REGISTRY[h]["detect"]) for h in HOOK_HOSTS]
+    rows += [(h, plugins.REGISTRY[h]["label"], "card", plugins.REGISTRY[h]["detect"]) for h in plugins.PLUGIN_HOSTS]
+    rows += [(k, PROMPT_REGISTRY[k]["label"], "prompt", PROMPT_REGISTRY[k]["detect"]) for k in PROMPT_SURFACES]
+    return rows
+
+
+def present(key):
+    """Whether the host or surface is on this machine, by its detect rule."""
+    if key in HOSTS:
+        return installed(key)
+    if key in HOOK_HOSTS:
+        return hook_installed(key)
+    if key in PROMPT_REGISTRY:
+        return _probe_hit(PROMPT_REGISTRY[key]["probe"])
+    from . import plugins
+    return plugins.installed(key)
+
+
+def detected():
+    """[(key, label, tier)] for everything present, in catalogue order. The
+    prompt tier is informational: nothing wires it, snippet hands out its config.
+    """
+    return [(k, label, tier) for k, label, tier, _ in catalogue() if present(k)]
+
+
+def wired(key):
+    """Whether our shim, hook or plugin is what the host runs now, whatever its
+    config dir says. A prompt surface is never wired, only configured by hand.
+    """
+    if key in HOSTS:
+        data, _, problem = read_settings(key)
+        return not problem and is_ours(get_command(data, key), key)
+    if key in HOOK_HOSTS:
+        return hook_wired(key)
+    if key in PROMPT_REGISTRY:
+        return False
+    from . import plugins
+    return plugins.plugin_status(key) == "wired"
+
+
+def leftover(key):
+    """Our files for a host whose settings no longer name them, so an uninstall
+    still has something to sweep up.
+    """
+    if key in HOSTS:
+        return os.path.exists(shim_path(key)) or os.path.exists(wrapped_path(key))
+    if key in HOOK_HOSTS:
+        return os.path.exists(hook_shim_path(key))
+    if key in PROMPT_REGISTRY:
+        return False
+    from . import plugins
+    return os.path.exists(plugins.plugin_path(key))
+
+
+def _table_status(key, tier):
+    if tier == "prompt":
+        return "found, `terminalcreature snippet %s`" % key if present(key) else "not found"
+    if not present(key):
+        return "not found"
+    line = "wired" if wired(key) else "not wired"
+    if tier == "card" and key not in HOOK_HOSTS:
+        from . import plugins
+        note = plugins.missing_runtime(key)
+        if note:
+            line += " (%s)" % note
+    return line
+
+
+def hosts_lines():
+    """The support table: every host and surface, how it's detected, and where
+    it stands here. Detect notes are home-relative, so no path leaves the machine.
+    """
+    rows = catalogue()
+    width = max(len(note) for _, _, _, note in rows)
+    lines = ["  %-8s %-19s %-10s %-*s %s" % ("host", "", "tier", width, "detected by", "status")]
+    for key, label, tier, note in rows:
+        lines.append("  %-8s %-19s %-10s %-*s %s" % (key, label, tier, width, note, _table_status(key, tier)))
+    lines.append("")
+    lines.append("install wires every statusline and card host found here; --host <name> does one.")
+    lines.append("a host that isn't listed qualifies as soon as it has a statusline command or a")
+    lines.append("turn-end hook: open an issue with a link to its docs for either.")
+    return lines
+
+
+def doctor_lines():
+    from . import plugins
+    lines = ["hosts:"]
+    for key, label, tier, _ in catalogue():
+        if tier == "prompt":
+            continue
+        if key in HOSTS:
+            line = status(key)
+        elif key in HOOK_HOSTS:
+            line = hook_status(key)
+        else:
+            line = plugins.plugin_status(key)
+            if line != "not installed":
+                line = "card, " + line
+                note = plugins.missing_runtime(key)
+                if note:
+                    line += " (%s)" % note
+        lines.append("  %-8s %-19s %s" % (key, label, line))
+    found = [k for k, _, tier in detected() if tier == "prompt"]
+    lines.append("prompt surfaces (%s): see `terminalcreature snippet <surface>`" % (
+        ", ".join(found) + " found" if found else "tmux, starship, shells"))
     return lines
 
 
@@ -550,6 +683,7 @@ HOOK_HOSTS = ("codex", "gemini", "vibe", "auggie")
 # shell: the host hands the command to a shell, so a path with a space needs
 # quoting; off, it execs the file itself and quotes would be part of the name.
 # matcher: what the group carries when the host documents one, else None.
+# detect: the dir's presence is the host's presence, in words for the table.
 HOOK_REGISTRY = {
     # docs, 2026-09: ~/.codex/hooks.json, Stop replies JSON, systemMessage is
     # shown as a warning line, exit 0 with no output is success. hooks run only
@@ -558,7 +692,7 @@ HOOK_REGISTRY = {
         "label": "Codex CLI", "dir": "~/.codex", "config": "~/.codex/hooks.json", "format": "json",
         "jsonc": False, "name": False, "event": "Stop", "field": "systemMessage", "silent": "",
         "shim": "hookcard-codex.sh", "note": "approve it once with /hooks inside codex",
-        "shell": True, "matcher": None,
+        "shell": True, "matcher": None, "detect": "~/.codex",
     },
     # docs, 2026-09: hooks live under "hooks" in settings.json, AfterAgent fires once
     # per turn, systemMessage prints to the terminal. stdout is parsed as JSON and
@@ -568,7 +702,7 @@ HOOK_REGISTRY = {
         "label": "Gemini CLI", "dir": "~/.gemini", "config": "~/.gemini/settings.json", "format": "json",
         "jsonc": True, "name": True, "event": "AfterAgent", "field": "systemMessage", "silent": "{}",
         "shim": "hookcard-gemini.sh", "note": "",
-        "shell": True, "matcher": "*",
+        "shell": True, "matcher": "*", "detect": "~/.gemini",
     },
     # docs, 2026-09: [[hooks]] tables in ~/.vibe/hooks.toml, type post_agent fires
     # after every turn, system_message is UI-only, exit 0 with empty stdout passes
@@ -576,7 +710,7 @@ HOOK_REGISTRY = {
         "label": "Mistral Vibe", "dir": "~/.vibe", "config": "~/.vibe/hooks.toml", "format": "toml",
         "jsonc": False, "name": True, "event": "post_agent", "field": "system_message", "silent": "",
         "shim": "hookcard-vibe.sh", "note": "",
-        "shell": True, "matcher": None,
+        "shell": True, "matcher": None, "detect": "~/.vibe",
     },
     # docs, 2026-09: same tree as codex under "hooks" in ~/.augment/settings.json,
     # Stop takes no matcher, systemMessage goes to the user, the script must be an
@@ -586,7 +720,7 @@ HOOK_REGISTRY = {
         "label": "Augment auggie", "dir": "~/.augment", "config": "~/.augment/settings.json", "format": "json",
         "jsonc": False, "name": False, "event": "Stop", "field": "systemMessage", "silent": "",
         "shim": "hookcard-auggie.sh", "note": "",
-        "shell": False, "matcher": None,
+        "shell": False, "matcher": None, "detect": "~/.augment",
     },
 }
 
@@ -935,7 +1069,3 @@ def hook_status(host):
     if not hook_installed(host):
         return "not installed"
     return "card, wired" if hook_wired(host) else "card, not wired"
-
-
-def hook_doctor_lines():
-    return ["  %-8s %-19s %s" % (host, HOOK_REGISTRY[host]["label"], hook_status(host)) for host in HOOK_HOSTS]
