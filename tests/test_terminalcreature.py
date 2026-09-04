@@ -1500,6 +1500,13 @@ def test_width_cap():
     check(fit("#[fg=green]green fields#[default]", 5) == "#[fg=green]green#[default]", "same for tmux styles")
     check(fit("\U0001f95a egg here", 5) == "\U0001f95a", "the icon is two cells wide, so five columns is not enough for egg")
     check(fit("\U0001f95a egg here", 6) == "\U0001f95a egg", "and six is")
+    link = "\x1b]8;;http://x.y\x1b\\go\x1b]8;;\x1b\\ branch"
+    check(fit(link, 2) == "\x1b]8;;http://x.y\x1b\\go\x1b]8;;\x1b\\", "an osc hyperlink is one zero-width unit, never cut inside")
+    check(fit("ab\x1b[2Kcd ef", 3) == "ab\x1b[2Kc", "a non-sgr csi code is skipped whole and not closed with a reset")
+    check(fit("\x1b[1;32mgo\x1b[2K wide\x1b[0m", 2) == "\x1b[1;32mgo\x1b[2K\x1b[0m", "a cut inside a colour span still closes it past a later csi")
+    check(fit("PR #[12] open", 9, fmt="ansi") == "PR #[12]", "ansi output keeps a host's literal #[ as text")
+    check(fit("PR #[12] open", 9) == "PR #[12] open", "and without a format a #[ style costs no column")
+    check(fit("e\ufe0f\u200d x", 1) == "e\ufe0f\u200d", "a variation selector and a joiner cost no column")
 
     os.environ.pop("NO_COLOR", None)
     try:

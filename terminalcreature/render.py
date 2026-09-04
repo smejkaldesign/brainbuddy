@@ -106,32 +106,42 @@ def styled(fmt):
         _active = prev
 
 
-# a styling directive in either backend. zero columns wide on screen
-_DIRECTIVE = re.compile(r"(\033\[[0-9;]*m|#\[[^\]]*\])|(.)", re.DOTALL)
+# zero columns wide on screen: any CSI sequence (SGR included), an OSC such as
+# a hyperlink, a lone two-byte escape, and in tmux a #[] style. a host's own text
+# reaches fit through compose, so the whole family is skipped as a unit or a cap
+# could land inside one. ansi callers keep a literal #[ in that text as text
+_ESCAPE = r"\033\[[0-?]*[ -/]*[@-~]|\033\][^\033\a]*(?:\a|\033\\)?|\033[@-Z\\-_]"
+_DIRECTIVE = {
+    "ansi": re.compile(r"(%s)|(.)" % _ESCAPE, re.DOTALL),
+    None: re.compile(r"(%s|#\[[^\]]*\])|(.)" % _ESCAPE, re.DOTALL),
+}
 
 
 def _cell_width(ch):
-    if unicodedata.combining(ch):
+    if unicodedata.combining(ch) or unicodedata.category(ch) in ("Mn", "Me", "Cf"):
+        # marks, variation selectors and joiners ride on the glyph before them
         return 0
     # the egg icon and its kind take two cells; counting them as one would
     # let a capped line run a column past where the host cuts it
     return 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
 
 
-def fit(text, width):
+def fit(text, width, fmt=None):
     """Cap every line at width visible columns. Directives cost nothing, wide
     glyphs cost two, and a cut lands after a whole word rather than inside one.
     Whatever styling was open at the cut is closed, so the host's own text
-    after it doesn't inherit the creature's colour.
+    after it doesn't inherit the creature's colour. fmt "ansi" reads #[ as
+    text; anything else treats a tmux style as a directive too.
     """
     if not width or width < 1:
         return text
-    return "\n".join(_fit_line(line, width) for line in text.split("\n"))
+    pattern = _DIRECTIVE.get(fmt, _DIRECTIVE[None])
+    return "\n".join(_fit_line(line, width, pattern) for line in text.split("\n"))
 
 
-def _fit_line(line, width):
+def _fit_line(line, width, pattern):
     kept, cols, cut = [], 0, False
-    for m in _DIRECTIVE.finditer(line):
+    for m in pattern.finditer(line):
         directive, ch = m.group(1), m.group(2)
         if directive:
             kept.append((directive, True))
@@ -151,7 +161,8 @@ def _fit_line(line, width):
         kept.pop()
     out = "".join(t for t, _ in kept)
     if cut:
-        opened = [t for t, d in kept if d]
+        # only a colour directive needs closing; a hyperlink or cursor code doesn't
+        opened = [t for t, d in kept if d and (t.startswith("#[") or t.endswith("m"))]
         if opened and opened[-1] not in (RESET, TMUX_RESET):
             out += TMUX_RESET if opened[-1].startswith("#[") else RESET
     return out
@@ -318,7 +329,7 @@ def segment(st, xp=None, counts=None, gain=0, mood=None, fmt=None, width=None):
     Claude Code has always been handed.
     """
     with styled(fmt):
-        return fit(_segment(st, xp, counts, gain, mood), width)
+        return fit(_segment(st, xp, counts, gain, mood), width, fmt or "ansi")
 
 
 def _segment(st, xp, counts, gain, mood):
@@ -423,7 +434,7 @@ def compose(st, left, xp=None, counts=None, gain=0, mood=None, fmt=None, width=N
     host's box can be any width and the art still lands whole.
     """
     with styled(fmt):
-        return fit(_compose(st, left, xp, counts, gain, mood), width)
+        return fit(_compose(st, left, xp, counts, gain, mood), width, fmt or "ansi")
 
 
 def _compose(st, left, xp, counts, gain, mood):
@@ -579,7 +590,7 @@ def card(st, xp=None, counts=None, hungry_note=True, art=True, fmt=None, width=N
     rather than repeating them.
     """
     with styled(fmt):
-        return fit(_card(st, xp, counts, hungry_note, art), width)
+        return fit(_card(st, xp, counts, hungry_note, art), width, fmt or "ansi")
 
 
 def _card(st, xp, counts, hungry_note, art):
