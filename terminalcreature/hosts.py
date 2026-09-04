@@ -650,21 +650,31 @@ def _hook_handler(host):
 
 
 def _is_our_handler(handler):
-    return isinstance(handler, dict) and HOOK_MARK in str(handler.get("command", ""))
+    # both words, so a hook of the user's own that merely mentions the
+    # creature isn't taken for ours and dropped on uninstall
+    command = str(handler.get("command", "")) if isinstance(handler, dict) else ""
+    return HOOK_MARK in command and "hookcard" in command
 
 
 def _event_groups(data, host, create=False):
-    """The list under hooks.<event>, or None when the tree isn't there."""
+    """The list under hooks.<event>, or None when the tree isn't there. With
+    create, a missing level is made; one that's there in the wrong shape is
+    refused (ValueError) rather than overwritten, since it's the user's.
+    """
     event = HOOK_REGISTRY[host]["event"]
     hooks = data.get("hooks")
     if not isinstance(hooks, dict):
         if not create:
             return None
+        if hooks is not None:
+            raise ValueError('a "hooks" that isn\'t an object')
         hooks = data["hooks"] = {}
     groups = hooks.get(event)
     if not isinstance(groups, list):
         if not create:
             return None
+        if groups is not None:
+            raise ValueError('a "hooks.%s" that isn\'t a list' % event)
         groups = hooks[event] = []
     return groups
 
@@ -793,14 +803,23 @@ def wire_hook(host):
     content, raw, problem = _read_hook_config(host)
     if problem:
         return False, problem
-    _write_hook_shim(host)
     if spec["format"] == "toml":
         if TOML_OPEN in content:
+            if not _strip_toml_block(content)[1]:
+                return False, "%s has our begin marker with no end marker, so nothing was changed. fix it and re-run." % (
+                    spec["config"])
+            _write_hook_shim(host)
             return True, "already wired, shim refreshed"
+        _write_hook_shim(host)
         joint = "" if not content or content.endswith("\n") else "\n"
         _write_hook_config(host, content + joint + _toml_block(host), raw)
     else:
-        if not _add_our_hook(content, host):
+        try:
+            added = _add_our_hook(content, host)
+        except ValueError as e:
+            return False, "%s has %s, so nothing was changed. fix it and re-run." % (spec["config"], e)
+        _write_hook_shim(host)
+        if not added:
             return True, "already wired, shim refreshed"
         _write_hook_config(host, content, raw)
     what = "%s hook set in %s" % (spec["event"], spec["config"])
@@ -869,7 +888,7 @@ def hook_wired(host):
     if problem:
         return False
     if HOOK_REGISTRY[host]["format"] == "toml":
-        return TOML_OPEN in content
+        return _strip_toml_block(content)[1]
     return _has_our_hook(content, host)
 
 
