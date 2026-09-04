@@ -17,6 +17,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      # the tpm plugin test drives a throwaway tmux server; it skips itself when
+      # tmux is missing, so a mirror hiccup here degrades to a skip, not a red run
+      - name: tmux for the plugin test
+        run: sudo apt-get install -y tmux || true
       - name: tests
         run: python3 tests/test_terminalcreature.py
 

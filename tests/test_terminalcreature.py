@@ -1886,9 +1886,63 @@ def test_snippets():
         shutil.rmtree(fake_home)
 
 
+def test_tmux_plugin():
+    """The tpm plugin swaps #{creature} for a call to its own helper, against a
+    throwaway tmux server so nothing of the user's is touched.
+    """
+    print("\ntmux plugin")
+    import subprocess
+
+    if not shutil.which("tmux"):
+        print("  skip tmux is not installed here")
+        return
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    plugin = os.path.join(repo, "tmux", "terminalcreature.tmux")
+    helper = os.path.join(repo, "tmux", "creature.sh")
+    check(os.access(plugin, os.X_OK) and os.access(helper, os.X_OK), "plugin and helper are executable")
+    check(os.access(os.path.join(repo, "terminalcreature.tmux"), os.X_OK), "the root shim tpm actually sources is executable too")
+    check(len(open(os.path.join(repo, "tmux", "README.md")).read().strip().splitlines()) <= 10, "the readme is ten lines or fewer")
+
+    sock = "tctest-%d" % os.getpid()
+    t = lambda *a: subprocess.run(["tmux", "-L", sock] + list(a), capture_output=True, text=True)
+    r = t("-f", "/dev/null", "new-session", "-d")
+    if r.returncode != 0:
+        print("  skip could not start a tmux server: %s" % r.stderr.strip()[-100:])
+        return
+    try:
+        t("set-option", "-g", "status-right", "cpu #{creature} %H:%M")
+        t("set-option", "-g", "status-left", "[#S]")
+        path = t("display-message", "-p", "#{socket_path}").stdout.strip()
+        env = dict(os.environ, TMUX="%s,0,0" % path)
+        for entry in (plugin, os.path.join(repo, "terminalcreature.tmux")):
+            t("set-option", "-g", "status-right", "cpu #{creature} %H:%M")
+            r = subprocess.run([entry], env=env, capture_output=True, text=True)
+            check(r.returncode == 0, "%s runs clean (%s)" % (os.path.relpath(entry, repo), r.stderr.strip()[-100:]))
+            right = t("show-option", "-gv", "status-right").stdout.strip()
+            check("render --format tmux" in right and "#{creature}" not in right, "the placeholder became a render call")
+            check(right.startswith("cpu #(") and right.endswith(") %H:%M"), "and the rest of status-right survived around it")
+            named = right[right.find("#(") + 2:right.find(" render")]
+            check(os.path.realpath(named) == os.path.realpath(helper),
+                  "the call names the helper by absolute path, so tpm's clone location doesn't matter")
+        check(t("show-option", "-gv", "status-left").stdout.strip() == "[#S]", "an option without the placeholder is left alone")
+        # a home with the installer's lib layout and no entry point on PATH, so
+        # the helper has to take its fallback route to reach this checkout
+        home = tempfile.mkdtemp(prefix="bb-helper-")
+        lib = os.path.join(home, ".claude", "terminalcreature", "lib")
+        os.makedirs(lib)
+        os.symlink(os.path.join(repo, "terminalcreature"), os.path.join(lib, "terminalcreature"))
+        env = dict(os.environ, HOME=home, PATH=os.pathsep.join([os.path.dirname(sys.executable), "/usr/bin", "/bin"]))
+        r = subprocess.run([helper, "simulate", "10"], env=env, capture_output=True, text=True)
+        check(r.returncode == 0 and "Lv" in r.stdout, "the helper reaches terminalcreature through the lib (%s)" % r.stderr.strip()[-80:])
+        shutil.rmtree(home)
+    finally:
+        t("kill-server")
+
+
 if __name__ == "__main__":
     test_metric()
     test_snippets()
+    test_tmux_plugin()
     test_agents_provider()
     test_render_formats()
     test_width_cap()
