@@ -36,6 +36,12 @@ USAGE = """terminalcreature - a terminal pet that evolves with your memory
   sources             what it can count, and what to do if that's nothing
   doctor [--check]    check what terminalcreature can see; --check also asks pypi
   update [--apply]    ask pypi whether there's a newer terminalcreature; --apply installs it
+  install [--host claude|cursor|copilot|qwen|droid|all] [--inline] [--statusline <cmd>]
+                      point a host's statusline at the creature, wrapping what it ran
+                      before. all wires every host that's installed. install.sh does
+                      the full claude setup; this only wires the statusline
+  uninstall [--host ...]
+                      put the host's statusline back and drop the shim
 
 update and doctor --check are the only commands that go online, and only when
 you run them. Everything else, the statusline included, is offline.
@@ -600,6 +606,8 @@ def cmd_doctor(args):
         print(hosts.describe(hosts.parse_session(raw)))
     else:
         print("stdin: no session on stdin")
+    for line in hosts.doctor_lines():
+        print(line)
     override = _project_override()
     if override:
         print("\n" + override)
@@ -700,12 +708,78 @@ def cmd_show(args):
     return _set_hidden(False)
 
 
+def _host_args(args):
+    """(host, inline, statusline) out of install/uninstall args, or (None, problem)."""
+    host, inline, statusline, i = "claude", False, None, 0
+    while i < len(args):
+        key, eq, val = args[i].partition("=")
+        if key == "--inline":
+            inline = True
+        elif key in ("--host", "--statusline"):
+            if not eq:
+                i += 1
+                if i >= len(args):
+                    return None, "%s needs a value" % key
+                val = args[i]
+            if key == "--host":
+                host = val
+            else:
+                statusline = val
+        else:
+            return None, "unknown option %s. hosts are %s, or all" % (args[i], ", ".join(hosts.HOSTS))
+        i += 1
+    if host != "all" and host not in hosts.HOSTS:
+        return None, "unknown host %s. hosts are %s, or all" % (host, ", ".join(hosts.HOSTS))
+    return (host, inline, statusline), None
+
+
+def _host_targets(host, uninstall=False):
+    """all means every host that's here; on uninstall, every host still wired too."""
+    if host != "all":
+        return [host]
+    if uninstall:
+        return [h for h in hosts.HOSTS if hosts.installed(h) or os.path.exists(hosts.shim_path(h))]
+    return [h for h in hosts.HOSTS if hosts.installed(h)]
+
+
+def cmd_install(args):
+    parsed, problem = _host_args(args)
+    if problem:
+        print(problem)
+        return 1
+    host, inline, statusline = parsed
+    targets = _host_targets(host)
+    if host == "all" and targets == ["claude"]:
+        print("only claude is installed here, nothing else to wire")
+    failed = False
+    for h in targets:
+        ok, message = hosts.wire(h, inline=inline, statusline=statusline)
+        print("  %-8s %s" % (h, message))
+        failed = failed or not ok
+    return 1 if failed else 0
+
+
+def cmd_uninstall(args):
+    parsed, problem = _host_args(args)
+    if problem:
+        print(problem)
+        return 1
+    host = parsed[0]
+    failed = False
+    for h in _host_targets(host, uninstall=True):
+        ok, message = hosts.unwire(h)
+        print("  %-8s %s" % (h, message))
+        failed = failed or not ok
+    return 1 if failed else 0
+
+
 COMMANDS = {
     "render": cmd_render, "compose": cmd_compose, "refresh": cmd_refresh, "card": cmd_card,
     "new": cmd_new, "hatch": cmd_hatch, "names": cmd_names, "focus": cmd_focus, "list": cmd_list,
     "rename": cmd_rename, "retire": cmd_retire, "config": cmd_config,
     "simulate": cmd_simulate, "doctor": cmd_doctor, "sources": cmd_sources,
     "hide": cmd_hide, "show": cmd_show, "update": cmd_update,
+    "install": cmd_install, "uninstall": cmd_uninstall,
 }
 
 
