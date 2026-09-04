@@ -170,8 +170,10 @@ BACKUP_SUFFIX = ".pre-terminalcreature.bak"
 REGISTRY = {
     "claude": {
         "label": "Claude Code", "dir": "~/.claude", "settings": "~/.claude/settings.json",
-        "key": "statusLine", "typed": True, "extras": {}, "jsonc": False, "inline": False, "probe": (),
-        "detect": "~/.claude",
+        # our own state dir lives under ~/.claude, so the dir alone proves nothing
+        "key": "statusLine", "typed": True, "extras": {}, "jsonc": False, "inline": False,
+        "probe": ("~/.claude/settings.json", "claude"),
+        "detect": "~/.claude/settings.json, or claude on PATH",
         "shim": "statusline-terminalcreature.sh", "wrapped": "wrapped-command",
     },
     # the cli-config schema in the 2026.09 bundle: statusLine {type, command,
