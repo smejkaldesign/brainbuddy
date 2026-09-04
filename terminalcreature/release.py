@@ -1,8 +1,9 @@
 """Version discovery. The only code in terminalcreature that opens a socket.
 
-A socket opens on exactly three paths, all consented: `update`, `doctor
---check`, and, only for users who set `update_check` on, the background
-refresh's once-a-day `maybe_refresh_latest`. A pet that phoned home from the
+A socket opens on exactly four paths, all consented: `update`, `update
+--apply` (which also downloads the release it found), `doctor --check`, and,
+only for users who set `update_check` on, the background refresh's once-a-day
+`maybe_refresh_latest`. A pet that phoned home from the
 statusline would be checking a few times a second and reading as spyware, so
 the render path only ever reads the cache those three write. One request per
 invocation, no retries; the daily check caches under a 24h stamp.
@@ -13,7 +14,11 @@ import json
 from . import __version__
 
 PYPI_URL = "https://pypi.org/pypi/terminalcreature/json"
+# the same tarball bootstrap.sh installs from, so `update --apply` and a fresh
+# install land the identical tree
+TARBALL_URL = "https://api.github.com/repos/smejkaldesign/terminalcreature/tarball/v%s"
 TIMEOUT = 4.0
+DOWNLOAD_TIMEOUT = 60.0
 
 
 def _parts(version):
@@ -65,16 +70,86 @@ def status_line(status, latest, current=__version__):
     return "terminalcreature %s is the latest. nothing to do." % current
 
 
-def check():
-    status, latest = fetch_latest()
-    # the chip reads this cache, so a manual check and the statusline agree.
-    # a cache that can't be written is not worth failing the answer over
+def remember(status, latest):
+    """Cache what a check found. The chip reads this, so a manual check and
+    the statusline agree. A cache that can't be written is not worth failing
+    the answer over."""
     try:
         from . import state as state_mod
         state_mod.write_latest(latest if status == "ok" else "")
     except Exception:
         pass
+
+
+def check():
+    status, latest = fetch_latest()
+    remember(status, latest)
     return status_line(status, latest)
+
+
+def fetch_tarball(version, dest, url_template=TARBALL_URL, timeout=DOWNLOAD_TIMEOUT):
+    """Download one release tarball to dest. Returns True or False, never raises."""
+    try:
+        import urllib.request
+
+        with urllib.request.urlopen(url_template % version, timeout=timeout) as response, open(dest, "wb") as out:
+            while True:
+                chunk = response.read(65536)
+                if not chunk:
+                    break
+                out.write(chunk)
+        return True
+    except Exception:
+        return False
+
+
+def apply(version, state_dir=None, fetch=fetch_tarball, run=None):
+    """Install `version` over this one by running its own installer.
+
+    Downloads the release tarball, unpacks it, and runs the install.sh inside,
+    which is what bootstrap.sh does on a fresh machine. The installer keeps
+    the roster, the wrapped command and the settings; only the library and
+    shim change. Under a plugin install the commands are the plugin's, so the
+    installer is told to leave them alone. Returns (ok, message).
+    """
+    import os
+    import shutil
+    import subprocess
+    import tarfile
+    import tempfile
+
+    if state_dir is None:
+        from . import state as state_mod
+        state_dir = state_mod.STATE_DIR
+    run = run or subprocess.run
+    work = tempfile.mkdtemp(prefix="terminalcreature-update-")
+    try:
+        tarball = os.path.join(work, "release.tar.gz")
+        if not fetch(version, tarball):
+            return False, "github has %s on pypi's word but wouldn't hand over the tarball. check your connection, then run this again." % version
+        try:
+            with tarfile.open(tarball) as tar:
+                try:
+                    tar.extractall(work, filter="data")
+                except TypeError:
+                    # python < 3.12 has no extraction filter
+                    tar.extractall(work)
+        except (tarfile.TarError, OSError):
+            return False, "the %s download didn't unpack as a tarball. try again; if it repeats, re-run the installer from the website." % version
+        installers = [os.path.join(work, d, "install.sh") for d in os.listdir(work)
+                      if os.path.isfile(os.path.join(work, d, "install.sh"))]
+        if len(installers) != 1:
+            return False, "the %s tarball has no install.sh where one is expected, so nothing was changed." % version
+        cmd = ["bash", installers[0]]
+        if os.path.isfile(os.path.join(state_dir, "plugin-root")):
+            cmd.append("--no-commands")
+        result = run(cmd, stdin=subprocess.DEVNULL)
+        if result.returncode != 0:
+            return False, "the %s installer exited %d. whatever it printed above is the reason; the old version is still wired." % (
+                version, result.returncode)
+        return True, "terminalcreature %s is installed. the statusline picks it up on its next redraw." % version
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 def maybe_refresh_latest(settings):

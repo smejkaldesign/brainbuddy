@@ -42,7 +42,7 @@ SHIM="$HOMEDIR/statusline-terminalcreature.sh"
 WRAPPED="$HOMEDIR/wrapped-command"
 BEGIN="# >>> brainbuddy >>>"
 END="# <<< brainbuddy <<<"
-COMMAND_NAMES="creature creature-hide creature-show creature-new creature-hatch"
+COMMAND_NAMES="creature creature-hide creature-show creature-new creature-hatch creature-update"
 # what a brainbuddy 1.x install left behind, for the migration
 OLD_HOMEDIR="$HOME/.claude/brainbuddy"
 OLD_SHIM="$OLD_HOMEDIR/statusline-brainbuddy.sh"
@@ -293,7 +293,7 @@ fi
 # ~ rather than the expanded path, so a screenshot of this carries no username
 echo "  library  -> ${LIB/#$HOME/~}"
 if [ "$COMMANDS" = 1 ]; then
-  echo "  commands -> ${CMDS/#$HOME/~}  (/creature, -new, -hatch, -hide, -show)"
+  echo "  commands -> ${CMDS/#$HOME/~}  (/creature, -new, -hatch, -hide, -show, -update)"
 else
   echo "  commands -> left alone, the plugin already provides them"
 fi

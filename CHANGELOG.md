@@ -3,6 +3,13 @@
 Notable changes, newest first. Versions follow semver; the version lives in
 `terminalcreature/__init__.py` and each release is the matching `v*` tag.
 
+## Unreleased
+
+- `/creature-update` and `terminalcreature update --apply`: check pypi for a
+  newer release and, if there is one, download it and run its installer over
+  this one. Roster, settings and the wrapped statusline all stay; only the
+  library and shim change. Plugin installs keep their own command files.
+
 ## 2.1.0
 
 - The creature blinks: a closed-eye beat for 0.4s out of every 5, on the

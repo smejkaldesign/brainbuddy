@@ -365,12 +365,13 @@ terminalcreature sources           what it can count, and what to do if that's n
 terminalcreature doctor            what can it see, and why is it zero
 terminalcreature doctor --check    the same, plus a version check against pypi
 terminalcreature update            ask pypi whether there's a newer terminalcreature
+terminalcreature update --apply    and install it if there is, keeping your creature
 terminalcreature render            the one-line statusline segment
 terminalcreature compose "<text>"  your statusline text, creature as a left column
 terminalcreature refresh           recompute the xp cache
 ```
 
-Five are slash commands in Claude Code, so plain language reaches them without the CLI: `/creature`, `/creature-new`, `/creature-hatch`, `/creature-hide`, `/creature-show`.
+Six are slash commands in Claude Code, so plain language reaches them without the CLI: `/creature`, `/creature-new`, `/creature-hatch`, `/creature-hide`, `/creature-show`, `/creature-update`.
 
 After an `install.sh` or bootstrap install there's no `terminalcreature` on your PATH: the library is imported by the statusline, not installed as a binary. The slash commands reach everything you'd normally want. For the rest, alias it, or `pipx install terminalcreature`:
 
@@ -401,7 +402,7 @@ Short enough to check yourself.
 - **It never prints a path it matched**, in any mode including `doctor`, which reports a home-relative root and counts rather than filenames.
 - **All state is local**, at `~/.claude/terminalcreature/`: the roster, your settings, and the XP cache. Nothing else, nowhere else.
 - **The render never opens a socket, and by default neither does anything it starts.** No telemetry, no analytics, no phone-home.
-- **The only network calls are the ones you allowed.** The installer downloading a release tarball from `api.github.com`; `terminalcreature update` and `doctor --check` reading pypi's public package metadata; and, if you opt in with `config update_check true`, that same version request once a day from the background refresh so the yellow `⬆ update` chip can appear. It's off by default and asked as a question. Every one is an unauthenticated GET that sends nothing about you or your memory.
+- **The only network calls are the ones you allowed.** The installer (and `terminalcreature update --apply`) downloading a release tarball from `api.github.com`; `terminalcreature update` and `doctor --check` reading pypi's public package metadata; and, if you opt in with `config update_check true`, that same version request once a day from the background refresh so the yellow `⬆ update` chip can appear. It's off by default and asked as a question. Every one is an unauthenticated GET that sends nothing about you or your memory.
 
 Three tests enforce this. A runtime trap patches every file-reading builtin and asserts none fire during a measurement. A static pass tokenizes `metric.py` and fails if a reader appears in the code at all. A third guards every socket call, including in the background processes a render spawns: opted out, an aged cache plus a render produces zero network from any process; opted in, exactly one attempt per day, never from the render itself. A leak guard runs in CI and as a `pre-push` hook, failing the build if an absolute home path or a vault-shaped filename ever reaches the repo.
 
