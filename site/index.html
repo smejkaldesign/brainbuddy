@@ -164,6 +164,14 @@
   .t-cursor { display: inline-block; width: 8px; height: 15px; background: var(--gold); vertical-align: -2px; animation: blink 1s steps(1) infinite; }
   .t-status { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 6px; background: #070d0a; color: var(--muted); }
   .t-status .frame { color: #3a5546; } .t-status .creature { color: var(--gold-2); } .t-status .bar { color: var(--xp); }
+  .t-status .dim { color: var(--dim); } .t-status .in { color: var(--text); }
+  /* tmux draws one status line with its own background, so the bar gets the pane look */
+  .t-tmux { margin-top: 10px; display: flex; justify-content: space-between; gap: 16px; padding: 4px 10px; border-radius: 3px; background: #123522; color: #d6ffe1; white-space: pre; overflow: hidden; }
+  .t-tmux .win { color: #86cfa0; } .t-tmux .cur { color: #061008; background: #5eea86; padding: 0 5px; border-radius: 2px; } .t-tmux .bar { color: #a6ffbd; }
+  .t-hosts { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); white-space: normal; }
+  .t-hosts button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--dim); background: none; border: 1px solid var(--line-2); border-radius: 4px; padding: 3px 9px; }
+  .t-hosts button:hover { color: var(--text); border-color: var(--gold); }
+  .t-hosts button[aria-pressed="true"] { color: var(--gold); border-color: var(--gold); background: rgba(var(--gold-rgb), .06); }
   @keyframes blink { 50% { opacity: 0; } }
 
   /* ---------- sections ---------- */
@@ -354,7 +362,7 @@
     <div class="terminal">
       <div class="terminal-bar">
         <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span class="terminal-title">terminalcreature-demo: first hatch</span>
+        <span class="terminal-title" id="term-title">terminalcreature-demo: first hatch</span>
         <button class="terminal-btn" id="replay">replay</button>
       </div>
       <div class="terminal-body" id="term"></div>
@@ -639,9 +647,16 @@
     ["status"]
   ];
   var running = null;
-  function statusHTML() {
+  // the same sprite, drawn inside three different host chromes: the point of 3.0 in one box
+  var SEG = '🥚 Zask · Adept Lv41 <span class="bar">█░░░░░</span>';
+  function spriteRows(right) {
+    var rows = sprite(NIM, 3, true).split("\n"), out = "";
+    for (var k = 0; k < rows.length; k++) out += '<span class="creature">' + esc(rows[k]) + "</span>" + (right[k] || "") + "\n";
+    return out;
+  }
+  function claudeStatus() {
     var rows = sprite(NIM, 3, true).split("\n");
-    var right = ['  <span class="bar">████░░░░░░</span>  my-notes ⎇ main', '  🥚 Zask · Adept Lv41 <span class="bar">█░░░░░</span>', "", "", ""];
+    var right = ['  <span class="bar">████░░░░░░</span>  my-notes ⎇ main', "  " + SEG, "", "", ""];
     var edge = "─".repeat(WIDTH);
     var out = '<div class="t-status"><span class="frame">┌' + edge + '┐</span>\n';
     for (var k = 0; k < rows.length; k++) {
@@ -649,15 +664,55 @@
     }
     return out + '<span class="frame">└' + edge + '┘</span></div>';
   }
+  function cursorStatus() {
+    var edge = "─".repeat(34);
+    return '<div class="t-status"><span class="frame">╭' + edge + '╮</span>\n' +
+      '<span class="frame">│</span> <span class="t-prompt">›</span> <span class="in">what did I write about tmux last week?</span><span class="t-cursor"></span>\n' +
+      '<span class="frame">╰' + edge + '╯</span>\n' +
+      spriteRows(['  <span class="dim">auto · 34% context · my-notes ⎇ main</span>', "  " + SEG, "", "", ""]) + "</div>";
+  }
+  function tmuxStatus() {
+    return '<div class="t-status"><span class="dim">  (pane 1 keeps running whatever you had open)</span>\n' +
+      spriteRows(['  <span class="dim">$ terminalcreature render --format tmux --width 40</span>', "  " + SEG, "", "", ""]) +
+      '<div class="t-tmux"><span><span class="cur">notes</span> <span class="win">0:zsh  1:claude*  2:cursor</span></span><span>' + SEG + ' <span class="win">│ 14:02</span></span></div></div>';
+  }
+  var HOST_DEMOS = [
+    ["claude code", "claude code · statusline", claudeStatus],
+    ["cursor", "cursor cli · footer", cursorStatus],
+    ["tmux", "tmux · status-right", tmuxStatus]
+  ];
+  var title = document.getElementById("term-title"), hostIdx = 0, hostTimer = null;
+  function showHost(i) {
+    hostIdx = i;
+    var slot = document.getElementById("t-host");
+    if (!slot) return;
+    slot.innerHTML = HOST_DEMOS[i][2]();
+    title.textContent = "terminalcreature-demo: " + HOST_DEMOS[i][1];
+    Array.prototype.forEach.call(term.querySelectorAll(".t-hosts button"), function (b, k) { b.setAttribute("aria-pressed", String(k === i)); });
+  }
+  function stopCycle() { if (hostTimer) clearInterval(hostTimer); hostTimer = null; }
+  function startCycle() { stopCycle(); if (!reduce) hostTimer = setInterval(function () { showHost((hostIdx + 1) % HOST_DEMOS.length); }, 3000); }
+  function hostsHTML() {
+    var out = '<div id="t-host"></div><div class="t-hosts" role="group" aria-label="Host chrome"><span>same creature in</span>';
+    HOST_DEMOS.forEach(function (h) { out += '<button type="button" aria-pressed="false">' + h[0] + "</button>"; });
+    return out + "</div>";
+  }
   function play() {
     if (running) clearTimeout(running);
+    stopCycle();
+    title.textContent = "terminalcreature-demo: first hatch";
     term.innerHTML = "";
     var i = 0;
     function line() {
       if (i >= SCRIPT.length) return;
       var s = SCRIPT[i++];
       if (s[0] === "gap") { term.innerHTML += "\n"; return setTimeout(line, 240); }
-      if (s[0] === "status") { term.innerHTML += statusHTML(); return; }
+      if (s[0] === "status") {
+        term.innerHTML += hostsHTML();
+        Array.prototype.forEach.call(term.querySelectorAll(".t-hosts button"), function (b, k) { b.addEventListener("click", function () { showHost(k); startCycle(); }); });
+        showHost(0); startCycle();
+        return;
+      }
       if (s[0] === "art") { term.innerHTML += '<span class="t-art">' + esc(s[1]) + "</span>\n"; return setTimeout(line, 700); }
       if (s[0] === "prompt") {
         var span = document.createElement("span");
