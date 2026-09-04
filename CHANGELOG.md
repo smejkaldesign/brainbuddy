@@ -22,8 +22,8 @@ channel, crediting session XP the same way the statusline does.
   plugin APIs, were confirmed from the hosts' docs as of September 2026; none
   was guessed. Hooks you already had on the same event stay, `uninstall
   --host` removes only ours and restores the backup byte for byte when nothing
-  else changed, and `--host all` now covers the hook hosts whose config dir
-  exists (plugin hosts are named outright). Codex runs hooks only after a
+  else changed, and `--host all` now covers every card host whose config dir
+  exists, plugin hosts included. Codex runs hooks only after a
   one-time `/hooks` approval in its TUI, and the install message says so.
   `./install.sh --host <name>` passes the card hosts through.
 - `terminalcreature hookcard --host <name>`, what those hooks run. It reads

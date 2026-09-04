@@ -530,11 +530,8 @@ def doctor_lines():
     for host in HOSTS:
         lines.append("  %-8s %-19s %s" % (host, REGISTRY[host]["label"], status(host)))
     lines += hook_doctor_lines()
-    try:
-        from . import plugins
-        lines += plugins.doctor_lines()
-    except ImportError:
-        pass
+    from . import plugins
+    lines += plugins.doctor_lines()
     lines.append("prompt surfaces (tmux, starship, shells): see `terminalcreature snippet`")
     return lines
 

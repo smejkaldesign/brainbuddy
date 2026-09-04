@@ -10,7 +10,7 @@ import sys
 
 from . import __version__
 from . import creature as creature_mod
-from . import hosts, metric, render, sprites
+from . import hosts, metric, plugins, render, sprites
 from . import state as state_mod
 
 USAGE = """terminalcreature - a terminal pet that evolves with your memory
@@ -48,7 +48,7 @@ USAGE = """terminalcreature - a terminal pet that evolves with your memory
   install --host codex|gemini|vibe|auggie|opencode|amp
                       hosts with no statusline get a one-line card after each turn:
                       a hook entry (codex, gemini, vibe, auggie) or a plugin file
-                      (opencode, amp). all covers the hook hosts too
+                      (opencode, amp). all covers these too, by their config dir
   uninstall [--host ...]
                       put the host's statusline back and drop the shim, or take the
                       hook entry or plugin out
@@ -767,13 +767,8 @@ def cmd_show(args):
     return _set_hidden(False)
 
 
-# the plugin hosts live in their own module. named here too so the host list
-# in an error message is complete even before that module is on disk
-PLUGIN_HOSTS = ("opencode", "amp")
-
-
 def _all_hosts():
-    return tuple(hosts.HOSTS) + tuple(hosts.HOOK_HOSTS) + PLUGIN_HOSTS
+    return tuple(hosts.HOSTS) + tuple(hosts.HOOK_HOSTS) + tuple(plugins.PLUGIN_HOSTS)
 
 
 def _host_args(args):
@@ -806,26 +801,25 @@ def _host_args(args):
 
 
 def _host_targets(host, uninstall=False):
-    """all means every host that's here; on uninstall, every host still wired too.
-    The plugin hosts are only ever named outright.
+    """all means every host that's here, a config dir being "here"; on
+    uninstall, every host still carrying our shim or plugin file too.
     """
     if host != "all":
         return [host]
     if uninstall:
         return ([h for h in hosts.HOSTS if hosts.installed(h) or os.path.exists(hosts.shim_path(h))]
-                + [h for h in hosts.HOOK_HOSTS if hosts.hook_installed(h) or os.path.exists(hosts.hook_shim_path(h))])
-    return [h for h in hosts.HOSTS if hosts.installed(h)] + [h for h in hosts.HOOK_HOSTS if hosts.hook_installed(h)]
+                + [h for h in hosts.HOOK_HOSTS if hosts.hook_installed(h) or os.path.exists(hosts.hook_shim_path(h))]
+                + [h for h in plugins.PLUGIN_HOSTS if plugins.installed(h) or os.path.exists(plugins.plugin_path(h))])
+    return ([h for h in hosts.HOSTS if hosts.installed(h)]
+            + [h for h in hosts.HOOK_HOSTS if hosts.hook_installed(h)]
+            + [h for h in plugins.PLUGIN_HOSTS if plugins.installed(h)])
 
 
 def _wire(h, inline, statusline, uninstall):
     """One host, whichever kind it is. (ok, message)."""
     if h in hosts.HOOK_HOSTS:
         return hosts.unwire_hook(h) if uninstall else hosts.wire_hook(h)
-    if h in PLUGIN_HOSTS:
-        try:
-            from . import plugins
-        except ImportError:
-            return False, "not built yet"
+    if h in plugins.PLUGIN_HOSTS:
         return True, plugins.unwire_plugin(h) if uninstall else plugins.wire_plugin(h)
     if uninstall:
         return hosts.unwire(h)

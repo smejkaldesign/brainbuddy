@@ -213,7 +213,7 @@ Each host gets its own shim and its own backup of its settings file, so wiring C
 
 ### Codex, Gemini, Vibe, auggie, opencode, Amp: the turn-end card
 
-These six have no statusline to wire, but each has a documented channel that shows a line to you when a turn ends. `install --host <name>` uses it: one hook entry for Codex CLI, Gemini CLI, Mistral Vibe and Augment auggie, one small plugin file for opencode and Amp. `--host all` covers the hook hosts whose config dir exists; the plugin hosts are only ever named outright.
+These six have no statusline to wire, but each has a documented channel that shows a line to you when a turn ends. `install --host <name>` uses it: one hook entry for Codex CLI, Gemini CLI, Mistral Vibe and Augment auggie, one small plugin file for opencode and Amp. `--host all` covers every card host whose config dir exists, plugin hosts included.
 
 ```bash
 terminalcreature install --host codex        # or gemini, vibe, auggie
