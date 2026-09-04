@@ -148,12 +148,12 @@ def cmd_card(args):
     s = st["settings"]
     if not s.get("update_check") and not s.get("update_check_asked"):
         # the one-time offer. default-off would otherwise mean nobody who
-        # didn't hatch after this shipped ever learns the check exists
+        # didn't hatch after this shipped ever learns the check exists.
+        # set_setting, not save: this snapshot is as old as the scan above
         print("\nit can check once a day whether a newer brainbuddy exists: one request to")
         print("pypi.org for a version number, nothing about you or your notes goes anywhere.")
         print("  /brainbuddy config update_check true")
-        s["update_check_asked"] = True
-        state_mod.save(st, own_settings=True)
+        state_mod.set_setting("update_check_asked", True)
     return 0
 
 

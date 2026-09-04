@@ -509,6 +509,69 @@ def test_version_check_is_explicit_only():
     finally:
         shutil.rmtree(home)
 
+    # the real statusline ordering: the xp cache goes stale, render spawns the
+    # detached recount, and THAT child is where an opted-in fetch happens. an
+    # in-process guard can't see across the fork, so a sitecustomize on
+    # PYTHONPATH guards every python process this test starts, children included
+    import time as _t
+
+    home = tempfile.mkdtemp(prefix="bb-spawn-")
+    log = os.path.join(home, "net.log")
+    guard_dir = os.path.join(home, "guard")
+    os.makedirs(guard_dir)
+    with open(os.path.join(guard_dir, "sitecustomize.py"), "w") as f:
+        f.write(
+            "import socket, sys\n"
+            "def _guard(*a, **kw):\n"
+            "    with open(%r, 'a') as fh:\n"
+            "        fh.write(' '.join(sys.argv) + chr(10))\n"
+            "    raise AssertionError('network')\n"
+            "socket.create_connection = _guard\n"
+            "socket.getaddrinfo = _guard\n" % log
+        )
+    marker = os.path.join(home, ".claude", "brainbuddy", "latest-version")
+    cache = os.path.join(home, ".claude", "brainbuddy", "xp.cache")
+    try:
+        for opted, expect_net in (("true", True), ("false", False)):
+            open(log, "w").close()
+            if os.path.exists(marker):
+                os.remove(marker)
+            child = (
+                "import os\n"
+                "from brainbuddy import cli, state as sm\n"
+                "cli.main(['config', 'update_check', %r])\n"
+                "sm.write_cache(5, {})\n"
+                "os.utime(sm.CACHE_PATH, (1, 1))\n"
+                "cli.main(['render'])\n"
+            ) % opted
+            env = dict(os.environ, HOME=home, PYTHONPATH=guard_dir + os.pathsep + repo)
+            r = subprocess.run([sys.executable, "-c", child], env=env, input="{}",
+                               capture_output=True, text=True)
+            check(r.returncode == 0, "stale-cache render (%s) finishes clean (%s)" % (opted, r.stderr.strip()[-120:]))
+            deadline = _t.time() + 20
+            if expect_net:
+                while _t.time() < deadline and not os.path.exists(marker):
+                    _t.sleep(0.2)
+                lines = open(log).read().splitlines() if os.path.exists(log) else []
+                check(os.path.exists(marker), "opted in: the spawned refresh stamped its attempt")
+                check(len(lines) >= 1 and all("refresh" in l for l in lines),
+                      "every socket attempt came from the refresh child, none from the render: %r" % lines[:2])
+            else:
+                ino0 = None
+                try:
+                    ino0 = os.stat(cache).st_ino
+                except OSError:
+                    pass
+                while _t.time() < deadline and (ino0 is None or os.stat(cache).st_ino == ino0):
+                    _t.sleep(0.2)
+                check(os.stat(cache).st_ino != ino0, "opted out: the spawned refresh still ran (cache rewritten)")
+                _t.sleep(0.3)
+                lines = open(log).read().splitlines() if os.path.exists(log) else []
+                check(lines == [] and not os.path.exists(marker),
+                      "and no process, child included, made a network attempt or stamped anything")
+    finally:
+        shutil.rmtree(home)
+
 
 def test_project_statusline_override():
     """A project's own statusLine wins, and doctor is the only place that can say so.
@@ -1050,6 +1113,16 @@ def test_update_chip():
         with open(state_mod.LATEST_PATH, "w") as f:
             f.write("not json")
         check(not release.update_available(st["settings"]), "a corrupt cache reads as no cache, no crash")
+
+        # set_setting writes against the file as it is now, not a held snapshot
+        p = os.path.join(d, "state.json")
+        st1 = state_mod.load(p)
+        st1["settings"]["hidden"] = True
+        state_mod.save(st1, path=p, own_settings=True)
+        state_mod.set_setting("update_check_asked", True, path=p)
+        st2 = state_mod.load(p)
+        check(st2["settings"]["hidden"] and st2["settings"]["update_check_asked"],
+              "set_setting keeps a concurrent edit and lands its own key")
 
         # the daily gate: a fresh stamp means no fetch at all
         calls = []

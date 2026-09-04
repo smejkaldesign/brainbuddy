@@ -215,6 +215,18 @@ def write_cache(xp, counts, path=CACHE_PATH):
     os.replace(tmp, path)
 
 
+def set_setting(key, value, path=STATE_PATH):
+    """Set one setting against the file as it is NOW, not as it was loaded.
+
+    Callers holding a state snapshot across anything slow (a card's cold-start
+    scan, say) must not write their stale settings back wholesale; that is the
+    same revert `save`'s own_settings rule exists to stop.
+    """
+    st = load(path)
+    st["settings"][key] = value
+    save(st, path=path, own_settings=True)
+
+
 def read_latest(path=None):
     """Returns (version_or_empty, age_seconds) or None. Never raises.
 

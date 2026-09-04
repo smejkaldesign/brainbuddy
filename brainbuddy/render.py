@@ -157,15 +157,18 @@ def no_source_help(settings, status):
     ])
 
 
-def update_chip(settings, uni, word=True):
+def update_chip(settings, uni, word=True, available=None):
     """The update chip, or "". A fact off the cache, never a fetch: it exists
     only for opted-in users whose cached latest is newer than this install.
     Always painted whole and always last on its line; the word is the first
-    thing cut in tight densities, never the icon.
+    thing cut in tight densities, never the icon. Callers that need both
+    variants pass `available` so the cache is read once, not per variant.
     """
     from . import release
 
-    if not release.update_available(settings):
+    if available is None:
+        available = release.update_available(settings)
+    if not available:
         return ""
     icon = "⬆" if uni else "^"
     return paint(icon + " update" if word else icon, UPDATE)
@@ -201,9 +204,11 @@ def segment(st, xp=None, counts=None, gain=0):
     shown = full["name"] if state_mod.is_hatched(c) else "Unhatched"
 
     earned = (" " + paint("+%d XP" % gain, GAIN)) if gain > 0 else ""
-    chip_icon = update_chip(settings, uni, word=False)
+    from . import release
+    avail = release.update_available(settings)  # one cache read for both variants
+    chip_icon = update_chip(settings, uni, word=False, available=avail)
     chip_icon = (" " + chip_icon) if chip_icon else ""
-    chip_word = update_chip(settings, uni, word=True)
+    chip_word = update_chip(settings, uni, word=True, available=avail)
     chip_word = (" " + chip_word) if chip_word else ""
 
     if settings.get("density") == "sprite":

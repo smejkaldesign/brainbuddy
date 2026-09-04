@@ -67,9 +67,13 @@ def status_line(status, latest, current=__version__):
 
 def check():
     status, latest = fetch_latest()
-    # the chip reads this cache, so a manual check and the statusline agree
-    from . import state as state_mod
-    state_mod.write_latest(latest if status == "ok" else "")
+    # the chip reads this cache, so a manual check and the statusline agree.
+    # a cache that can't be written is not worth failing the answer over
+    try:
+        from . import state as state_mod
+        state_mod.write_latest(latest if status == "ok" else "")
+    except Exception:
+        pass
     return status_line(status, latest)
 
 
