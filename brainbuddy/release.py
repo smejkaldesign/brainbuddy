@@ -1,9 +1,11 @@
 """Version discovery. The only code in brainbuddy that opens a socket.
 
-Nothing imports this unless the user asked: `update`, or `doctor --check`. A pet
-that phoned home from the statusline would be checking for updates a few times a
-second and reading as spyware while it did it, so the check is explicit or it
-doesn't happen. One request per invocation, no retries, no caching.
+A socket opens on exactly three paths, all consented: `update`, `doctor
+--check`, and, only for users who set `update_check` on, the background
+refresh's once-a-day `maybe_refresh_latest`. A pet that phoned home from the
+statusline would be checking a few times a second and reading as spyware, so
+the render path only ever reads the cache those three write. One request per
+invocation, no retries; the daily check caches under a 24h stamp.
 """
 
 import json
@@ -32,10 +34,13 @@ def fetch_latest(url=PYPI_URL, timeout=TIMEOUT):
 
     status is ok, unpublished (nothing under that name yet) or unreachable.
     """
-    import urllib.error  # kept off module import, so `from . import release` stays cheap
-    import urllib.request
-
     try:
+        # kept off module import so `from . import release` stays cheap, and
+        # inside the try because a python built without ssl can't import
+        # urllib.request at all, which is still just "unreachable" to us
+        import urllib.error
+        import urllib.request
+
         with urllib.request.urlopen(url, timeout=timeout) as response:
             data = json.loads(response.read().decode("utf-8"))
         return "ok", data["info"]["version"]
@@ -53,7 +58,7 @@ def status_line(status, latest, current=__version__):
     if status == "unreachable":
         return "couldn't reach pypi just now. you're on %s, try again when it's back." % current
     if _parts(latest) > _parts(current):
-        return "brainbuddy %s is out, you're on %s; re-run your installer (or pipx upgrade brainbuddy)." % (
+        return "brainbuddy %s is out, you're on %s; re-run your installer, pipx upgrade brainbuddy, or take the plugin update." % (
             latest, current)
     if _parts(latest) < _parts(current):
         return "you're on %s and pypi has %s, so you're ahead of the release." % (current, latest)
@@ -61,4 +66,36 @@ def status_line(status, latest, current=__version__):
 
 
 def check():
-    return status_line(*fetch_latest())
+    status, latest = fetch_latest()
+    # the chip reads this cache, so a manual check and the statusline agree
+    from . import state as state_mod
+    state_mod.write_latest(latest if status == "ok" else "")
+    return status_line(status, latest)
+
+
+def maybe_refresh_latest(settings):
+    """The once-a-day check the background refresh carries. Opt-in only.
+
+    Failures stamp the cache too, so an offline machine retries tomorrow
+    rather than on every refresh, and never more than once per TTL.
+    """
+    if not settings.get("update_check"):
+        return
+    from . import state as state_mod
+    cached = state_mod.read_latest()
+    if cached is not None and cached[1] < state_mod.UPDATE_TTL:
+        return
+    status, latest = fetch_latest()
+    state_mod.write_latest(latest if status == "ok" else "")
+
+
+def update_available(settings, current=__version__):
+    """True when the cached check says a newer version exists. Reads a file,
+    never the network: the render path calls this on every draw."""
+    if not settings.get("update_check"):
+        return False
+    from . import state as state_mod
+    cached = state_mod.read_latest()
+    if not cached or not cached[0]:
+        return False
+    return _parts(cached[0]) > _parts(current)

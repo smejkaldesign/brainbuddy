@@ -27,7 +27,7 @@ USAGE = """brainbuddy - a terminal pet that evolves with your memory
   rename <old> <new>
   retire <name>
   config              show settings
-  config <key> <val>  set one (provider, vault_root, xp_max, density, columns, sprite_height, unicode, border, hidden)
+  config <key> <val>  set one (provider, vault_root, xp_max, density, columns, sprite_height, unicode, border, hidden, update_check)
   hide / show         drop the creature from the statusline, or bring it back
   simulate <xp>       preview any level without touching your real state
   refresh             recompute the xp cache (run in the background by render)
@@ -128,6 +128,12 @@ def cmd_refresh(args):
     st = _load()
     event = state_mod.sync(st, xp)
     state_mod.save(st)
+    try:
+        # opt-in and TTL-gated inside; the xp cache above never waits on it
+        from . import release
+        release.maybe_refresh_latest(st["settings"])
+    except Exception:
+        pass
     if event:
         print(render.evolution_notice(event, st))
     return 0
@@ -139,6 +145,15 @@ def cmd_card(args):
     state_mod.sync(st, xp)
     state_mod.save(st)
     print(render.card(st))
+    s = st["settings"]
+    if not s.get("update_check") and not s.get("update_check_asked"):
+        # the one-time offer. default-off would otherwise mean nobody who
+        # didn't hatch after this shipped ever learns the check exists
+        print("\nit can check once a day whether a newer brainbuddy exists: one request to")
+        print("pypi.org for a version number, nothing about you or your notes goes anywhere.")
+        print("  /brainbuddy config update_check true")
+        s["update_check_asked"] = True
+        state_mod.save(st, own_settings=True)
     return 0
 
 
@@ -348,7 +363,7 @@ def cmd_config(args):
         if value < 1:
             print("xp_max must be positive")
             return 1
-    elif key in ("unicode", "hidden", "border"):
+    elif key in ("unicode", "hidden", "border", "update_check", "update_check_asked"):
         value = raw.lower() in ("1", "true", "yes", "on")
     elif key == "density":
         if raw not in ("compact", "minimal", "full", "sprite", "ruler"):
@@ -524,6 +539,16 @@ def cmd_doctor(args):
     override = _project_override()
     if override:
         print("\n" + override)
+    uc = settings.get("update_check")
+    cached = state_mod.read_latest()
+    if not uc:
+        print("update check: off. `config update_check true` turns on a once-a-day check.")
+    elif cached is None:
+        print("update check: on, hasn't checked yet")
+    elif cached[0]:
+        print("update check: on, last checked %s ago, latest is %s" % (_rough_age(cached[1]), cached[0]))
+    else:
+        print("update check: on, last try %s ago didn't reach pypi" % _rough_age(cached[1]))
     help_text = render.no_source_help(settings, status)
     if help_text:
         print("\n" + help_text)
@@ -532,9 +557,17 @@ def cmd_doctor(args):
     return 0
 
 
+def _rough_age(seconds):
+    if seconds < 3600:
+        return "%dm" % max(1, seconds // 60)
+    if seconds < 86400:
+        return "%dh" % (seconds // 3600)
+    return "%dd" % (seconds // 86400)
+
+
 def _version_check():
-    # imported here, not at the top: this is the one path allowed a socket, and
-    # keeping the import inside it is what proves the rest never gets one
+    # imported here, not at the top. the socket paths are this, and refresh's
+    # opt-in daily check; keeping the imports inside them keeps that legible
     from . import release
 
     return release.check()

@@ -82,9 +82,9 @@ Short enough to check yourself.
 - **It never prints a path it matched**, in any mode including `doctor`, which reports a home-relative root and counts rather than filenames. Filenames alone leak more than people expect.
 - **All state is local**, at `~/.claude/brainbuddy/`. The roster, your settings, and the XP cache. Nothing else, nowhere else.
 - **Zero network at runtime.** No telemetry, no analytics, no background phone-home. Nothing brainbuddy runs on your statusline ever touches the network, on any render.
-- **The only network calls are the ones you run on purpose.** Two of them: the installer downloading a release tarball from `api.github.com`, and the version check in `brainbuddy update` and `brainbuddy doctor --check`, which reads pypi's public package metadata to compare version numbers. One request per invocation, no retries, no caching. Both are unauthenticated GETs, and neither sends anything about you or your memory.
+- **The only network calls are the ones you allowed.** Two you run by hand: the installer downloading a release tarball from `api.github.com`, and the version check in `brainbuddy update` and `brainbuddy doctor --check`, which reads pypi's public package metadata to compare version numbers. And one you can opt into: `config update_check true` lets the background refresh make that same version request **once a day**, so a yellow `⬆ update` chip can appear in your statusline when a release is out. It's off by default, asked as a question, and the render itself still only ever reads the cached answer. Every one of these is an unauthenticated GET that sends nothing about you or your memory.
 
-Three tests enforce this. A runtime trap patches every file-reading builtin and asserts none fire during a measurement. A static pass tokenizes `metric.py` and fails if a reader appears in the code at all. A third records every socket call and fails if anything other than `update` and `doctor --check` opens one, which is the rule that keeps the statusline honest: it renders several times a second, so a background check there would be indistinguishable from telemetry. On top of that a leak guard runs in CI and as a `pre-push` hook, failing the build if an absolute home path or a vault-shaped filename ever reaches the repo.
+Three tests enforce this. A runtime trap patches every file-reading builtin and asserts none fire during a measurement. A static pass tokenizes `metric.py` and fails if a reader appears in the code at all. A third records every socket call and fails if anything opens one outside `update`, `doctor --check`, and the opted-in daily check, which is the rule that keeps the statusline honest: it renders several times a second, so an unconsented check there would be indistinguishable from telemetry, and the render path itself is asserted network-free in both settings. On top of that a leak guard runs in CI and as a `pre-push` hook, failing the build if an absolute home path or a vault-shaped filename ever reaches the repo.
 
 ---
 
@@ -405,6 +405,7 @@ brainbuddy sources           what it can count, and what to do if that's nothing
 brainbuddy doctor            what can it see, and why is it zero
 brainbuddy doctor --check    the same, plus a version check against pypi
 brainbuddy update            ask pypi whether there's a newer brainbuddy
+brainbuddy config update_check true   opt in to the once-a-day check behind the ⬆ chip
 brainbuddy render            the one-line statusline segment
 brainbuddy compose "<text>"  your statusline text, creature as a left column
 brainbuddy refresh           recompute the xp cache

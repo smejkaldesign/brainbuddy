@@ -21,6 +21,9 @@ RARITY_COLOR = {
 DIM = "\033[2m"
 # session gain reads as a gain, so green. it is not a rarity, it just shares the code
 GAIN = "\033[32m"
+# bold yellow, its own constant on purpose: flat yellow is the Uncommon tint,
+# and an Uncommon creature must not wear the chip's colour on its own face
+UPDATE = "\033[1;33m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
 # 256-colour grey rather than \033[90m, which themes remap and some render near-white.
@@ -154,6 +157,20 @@ def no_source_help(settings, status):
     ])
 
 
+def update_chip(settings, uni, word=True):
+    """The update chip, or "". A fact off the cache, never a fetch: it exists
+    only for opted-in users whose cached latest is newer than this install.
+    Always painted whole and always last on its line; the word is the first
+    thing cut in tight densities, never the icon.
+    """
+    from . import release
+
+    if not release.update_available(settings):
+        return ""
+    icon = "⬆" if uni else "^"
+    return paint(icon + " update" if word else icon, UPDATE)
+
+
 def segment(st, xp=None, counts=None, gain=0):
     """One line for the statusline. Empty string means render nothing."""
     settings = st["settings"]
@@ -184,15 +201,20 @@ def segment(st, xp=None, counts=None, gain=0):
     shown = full["name"] if state_mod.is_hatched(c) else "Unhatched"
 
     earned = (" " + paint("+%d XP" % gain, GAIN)) if gain > 0 else ""
+    chip_icon = update_chip(settings, uni, word=False)
+    chip_icon = (" " + chip_icon) if chip_icon else ""
+    chip_word = update_chip(settings, uni, word=True)
+    chip_word = (" " + chip_word) if chip_word else ""
 
     if settings.get("density") == "sprite":
-        return sprite_block(full, "%s %s%s" % (shown, label, mark), idx, tint, settings)
+        return sprite_block(full, "%s %s%s%s" % (shown, label, mark, chip_icon), idx, tint, settings)
     if settings.get("density") == "minimal":
-        # one glyph is the whole point of minimal, so no counter here
+        # one glyph is the whole point of minimal, so no counter and no chip
         return paint(sprites.glyph(idx, uni) + shiny, tint)
     if settings.get("density") == "full":
-        return "%s %s %s%s" % (paint(f + shiny, tint), paint(shown, BOLD), paint("%s %s" % (label, mark), DIM), earned)
-    return "%s %s%s" % (paint(f + shiny + mark, tint), paint(label, DIM), earned)
+        return "%s %s %s%s%s" % (paint(f + shiny, tint), paint(shown, BOLD), paint("%s %s" % (label, mark), DIM), earned, chip_word)
+    # compact's ~10 columns are a contract, so the chip is icon-only here
+    return "%s %s%s%s" % (paint(f + shiny + mark, tint), paint(label, DIM), earned, chip_icon)
 
 
 
@@ -275,11 +297,14 @@ def compose(st, left, xp=None, counts=None, gain=0):
     if hatched:
         # painted in pieces. wrapping the finished string in BOLD would end at
         # the gain's own reset and leave the bar unbolded. the gain reads as a
-        # delta on the bar, so it sits to the bar's right
+        # delta on the bar, so it sits to the bar's right, and the chip last
         caption = paint("%s %s · %s Lv%d" % (icon, full["name"], stage, level), BOLD)
         caption += " " + paint(sprites.bar(frac, 6, uni), BOLD)
         if gain > 0:
             caption += " " + paint("+%d XP" % gain, GAIN)
+        chip = update_chip(settings, uni, word=True)
+        if chip:
+            caption += " " + chip
     else:
         # no name, no level, no progress bar: the name is chosen at the hatch
         # and everything else would spoil the reveal before you open it

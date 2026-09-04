@@ -17,6 +17,8 @@ STATE_DIR = os.path.expanduser("~/.claude/brainbuddy")
 STATE_PATH = os.path.join(STATE_DIR, "state.json")
 CACHE_PATH = os.path.join(STATE_DIR, "xp.cache")
 CACHE_TTL = 60
+LATEST_PATH = os.path.join(STATE_DIR, "latest-version")
+UPDATE_TTL = 24 * 3600
 
 # bumped when the file's shape changes. `migrate` is what actually reads it, and
 # an upgrade that de-levels someone's buddy is the one failure with no undo
@@ -33,6 +35,8 @@ DEFAULT_SETTINGS = {
     "unicode": True,
     "hidden": False,          # keep the creature out of the statusline without uninstalling
     "border": True,           # box the compose column. costs two rows of height
+    "update_check": False,    # opt-in: refresh may ask pypi for the latest version once a day
+    "update_check_asked": False,  # the one-time offer was shown; never show it again
 }
 
 
@@ -208,6 +212,32 @@ def write_cache(xp, counts, path=CACHE_PATH):
     tmp = "%s.%d.tmp" % (path, os.getpid())
     with open(tmp, "w") as f:
         json.dump({"xp": xp, "counts": counts}, f)
+    os.replace(tmp, path)
+
+
+def read_latest(path=None):
+    """Returns (version_or_empty, age_seconds) or None. Never raises.
+
+    An empty version is a stamped failed attempt: the TTL still counts from
+    it, so an offline machine retries tomorrow rather than on every refresh.
+    path resolves at call time so tests can point LATEST_PATH elsewhere.
+    """
+    path = path or LATEST_PATH
+    try:
+        st = os.stat(path)
+        with open(path, "r") as f:
+            data = json.load(f)
+        return str(data.get("version") or ""), time.time() - st.st_mtime
+    except (OSError, ValueError):
+        return None
+
+
+def write_latest(version, path=None):
+    path = path or LATEST_PATH
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    with open(tmp, "w") as f:
+        json.dump({"version": version or ""}, f)
     os.replace(tmp, path)
 
 
