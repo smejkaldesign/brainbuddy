@@ -474,6 +474,104 @@ def test_version_check_is_explicit_only():
     finally:
         shutil.rmtree(home)
 
+    # opted in, the refresh gets exactly one attempt per TTL, and the render
+    # path still gets none: it reads the cache the attempt stamped. the class
+    # itself stays unpatched here because ssl subclasses socket.socket on
+    # import; the two call-path functions are the guard
+    home = tempfile.mkdtemp(prefix="bb-optin-")
+    log = os.path.join(home, "net.log")
+    child = (
+        "import socket, sys\n"
+        "def guard(*a, **kw):\n"
+        "    open(%r, 'a').write('called\\n')\n"
+        "    raise AssertionError('network')\n"
+        "socket.create_connection = guard\n"
+        "socket.getaddrinfo = guard\n"
+        "from brainbuddy import cli\n"
+        "cli.main(['config', 'update_check', 'true'])\n"
+        "cli.main(['refresh'])\n"
+        "cli.main(['render'])\n"
+        "cli.main(['compose', 'BAR'])\n"
+        "cli.main(['refresh'])\n"
+        "try:\n"
+        "    socket.getaddrinfo('pypi.invalid', 443)\n"
+        "except AssertionError:\n"
+        "    pass\n"
+    ) % log
+    try:
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo)
+        r = subprocess.run([sys.executable, "-c", child], env=env, input="{}",
+                           capture_output=True, text=True)
+        check(r.returncode == 0, "the opted-in run finishes clean (%s)" % r.stderr.strip()[-120:])
+        calls = open(log).read().splitlines() if os.path.exists(log) else []
+        check(len(calls) == 2,
+              "opted in: one attempt from the first refresh, none from render or the stamped second, plus the probe; got %d" % len(calls))
+    finally:
+        shutil.rmtree(home)
+
+    # the real statusline ordering: the xp cache goes stale, render spawns the
+    # detached recount, and THAT child is where an opted-in fetch happens. an
+    # in-process guard can't see across the fork, so a sitecustomize on
+    # PYTHONPATH guards every python process this test starts, children included
+    import time as _t
+
+    home = tempfile.mkdtemp(prefix="bb-spawn-")
+    log = os.path.join(home, "net.log")
+    guard_dir = os.path.join(home, "guard")
+    os.makedirs(guard_dir)
+    with open(os.path.join(guard_dir, "sitecustomize.py"), "w") as f:
+        f.write(
+            "import socket, sys\n"
+            "def _guard(*a, **kw):\n"
+            "    with open(%r, 'a') as fh:\n"
+            "        fh.write(' '.join(sys.argv) + chr(10))\n"
+            "    raise AssertionError('network')\n"
+            "socket.create_connection = _guard\n"
+            "socket.getaddrinfo = _guard\n" % log
+        )
+    marker = os.path.join(home, ".claude", "brainbuddy", "latest-version")
+    cache = os.path.join(home, ".claude", "brainbuddy", "xp.cache")
+    try:
+        for opted, expect_net in (("true", True), ("false", False)):
+            open(log, "w").close()
+            if os.path.exists(marker):
+                os.remove(marker)
+            child = (
+                "import os\n"
+                "from brainbuddy import cli, state as sm\n"
+                "cli.main(['config', 'update_check', %r])\n"
+                "sm.write_cache(5, {})\n"
+                "os.utime(sm.CACHE_PATH, (1, 1))\n"
+                "cli.main(['render'])\n"
+            ) % opted
+            env = dict(os.environ, HOME=home, PYTHONPATH=guard_dir + os.pathsep + repo)
+            r = subprocess.run([sys.executable, "-c", child], env=env, input="{}",
+                               capture_output=True, text=True)
+            check(r.returncode == 0, "stale-cache render (%s) finishes clean (%s)" % (opted, r.stderr.strip()[-120:]))
+            deadline = _t.time() + 20
+            if expect_net:
+                while _t.time() < deadline and not os.path.exists(marker):
+                    _t.sleep(0.2)
+                lines = open(log).read().splitlines() if os.path.exists(log) else []
+                check(os.path.exists(marker), "opted in: the spawned refresh stamped its attempt")
+                check(len(lines) >= 1 and all("refresh" in l for l in lines),
+                      "every socket attempt came from the refresh child, none from the render: %r" % lines[:2])
+            else:
+                ino0 = None
+                try:
+                    ino0 = os.stat(cache).st_ino
+                except OSError:
+                    pass
+                while _t.time() < deadline and (ino0 is None or os.stat(cache).st_ino == ino0):
+                    _t.sleep(0.2)
+                check(os.stat(cache).st_ino != ino0, "opted out: the spawned refresh still ran (cache rewritten)")
+                _t.sleep(0.3)
+                lines = open(log).read().splitlines() if os.path.exists(log) else []
+                check(lines == [] and not os.path.exists(marker),
+                      "and no process, child included, made a network attempt or stamped anything")
+    finally:
+        shutil.rmtree(home)
+
 
 def test_project_statusline_override():
     """A project's own statusLine wins, and doctor is the only place that can say so.
@@ -971,6 +1069,96 @@ def test_hatch_naming():
     check(c["name"] == "Zephyr" and state_mod.is_hatched(c), "a chosen name survives the reveal")
 
 
+def test_update_chip():
+    """The chip is a fact off the cache: opted in and newer, or it isn't there.
+
+    It never fetches; these cases run with no network at all. The cache path
+    resolves at call time, so pointing LATEST_PATH at a temp dir is enough.
+    """
+    print("\nupdate chip")
+    os.environ["NO_COLOR"] = "1"
+    from brainbuddy import release, render
+
+    d = tempfile.mkdtemp(prefix="bb-chip-")
+    real_path = state_mod.LATEST_PATH
+    state_mod.LATEST_PATH = os.path.join(d, "latest-version")
+    try:
+        st = state_mod.default_state()
+        c = _hatched(st, name="Zask")
+        c["xp_banked"] = 80
+        st["settings"]["unicode"] = True
+
+        state_mod.write_latest("9.9.9")
+        check(not release.update_available(st["settings"]), "a newer cache without consent is not an update")
+        cap = next(r for r in render.compose(st, "BAR", xp=80, counts={}, gain=5).split("\n") if "Lv" in r)
+        check("⬆" not in cap, "so no chip renders while opted out")
+
+        st["settings"]["update_check"] = True
+        check(release.update_available(st["settings"]), "opted in with a newer cache is one")
+        cap = next(r for r in render.compose(st, "BAR", xp=80, counts={}, gain=5).split("\n") if "Lv" in r)
+        check("⬆ update" in cap, "compose gets icon and word")
+        check(cap.index("+5 XP") < cap.index("⬆"), "and the chip sits last, right of the counter")
+        seg = render.segment(st, xp=80, counts={}, gain=5)
+        check("⬆" in seg and "update" not in seg, "compact gets the icon only, the word is cut first")
+        st["settings"]["density"] = "full"
+        check("⬆ update" in render.segment(st, xp=80, counts={}, gain=5), "full has room for the word")
+        st["settings"]["density"] = "minimal"
+        check("⬆" not in render.segment(st, xp=80, counts={}), "minimal stays one glyph, chip included")
+
+        # sprite pads by visible width, and the chip's escapes must not count.
+        # colour ON here on purpose: NO_COLOR hid this exact bug from the suite
+        import re
+        os.environ.pop("NO_COLOR", None)
+        st["settings"]["density"] = "sprite"
+        st["settings"]["columns"] = 24
+        line = render.segment(st, xp=80, counts={}).split("\n")[-1]
+        clean = re.sub(r"\x1b\[[0-9;]*m", "", line)
+        check(len(clean) == 24 and clean.endswith("⬆"),
+              "sprite caption stays right-aligned with the chip on, got %d cols" % len(clean))
+        check("\x1b[1;33m" in line, "and the chip is painted independently, not inside the DIM span")
+        os.environ["NO_COLOR"] = "1"
+        st["settings"]["density"] = "compact"
+        st["settings"]["columns"] = 0
+
+        state_mod.write_latest("0.0.1")
+        check(not release.update_available(st["settings"]), "an older cache is not an update")
+        state_mod.write_latest("")
+        check(not release.update_available(st["settings"]), "neither is a stamped failed attempt")
+        with open(state_mod.LATEST_PATH, "w") as f:
+            f.write("not json")
+        check(not release.update_available(st["settings"]), "a corrupt cache reads as no cache, no crash")
+
+        # set_setting writes against the file as it is now, not a held snapshot
+        p = os.path.join(d, "state.json")
+        st1 = state_mod.load(p)
+        st1["settings"]["hidden"] = True
+        state_mod.save(st1, path=p, own_settings=True)
+        state_mod.set_setting("update_check_asked", True, path=p)
+        st2 = state_mod.load(p)
+        check(st2["settings"]["hidden"] and st2["settings"]["update_check_asked"],
+              "set_setting keeps a concurrent edit and lands its own key")
+
+        # the daily gate: a fresh stamp means no fetch at all
+        calls = []
+        real_fetch = release.fetch_latest
+        release.fetch_latest = lambda *a, **k: calls.append(1) or ("ok", "9.9.9")
+        try:
+            state_mod.write_latest("9.9.9")
+            release.maybe_refresh_latest(st["settings"])
+            check(calls == [], "a fresh stamp means no fetch")
+            os.utime(state_mod.LATEST_PATH, (1, 1))
+            release.maybe_refresh_latest(st["settings"])
+            check(len(calls) == 1, "a stale one means exactly one")
+            release.maybe_refresh_latest({"update_check": False})
+            check(len(calls) == 1, "and opted out means none, stale or not")
+        finally:
+            release.fetch_latest = real_fetch
+    finally:
+        state_mod.LATEST_PATH = real_path
+        os.environ.pop("NO_COLOR", None)
+        shutil.rmtree(d)
+
+
 def test_refresh_never_reverts_concurrent_writes():
     """A background refresh must not hold a roster snapshot across the scan.
 
@@ -1029,6 +1217,7 @@ def test_migration_replaces_nulls():
 
 if __name__ == "__main__":
     test_metric()
+    test_update_chip()
     test_hatch_naming()
     test_refresh_never_reverts_concurrent_writes()
     test_migration_replaces_nulls()

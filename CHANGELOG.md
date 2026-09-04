@@ -3,6 +3,16 @@
 Notable changes, newest first. Versions follow semver; the version lives in
 `brainbuddy/__init__.py` and each release is the matching `v*` tag.
 
+## Unreleased
+
+- Opt-in update alert: `config update_check true` lets the background refresh
+  ask pypi once a day for the latest version number, and a yellow `⬆ update`
+  chip appears at the end of the statusline when a release is out, leaving on
+  its own after you upgrade. Off by default, asked once after the hatch, and
+  the render path still never touches the network in either setting; the
+  socket test now proves both. Existing installs get a one-time offer from
+  `/brainbuddy`, and `doctor` reports the check's state and last run.
+
 ## 1.1.0
 
 - An egg renders as Unhatched everywhere, never as a name. The name is chosen

@@ -21,6 +21,9 @@ RARITY_COLOR = {
 DIM = "\033[2m"
 # session gain reads as a gain, so green. it is not a rarity, it just shares the code
 GAIN = "\033[32m"
+# bold yellow, its own constant on purpose: flat yellow is the Uncommon tint,
+# and an Uncommon creature must not wear the chip's colour on its own face
+UPDATE = "\033[1;33m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
 # 256-colour grey rather than \033[90m, which themes remap and some render near-white.
@@ -154,6 +157,23 @@ def no_source_help(settings, status):
     ])
 
 
+def update_chip(settings, uni, word=True, available=None):
+    """The update chip, or "". A fact off the cache, never a fetch: it exists
+    only for opted-in users whose cached latest is newer than this install.
+    Always painted whole and always last on its line; the word is the first
+    thing cut in tight densities, never the icon. Callers that need both
+    variants pass `available` so the cache is read once, not per variant.
+    """
+    from . import release
+
+    if available is None:
+        available = release.update_available(settings)
+    if not available:
+        return ""
+    icon = "⬆" if uni else "^"
+    return paint(icon + " update" if word else icon, UPDATE)
+
+
 def segment(st, xp=None, counts=None, gain=0):
     """One line for the statusline. Empty string means render nothing."""
     settings = st["settings"]
@@ -184,15 +204,25 @@ def segment(st, xp=None, counts=None, gain=0):
     shown = full["name"] if state_mod.is_hatched(c) else "Unhatched"
 
     earned = (" " + paint("+%d XP" % gain, GAIN)) if gain > 0 else ""
+    from . import release
+    avail = release.update_available(settings)  # one cache read for both variants
+    chip_icon = update_chip(settings, uni, word=False, available=avail)
+    chip_icon = (" " + chip_icon) if chip_icon else ""
+    chip_word = update_chip(settings, uni, word=True, available=avail)
+    chip_word = (" " + chip_word) if chip_word else ""
 
     if settings.get("density") == "sprite":
-        return sprite_block(full, "%s %s%s" % (shown, label, mark), idx, tint, settings)
+        return sprite_block(full, "%s %s%s" % (shown, label, mark), idx, tint, settings,
+                            chip=update_chip(settings, uni, word=False, available=avail))
     if settings.get("density") == "minimal":
-        # one glyph is the whole point of minimal, so no counter here
+        # one glyph is the whole point of minimal, so no counter and no chip
         return paint(sprites.glyph(idx, uni) + shiny, tint)
     if settings.get("density") == "full":
-        return "%s %s %s%s" % (paint(f + shiny, tint), paint(shown, BOLD), paint("%s %s" % (label, mark), DIM), earned)
-    return "%s %s%s" % (paint(f + shiny + mark, tint), paint(label, DIM), earned)
+        # rstrip: Common's empty mark left a trailing space, invisible at line
+        # end until the chip started rendering after it
+        return "%s %s %s%s%s" % (paint(f + shiny, tint), paint(shown, BOLD), paint(("%s %s" % (label, mark)).rstrip(), DIM), earned, chip_word)
+    # compact's ~10 columns are a contract, so the chip is icon-only here
+    return "%s %s%s%s" % (paint(f + shiny + mark, tint), paint(label, DIM), earned, chip_icon)
 
 
 
@@ -275,11 +305,14 @@ def compose(st, left, xp=None, counts=None, gain=0):
     if hatched:
         # painted in pieces. wrapping the finished string in BOLD would end at
         # the gain's own reset and leave the bar unbolded. the gain reads as a
-        # delta on the bar, so it sits to the bar's right
+        # delta on the bar, so it sits to the bar's right, and the chip last
         caption = paint("%s %s · %s Lv%d" % (icon, full["name"], stage, level), BOLD)
         caption += " " + paint(sprites.bar(frac, 6, uni), BOLD)
         if gain > 0:
             caption += " " + paint("+%d XP" % gain, GAIN)
+        chip = update_chip(settings, uni, word=True)
+        if chip:
+            caption += " " + chip
     else:
         # no name, no level, no progress bar: the name is chosen at the hatch
         # and everything else would spoil the reveal before you open it
@@ -322,12 +355,16 @@ def compose(st, left, xp=None, counts=None, gain=0):
     return "\n".join(rows)
 
 
-def sprite_block(full, label, stage_index, tint, settings):
+def sprite_block(full, label, stage_index, tint, settings, chip=""):
     """Full creature on its own rows, for multi-line statuslines.
 
     Right-aligns to settings["columns"] because a statusline script can't learn
     the real terminal width. There's no field for it on stdin and /dev/tty
     isn't attached, so the width has to be declared rather than measured.
+
+    The chip arrives separately and painted: measuring it inside the label
+    would count its escapes as columns, and folding it into the DIM span
+    would leave it dimmed instead of independently painted.
     """
     art = sprites.sprite(full["species"], stage_index, full["shiny"], short=settings.get("sprite_height", 5) <= 3)
     while art and not art[-1].strip():
@@ -338,8 +375,13 @@ def sprite_block(full, label, stage_index, tint, settings):
     for row in art:
         pad = " " * max(0, cols - len(row))
         rows.append(pad + paint(row, tint))
-    pad = " " * max(0, cols - len(label))
-    rows.append(pad + paint(label, DIM))
+    caption = paint(label, DIM)
+    width = len(label)
+    if chip:
+        caption += " " + chip
+        width += 2  # one icon and its space, whatever escapes wrap them
+    pad = " " * max(0, cols - width)
+    rows.append(pad + caption)
     return "\n" + "\n".join(rows)
 
 

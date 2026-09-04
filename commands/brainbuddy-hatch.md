@@ -98,6 +98,19 @@ card, so don't also run `card` afterwards.
 `hatch` measures the source fresh rather than trusting the cache, so a provider set seconds
 earlier is scored correctly.
 
+## Step 4: offer the daily update check (after the reveal, never before)
+
+Once, right after the reveal lands. Nothing bureaucratic gets to stand in front of the payoff,
+so this always comes after the creature is on screen. Ask exactly this, default No:
+
+> Want it to check once a day whether a newer brainbuddy exists? One request to pypi.org for
+> a version number; nothing about you or your notes goes anywhere. Off unless you say yes.
+
+On yes: `config update_check true`. Either way: `config update_check_asked true`, and never
+ask again, on this egg or any later one. When it's on and a newer version exists, a yellow
+`⬆ update` chip appears at the end of the statusline caption and leaves on its own after the
+upgrade.
+
 ## It opens at the level it earned
 
 An egg banks XP the whole time it's closed, so hatching reveals whatever level that XP adds
