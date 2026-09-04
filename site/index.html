@@ -252,7 +252,7 @@
   .sim-note code { font-size: 12px; }
 
   /* provider picker */
-  .providers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 22px; }
+  .providers { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 22px; }
   .provider { text-align: left; background: var(--card); border: 1px solid var(--line-2); border-radius: 8px; padding: 20px 18px 18px; color: inherit; transition: border-color .15s, background .15s; }
   .provider:hover { border-color: var(--gold); }
   .provider[aria-pressed="true"] { border-color: var(--gold); background: rgba(var(--gold-rgb), .06); box-shadow: 0 0 0 1px rgba(var(--gold-rgb), .35); }
@@ -463,13 +463,19 @@
   <div class="wrap">
     <p class="label">Pick your source</p>
     <h2>What does it get to eat?</h2>
-    <p class="desc">Three providers. Pick one and the install command updates live. The first hatch asks the same question, with a file count for everything it finds.</p>
+    <p class="desc">Four providers. Pick one and the command updates live. Fresh installs default to <code>auto</code>: every agent when it finds more than one on the machine, Claude Code alone otherwise. The first hatch asks the same question, with a file count for everything it finds.</p>
     <div class="providers" role="group" aria-label="Memory provider">
       <button class="provider" data-provider="claude" aria-pressed="true">
         <div class="p-name">claude</div>
         <div class="p-title">Claude Code memory</div>
         <p class="p-desc">Stock memory under <code>~/.claude/projects/*/memory</code>. Nothing to set.</p>
         <div class="p-weight">every memory ×3</div>
+      </button>
+      <button class="provider" data-provider="agents" aria-pressed="false">
+        <div class="p-name">agents</div>
+        <div class="p-title">Every agent on the machine</div>
+        <p class="p-desc">One union of every agent's memory it can find: Claude Code, Codex, Gemini, Copilot, Cursor, Qwen, Droid, opencode, Amp, Goose, Continue, Kiro, Cline and Crush. Counts by product, never by path.</p>
+        <div class="p-weight">memories ×3 · rules ×2 · session logs ×1</div>
       </button>
       <button class="provider" data-provider="folder" aria-pressed="false">
         <div class="p-name">folder</div>
@@ -494,7 +500,7 @@
       <button class="copy" data-copy="#src-cmd" aria-label="Copy install command">copy</button>
     </div>
     <div class="zero">
-      <b>No notes yet?</b> Then there's nothing to count and your buddy sits at level 0, which is a fair reading rather than a bug. <code>terminalcreature doctor</code> names the cause, and the hatch flow offers to set a memory system up. XP follows on the next render once files start landing.
+      <b>No notes yet?</b> Then there's nothing to count and your buddy sits at level 0, which is a fair reading rather than a bug. <code>terminalcreature doctor</code> names the cause, and the hatch flow offers to set a memory system up. XP follows on the next render once files start landing. <code>terminalcreature sources</code> lists which agents it found and how many files each has, never a path.
     </div>
   </div>
 </section>
@@ -916,13 +922,13 @@
   var provider = "claude", pathIn = document.getElementById("path"), pathrow = document.getElementById("pathrow");
   function cmd() {
     var p = pathIn.value.trim() || "~/notes";
-    document.getElementById("src-cmd").textContent = provider === "claude" ? BASE : BASE + " -s -- --" + provider + " " + p;
+    document.getElementById("src-cmd").textContent = provider === "claude" ? BASE : provider === "agents" ? "terminalcreature config provider agents" : BASE + " -s -- --" + provider + " " + p;
   }
   Array.prototype.forEach.call(document.querySelectorAll(".provider"), function (b) {
     b.addEventListener("click", function () {
       provider = b.getAttribute("data-provider");
       Array.prototype.forEach.call(document.querySelectorAll(".provider"), function (o) { o.setAttribute("aria-pressed", String(o === b)); });
-      pathrow.hidden = provider === "claude";
+      pathrow.hidden = provider === "claude" || provider === "agents";
       if (provider === "vault" && pathIn.value === "~/notes") pathIn.value = "~/brain";
       if (provider === "folder" && pathIn.value === "~/brain") pathIn.value = "~/notes";
       cmd();
