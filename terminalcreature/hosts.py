@@ -23,13 +23,16 @@ FIELD_MAP = {
         "context_used_pct": ("context_window.used_percentage", "context_window.percentage",
                              "context_usage.used_percentage"),
     },
+    # read off the cursor cli 2026.09 bundle: claude's shape plus render_width_chars
+    # and autorun, with session_name, vim and worktree when they apply
     "cursor": {
-        "session_id": ("session_id", "conversation_id"),
-        "model": ("model.display_name", "model"),
-        "workspace": ("workspace.current_dir", "cwd", "workspace_roots"),
-        "context_used_pct": ("context_window.used_percentage", "context_usage.used_percentage",
-                             "context_usage.percentage"),
+        "session_id": ("session_id",),
+        "model": ("model.display_name", "model.id"),
+        "workspace": ("workspace.current_dir", "cwd"),
+        "context_used_pct": ("context_window.used_percentage",),
     },
+    # read off the copilot cli 1.0.82 bundle: claude's shape plus session_name,
+    # username, remote, ai_used and allow_all_enabled
     "copilot": {
         "session_id": ("session_id",),
         "model": ("model.display_name", "model.id"),
@@ -54,10 +57,11 @@ FIELD_MAP = {
 }
 
 # keys only that host sends. checked in this order, so a host that copies
-# claude's keys and adds its own is named before the claude fallback catches it
+# claude's keys and adds its own is named before the claude fallback catches it.
+# cursor and copilot both send transcript_path and output_style, so they go first
 MARKERS = (
-    ("cursor", ("cursor_version", "_agent_type", "workspace_roots", "conversation_id")),
-    ("copilot", ("copilot_version", "session_name", "username", "remote")),
+    ("cursor", ("render_width_chars", "autorun", "vim", "worktree")),
+    ("copilot", ("username", "remote", "ai_used", "allow_all_enabled")),
     ("qwen", ("metrics",)),
     ("droid", ("sessionId", "workingDirectory", "modelId")),
     ("claude", ("transcript_path", "hook_event_name", "cost", "exceeds_200k_tokens", "output_style")),
@@ -160,9 +164,9 @@ REGISTRY = {
         "key": "statusLine", "typed": True, "extras": {}, "jsonc": False, "inline": False, "probe": (),
         "shim": "statusline-terminalcreature.sh", "wrapped": "wrapped-command",
     },
-    # key path and value shape UNVERIFIED: the cli changelog names a statusLine
-    # command setting, the config reference doesn't document it. a custom
-    # statusline replaces the native footer, so inline keeps the wrapped output
+    # the cli-config schema in the 2026.09 bundle: statusLine {type, command,
+    # padding?, updateIntervalMs?, timeoutMs?}. a custom statusline replaces the
+    # native footer, so inline keeps the wrapped output on the line
     "cursor": {
         "label": "Cursor CLI", "dir": "~/.cursor", "settings": "~/.cursor/cli-config.json",
         "key": "statusLine", "typed": True, "extras": {}, "jsonc": False, "inline": True,
