@@ -48,11 +48,159 @@ FOLDER_SOURCES = [
     {"key": "notes", "glob": "**/*.md", "weight": 2, "exclude": ["MEMORY.md", "index.md", "README.md"]},
 ]
 
-PROVIDERS = ("claude", "vault", "folder")
+# Every coding agent's memory on disk, one entry each. Roots stay ~-relative
+# here and expand at measure time, so the table itself never holds a home path.
+# Weights: durable memory and instruction files 3, rules 2, session logs 1.
+# Session stores are counted as files (a .db is one file), never opened.
+# An agent is "found" when any of its root directories exists.
+AGENT_ROOTS = [
+    {"key": "claude", "label": "Claude Code", "roots": [
+        ("~/.claude/projects", [
+            {"key": "memories", "glob": "*/memory/*.md", "weight": 3, "exclude": ["MEMORY.md", "index.md"]},
+        ]),
+    ]},
+    {"key": "codex", "label": "Codex", "roots": [
+        ("~/.codex", [
+            {"key": "memories", "glob": "memories/**/*", "weight": 3, "exclude": []},
+            {"key": "instructions", "glob": "AGENTS.md", "weight": 3, "exclude": []},
+            {"key": "sessions", "glob": "sessions/**/*.jsonl", "weight": 1, "exclude": []},
+        ]),
+    ]},
+    {"key": "gemini", "label": "Gemini CLI", "roots": [
+        ("~/.gemini", [
+            {"key": "instructions", "glob": "GEMINI.md", "weight": 3, "exclude": []},
+            {"key": "sessions", "glob": "tmp/*/chats/**/*", "weight": 1, "exclude": []},
+        ]),
+    ]},
+    {"key": "copilot", "label": "Copilot CLI", "roots": [
+        ("~/.copilot", [
+            {"key": "instructions", "glob": "copilot-instructions.md", "weight": 3, "exclude": []},
+            {"key": "instructions", "glob": "instructions/*.md", "weight": 3, "exclude": []},
+            {"key": "sessions", "glob": "session-state/*/events.jsonl", "weight": 1, "exclude": []},
+        ]),
+    ]},
+    {"key": "cursor", "label": "Cursor", "roots": [
+        ("~/.cursor", [
+            {"key": "rules", "glob": "**/rules/*.mdc", "weight": 2, "exclude": []},
+            {"key": "sessions", "glob": "chats/**/*", "weight": 1, "exclude": []},
+        ]),
+    ]},
+    {"key": "qwen", "label": "Qwen Code", "roots": [
+        ("~/.qwen", [
+            {"key": "instructions", "glob": "QWEN.md", "weight": 3, "exclude": []},
+            {"key": "sessions", "glob": "tmp/*/**/*", "weight": 1, "exclude": []},
+        ]),
+    ]},
+    {"key": "droid", "label": "Droid", "roots": [
+        ("~/.factory", [
+            {"key": "sessions", "glob": "sessions/*.json", "weight": 1, "exclude": []},
+            {"key": "specs", "glob": "specs/**/*.md", "weight": 2, "exclude": []},
+        ]),
+    ]},
+    {"key": "opencode", "label": "opencode", "roots": [
+        ("~/.local/share/opencode", [
+            {"key": "sessions", "glob": "opencode.db", "weight": 1, "exclude": []},
+        ]),
+        ("~/.config/opencode", [
+            {"key": "instructions", "glob": "AGENTS.md", "weight": 3, "exclude": []},
+        ]),
+    ]},
+    {"key": "amp", "label": "Amp", "roots": [
+        ("~/.local/share/amp", [
+            {"key": "sessions", "glob": "threads/*.json", "weight": 1, "exclude": []},
+        ]),
+    ]},
+    {"key": "goose", "label": "Goose", "roots": [
+        ("~/.local/share/goose", [
+            {"key": "sessions", "glob": "sessions/sessions.db", "weight": 1, "exclude": []},
+        ]),
+        ("~/.config/goose", [
+            {"key": "instructions", "glob": ".goosehints", "weight": 3, "exclude": []},
+        ]),
+    ]},
+    {"key": "continue", "label": "Continue", "roots": [
+        ("~/.continue", [
+            {"key": "sessions", "glob": "sessions/*.json", "weight": 1, "exclude": []},
+        ]),
+    ]},
+    {"key": "kiro", "label": "Kiro", "roots": [
+        ("~/.kiro", [
+            {"key": "rules", "glob": "steering/*.md", "weight": 2, "exclude": []},
+        ]),
+    ]},
+    {"key": "cline", "label": "Cline", "roots": [
+        ("~/.cline", [
+            {"key": "sessions", "glob": "data/sessions/**/*", "weight": 1, "exclude": []},
+            {"key": "rules", "glob": "rules/*.md", "weight": 2, "exclude": []},
+        ]),
+    ]},
+    {"key": "crush", "label": "Crush", "roots": [
+        ("~/.config/crush", [
+            {"key": "instructions", "glob": "CRUSH.md", "weight": 3, "exclude": []},
+        ]),
+    ]},
+]
+
+# auto picks agents when two or more agent roots exist, else claude, so a
+# stock install measures exactly what it did before the table existed
+PROVIDERS = ("claude", "vault", "folder", "agents", "auto")
+AUTO_MIN_AGENTS = 2
 
 
 def default_claude_root():
     return os.path.expanduser("~/.claude/projects")
+
+
+def agent_keys():
+    return [a["key"] for a in AGENT_ROOTS]
+
+
+def found_agents():
+    """Keys of the agents whose root directory exists. isdir only, no scan."""
+    found = []
+    for agent in AGENT_ROOTS:
+        if any(os.path.isdir(os.path.expanduser(root)) for root, _ in agent["roots"]):
+            found.append(agent["key"])
+    return found
+
+
+def measure_agents(weights=None):
+    """Return (xp, {agent: {key: count}}, [found agent keys]).
+
+    Only found agents get a counts row, so a missing one reads as absent
+    rather than as an agent with nothing written. Weights override by source
+    key across every agent, the same knob the other providers take.
+    """
+    weights = weights or {}
+    counts = {}
+    found = []
+    xp = 0
+    for agent in AGENT_ROOTS:
+        present = False
+        row = {}
+        for root, sources in agent["roots"]:
+            root = os.path.expanduser(root)
+            if not os.path.isdir(root):
+                continue
+            present = True
+            for source in sources:
+                n = count_source(root, source)
+                # a key can appear twice under one agent, so add rather than set
+                row[source["key"]] = row.get(source["key"], 0) + n
+                xp += n * weights.get(source["key"], source["weight"])
+        if present:
+            counts[agent["key"]] = row
+            found.append(agent["key"])
+    return xp, counts, found
+
+
+def flatten_agent_counts(counts):
+    """Per-agent counts folded by source key, the shape the cache and card take."""
+    flat = {}
+    for row in counts.values():
+        for key, n in row.items():
+            flat[key] = flat.get(key, 0) + n
+    return flat
 
 
 def count_source(root, source):
