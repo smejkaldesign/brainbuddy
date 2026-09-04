@@ -2414,6 +2414,10 @@ def test_hook_hosts():
         bump(500)
         plain = run(env, ["hookcard", "--host", "opencode"], payload("codex", "o1")).stdout
         check("Kein Lv" in plain and "{" not in plain and plain.count("\n") == 1, "opencode gets the bare line, no JSON")
+        # the plugins send exactly this and read one line back, or nothing
+        amp = run(env, ["hookcard", "--host", "amp"], '{"session_id": "a1"}').stdout
+        check("Kein Lv" in amp and "{" not in amp and amp.count("\n") == 1, "amp's plugin payload gets the bare line")
+        check(run(env, ["hookcard", "--host", "amp"], '{"session_id": "a1"}').stdout == "", "and a quiet turn prints nothing at all")
         g = run(env, ["hookcard", "--host", "codex"], "not json at all")
         check(g.returncode == 0, "garbage on stdin exits 0")
         g = run(env, ["hookcard"], "")
