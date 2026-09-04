@@ -792,6 +792,9 @@ def cmd_install(args):
         return 1
     host, inline, statusline = parsed
     targets = _host_targets(host)
+    if host == "all" and not targets:
+        print("no supported host is installed here, nothing to wire")
+        return 0
     if host == "all" and targets == ["claude"]:
         print("only claude is installed here, nothing else to wire")
     failed = False
@@ -808,8 +811,12 @@ def cmd_uninstall(args):
         print(problem)
         return 1
     host = parsed[0]
+    targets = _host_targets(host, uninstall=True)
+    if host == "all" and not targets:
+        print("no host is wired here, nothing to undo")
+        return 0
     failed = False
-    for h in _host_targets(host, uninstall=True):
+    for h in targets:
         ok, message = hosts.unwire(h)
         print("  %-8s %s" % (h, message))
         failed = failed or not ok

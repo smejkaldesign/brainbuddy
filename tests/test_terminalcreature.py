@@ -2213,6 +2213,16 @@ def test_host_settings_edge_cases():
     finally:
         shutil.rmtree(home)
 
+    empty = tempfile.mkdtemp(prefix="bb-host-")
+    env = dict(os.environ, HOME=empty, PYTHONPATH=repo)
+    try:
+        r = subprocess.run(cmd + ["install", "--host", "all"], env=env, capture_output=True, text=True)
+        check(r.returncode == 0 and "nothing to wire" in r.stdout, "all with no host present says so instead of printing nothing")
+        u = subprocess.run(cmd + ["uninstall", "--host", "all"], env=env, capture_output=True, text=True)
+        check(u.returncode == 0 and "nothing to undo" in u.stdout, "and so does uninstall")
+    finally:
+        shutil.rmtree(empty)
+
 
 if __name__ == "__main__":
     test_metric()
