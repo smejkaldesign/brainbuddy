@@ -132,16 +132,6 @@
   .lede { font-size: 19px; line-height: 1.6; color: var(--muted); max-width: 640px; margin: 0 auto 80px; text-wrap: pretty; }
   .lede b { color: var(--gold); font-weight: 600; }
 
-  /* host groups above the host tabs: statusline hosts, card hosts, terminals. one row each, never fourteen buttons */
-  .groups { display: inline-flex; margin: 0 auto 12px; border: 1px solid var(--line-2); border-radius: 8px; background: rgba(0,0,0,.35); padding: 3px; gap: 3px; }
-  .group { font-family: var(--mono); font-size: 12px; letter-spacing: .04em; color: var(--muted); background: none; border: 1px solid transparent; border-radius: 5px; padding: 6px 14px; }
-  .group:hover { color: var(--text); }
-  .group[aria-pressed="true"] { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: 500; }
-  /* host tabs above the install stone: one command or snippet per host */
-  .tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 0 auto 14px; max-width: 780px; }
-  .tab { font-family: var(--mono); font-size: 12px; letter-spacing: .04em; color: var(--muted); background: rgba(0,0,0,.35); border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 12px; }
-  .tab:hover { color: var(--text); border-color: var(--gold); }
-  .tab[aria-selected="true"] { color: var(--gold); border-color: var(--gold); background: rgba(var(--gold-rgb), .08); box-shadow: 0 0 14px rgba(var(--gold-rgb), .18); }
   .install {
     display: inline-flex; align-items: center; gap: 12px; max-width: 100%;
     padding: 12px 16px 12px 22px; border-radius: 8px;
@@ -157,13 +147,24 @@
   }
   .copy:hover { background: rgba(255,255,255,.12); color: #fff; }
   .copy.copied { color: var(--xp); border-color: var(--xp); }
-  /* the stone keeps the hero width whichever tab is up; the script raises these to the tallest host so nothing below moves */
-  #host-panel { width: 100%; min-height: 70px; }
-  #host-panel code { flex: 1; }
-  #host-note, #host-sub { min-height: 3.2em; }
+  /* one command for every host, so the stone fills the hero width and never changes */
+  #install .install { width: 100%; }
+  #install .install code { flex: 1; }
   .alt { font-family: var(--mono); font-size: 13px; color: var(--muted); margin: 36px 0 0; }
   .alt code { background: none; border: 0; padding: 0; color: var(--gold); white-space: nowrap; }
   .alt .then { color: var(--muted); }
+  #install .alt { margin-top: 18px; }
+  #install .alt + .alt { margin-top: 6px; }
+  /* "I code with": a native select, because fourteen names never fit one row, and the arrows work without a script */
+  .picker { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; margin: 44px 0 0; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .pick { position: relative; display: inline-block; max-width: 100%; }
+  .pick select { appearance: none; -webkit-appearance: none; max-width: 100%; font-family: var(--mono); font-size: 13px; color: var(--text); background: rgba(0,0,0,.35); border: 1px solid var(--line-2); border-radius: 6px; padding: 7px 32px 7px 12px; cursor: pointer; }
+  .pick select:hover { border-color: var(--gold); }
+  .pick select option { background: var(--card); color: var(--text); }
+  .pick::after { content: "▾"; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--gold); pointer-events: none; }
+  .tier { display: inline-block; font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); border: 1px solid rgba(var(--gold-rgb), .45); background: rgba(var(--gold-rgb), .08); border-radius: 5px; padding: 4px 9px; white-space: nowrap; }
+  /* the notes under the picker are the only thing that changes height; the script holds them at the tallest host so the terminal never moves */
+  #host-info { margin-top: 4px; }
 
   /* ---------- terminal ---------- */
   .terminal { margin: 72px auto 0; border: 1px solid var(--line-2); border-radius: 10px; background: var(--term); overflow: hidden; box-shadow: 0 30px 60px rgba(0,0,0,.6); text-align: left; }
@@ -345,8 +346,6 @@
     .ledger-row .proof { grid-column: 2; }
     .ledger-row:first-child .proof { display: none; }
     .install { flex-wrap: wrap; justify-content: center; padding: 12px 14px; font-size: 12.5px; }
-    /* three group names fit one row at 375 only with tighter padding */
-    .group { padding: 6px 9px; font-size: 11px; white-space: nowrap; }
     .terminal-body { font-size: 12px; }
     /* the demo's tmux bar drops its window list so the creature stays in frame */
     .t-tmux .win { display: none; }
@@ -392,9 +391,10 @@
 
     <p class="lede">
       Something small is waiting at the edge of your terminal window. An egg, quiet, patient, and
-      <b>ravenously hungry for memories</b>. It hatches in your Claude Code statusline, then follows you into
-      Cursor, Copilot, Qwen, Droid, tmux and your shell prompt, and where there is no statusline (Codex, Gemini,
-      opencode, Amp) it drops a one-line card after every turn: <b>one creature, one roster, one XP number</b>,
+      <b>ravenously hungry for memories</b>. One install wires every agent on the machine: it hatches in your
+      Claude Code statusline, follows you into Cursor, Copilot, Qwen and Droid, sits in tmux and your shell prompt,
+      and where there is no statusline (Codex, Gemini, opencode, Amp) it drops a one-line card after every turn:
+      <b>one creature, one roster, one XP number</b>,
       wherever you happen to be coding. It wants to be your new best friend, but also to eat everything your
       agents remember, Claude, Codex, Gemini, Copilot and the rest. Don't fret, your creature wants your trust,
       so it <b>never reads the content of your files</b>. It eats each one whole, in a single bite, and grows
@@ -404,14 +404,22 @@
     </p>
 
     <div id="install">
-      <div class="groups" role="group" aria-label="Kind of host" id="host-groups"></div>
-      <div class="tabs" role="tablist" aria-label="Where should it live?" id="host-tabs"></div>
-      <div class="install" role="tabpanel" id="host-panel" aria-labelledby="tab-claude">
+      <div class="install">
         <code id="hero-cmd">curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash</code>
         <button class="copy" data-copy="#hero-cmd" aria-label="Copy install command">copy</button>
       </div>
-      <p class="alt" id="host-note"><span class="then">then, in Claude Code:</span> <code>/creature-hatch</code></p>
-      <p class="alt" id="host-sub">or <code>pipx install terminalcreature</code> <span class="then">for the CLI alone. bash, python 3.9+, nothing else.</span></p>
+      <p class="alt">wires every agent it finds on your machine; launch any of them.</p>
+      <p class="alt"><span class="then">then open the egg:</span> <code>/creature-hatch</code> <span class="then">in Claude Code, or</span> <code>terminalcreature hatch</code> <span class="then">from any shell. bash, python 3.9+, nothing else.</span></p>
+      <div class="picker">
+        <label for="host-pick">I code with</label>
+        <span class="pick"><select id="host-pick" aria-describedby="host-info"></select></span>
+        <span class="tier" id="host-tier"></span>
+      </div>
+      <div id="host-info" aria-live="polite">
+        <p class="alt" id="host-what"></p>
+        <p class="alt" id="host-step"></p>
+        <p class="alt" id="host-one"></p>
+      </div>
     </div>
 
     <div class="terminal">
@@ -544,9 +552,9 @@
       <div class="step">
         <div class="n">1</div>
         <h3>Install lays an egg</h3>
-        <p>The installer wraps whatever statusline you already have instead of replacing it, then leaves an egg in it. Claude Code is the default; <code>install --host</code> does the same for Cursor, Copilot, Qwen and Droid, gives Codex, Gemini, Vibe, auggie, opencode and Amp a one-line card after each turn, and <code>snippet</code> hands tmux and your prompt a paste-in. The egg banks XP from the moment it exists, including everything you'd written before.</p>
+        <p>The installer wraps whatever statusline you already have instead of replacing it, then leaves an egg in it. One command wires every host it finds: the statusline in Claude Code, Cursor, Copilot, Qwen and Droid, a one-line card after each turn in Codex, Gemini, Vibe, auggie, opencode and Amp. tmux and your prompt take a paste-in from <code>snippet</code>, and <code>doctor</code> lists what got wired. The egg banks XP from the moment it exists, including everything you'd written before.</p>
         <span class="say cmd">curl -fsSL …/bootstrap.sh | bash</span>
-        <span class="say cmd">terminalcreature install --host all</span>
+        <span class="say cmd">terminalcreature doctor</span>
       </div>
       <div class="step">
         <div class="n">2</div>
@@ -607,7 +615,7 @@
 <section class="cta">
   <div class="wrap">
     <h2>Ready to hatch?</h2>
-    <p class="desc">One command for Claude Code. Wraps the statusline you already have, lays an egg, and tells you how to open it. Every other host is <a href="#install">one tab away</a>.</p>
+    <p class="desc">One command. Wraps the statusline you already have, wires every agent it finds, lays an egg, and tells you how to open it. Curious what it looks like in your tool? <a href="#install">Pick it up top</a>.</p>
     <div class="install">
       <code id="cta-cmd">curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash</code>
       <button class="copy" data-copy="#cta-cmd" aria-label="Copy install command">copy</button>
@@ -924,113 +932,61 @@
   // provider picker: install command updates live
   var BASE = "curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash";
 
-  // install tabs: [id, label, command or snippet, note, sub-note], grouped so the row stays short
-  var CLI = '<span class="then">needs the CLI, which the Claude Code install already ships; otherwise</span> <code>pipx install terminalcreature</code><span class="then">.</span> <code>terminalcreature doctor</code> <span class="then">lists every host it found and whether it is wired.</span>';
-  var CARD = '<span class="then">a one-line card after each turn, same creature.</span> ';
-  var CARD_SUB = '<span class="then">first turn, then when XP or stage moves, else every 10th turn;</span> <code>config hookcard always|changes|off</code> <span class="then">sets that.</span> <code>uninstall --host</code> <span class="then">removes only ours. Needs the CLI:</span> <code>pipx install terminalcreature</code><span class="then">.</span>';
-  var GROUPS = [
-    ["statusline", "Statusline", ["claude", "cursor", "copilot", "qwen", "droid"]],
-    ["card", "Turn-end card", ["codex", "gemini", "vibe", "auggie", "opencode", "amp"]],
-    ["terminals", "Terminals", ["tmux", "starship", "shell"]]
+  // "I code with": the command never changes; the pick only shows what the creature looks like there.
+  // rows: id, label, tier, what appears, one-time step, the command for that host alone
+  var TIERS = { statusline: "Statusline", card: "Turn-end card", prompt: "Prompt" };
+  var CARD = 'as a one-line card in the reply after a turn: the first one, then whenever XP or stage moves, else every tenth. ';
+  var NONE = '<span class="then">no one-time step.</span>';
+  function inst(id) { return "terminalcreature install --host " + id; }
+  function snip(id) { return "terminalcreature snippet " + id; }
+  var HOSTS = [
+    ["claude", "Claude Code", "statusline", 'in the Claude Code statusline on every redraw, beside whatever you already had there.', NONE, inst("claude")],
+    ["cursor", "Cursor CLI", "statusline", 'in the Cursor CLI footer on every redraw. Its custom statusline replaces the native one, so the creature draws inline.', NONE, inst("cursor")],
+    ["copilot", "GitHub Copilot CLI", "statusline", 'in the Copilot CLI statusline on every redraw. The JSONC comments in its settings survive.', NONE, inst("copilot")],
+    ["qwen", "Qwen Code", "statusline", 'in the Qwen Code statusline on every redraw, well inside its five second cutoff.', NONE, inst("qwen")],
+    ["droid", "Factory Droid", "statusline", 'in the Droid statusline on every redraw.', NONE, inst("droid")],
+    ["codex", "Codex CLI", "card", CARD + 'A <code>Stop</code> hook in <code>~/.codex/hooks.json</code>.', 'approve the hook once, with <code>/hooks</code> inside Codex.', inst("codex")],
+    ["gemini", "Gemini CLI", "card", CARD + 'An <code>AfterAgent</code> hook in its <code>settings.json</code>, comments kept.', NONE, inst("gemini")],
+    ["vibe", "Mistral Vibe", "card", CARD + 'A marked <code>post_agent</code> block in <code>~/.vibe/hooks.toml</code>; the rest of the file is never touched.', NONE, inst("vibe")],
+    ["auggie", "Augment auggie", "card", CARD + 'A <code>Stop</code> hook in its <code>settings.json</code>.', NONE, inst("auggie")],
+    ["opencode", "opencode", "card", CARD + 'One plugin file under <code>~/.config/opencode/plugins</code>.', 'needs bun or node on your PATH to run the plugin.', inst("opencode")],
+    ["amp", "Amp", "card", CARD + 'One plugin under <code>~/.config/amp/plugins</code>.', 'needs bun on your PATH; Amp runs its plugins under it.', inst("amp")],
+    ["tmux", "tmux", "prompt", 'in the tmux status bar, as <code>#{creature}</code> anywhere in <code>status-right</code>.', 'paste the snippet into your tmux config, or use the TPM plugin from the README.', snip("tmux")],
+    ["starship", "Starship", "prompt", 'in your prompt, as a <code>[custom.creature]</code> module that reads one cached line, well inside the 500 ms budget.', 'paste the snippet into your Starship config.', snip("starship")],
+    ["shell", "zsh / fish / oh-my-posh / WezTerm", "prompt", 'in your right prompt, or the WezTerm status area, redrawn with it.', 'paste the snippet into your prompt config. Swap <code>zsh</code> for <code>fish</code>, <code>omp</code> or <code>wezterm</code>.', snip("zsh")]
   ];
-  var INSTALL = [
-    ["claude", "Claude Code", BASE,
-      '<span class="then">then, in Claude Code:</span> <code>/creature-hatch</code>',
-      'or <code>pipx install terminalcreature</code> <span class="then">for the CLI alone. bash, python 3.9+, nothing else.</span>'],
-    ["cursor", "Cursor", "terminalcreature install --host cursor",
-      '<span class="then">wraps the Cursor CLI statusline command, keeps a backup, and</span> <code>--uninstall</code> <span class="then">restores it. Or</span> <code>--host all</code> <span class="then">for every host on the machine.</span>', CLI],
-    ["copilot", "Copilot", "terminalcreature install --host copilot",
-      '<span class="then">wraps the Copilot CLI</span> <code>statusLine</code> <span class="then">command in its settings, JSONC comments included. Or</span> <code>--host all</code><span class="then">.</span>', CLI],
-    ["qwen", "Qwen", "terminalcreature install --host qwen",
-      '<span class="then">wraps Qwen Code\'s</span> <code>ui.statusLine</code> <span class="then">command. The render reads a cache, so it is well inside Qwen\'s five second cutoff. Or</span> <code>--host all</code><span class="then">.</span>', CLI],
-    ["droid", "Droid", "terminalcreature install --host droid",
-      '<span class="then">wraps the Factory Droid</span> <code>statusLine</code> <span class="then">command. Or</span> <code>--host all</code><span class="then">.</span>', CLI],
-    ["codex", "Codex", "terminalcreature install --host codex",
-      CARD + '<span class="then">Adds a</span> <code>Stop</code> <span class="then">hook to</span> <code>~/.codex/hooks.json</code><span class="then">. Codex asks you once to approve it, with</span> <code>/hooks</code> <span class="then">inside Codex.</span>', CARD_SUB],
-    ["gemini", "Gemini", "terminalcreature install --host gemini",
-      CARD + '<span class="then">Adds an</span> <code>AfterAgent</code> <span class="then">hook to Gemini CLI\'s</span> <code>settings.json</code><span class="then">, comments kept. Or</span> <code>--host all</code><span class="then">.</span>', CARD_SUB],
-    ["vibe", "Vibe", "terminalcreature install --host vibe",
-      CARD + '<span class="then">Appends a marked</span> <code>post_agent</code> <span class="then">block to</span> <code>~/.vibe/hooks.toml</code> <span class="then">and never touches the rest of the file.</span>', CARD_SUB],
-    ["auggie", "auggie", "terminalcreature install --host auggie",
-      CARD + '<span class="then">Adds a</span> <code>Stop</code> <span class="then">hook to Augment auggie\'s</span> <code>settings.json</code><span class="then">. Or</span> <code>--host all</code><span class="then">.</span>', CARD_SUB],
-    ["opencode", "opencode", "terminalcreature install --host opencode",
-      CARD + '<span class="then">Drops one plugin file under</span> <code>~/.config/opencode/plugins</code><span class="then">. Needs bun or node on your PATH to run it.</span>', CARD_SUB],
-    ["amp", "Amp", "terminalcreature install --host amp",
-      CARD + '<span class="then">Drops a plugin under</span> <code>~/.config/amp/plugins</code><span class="then">. Amp runs plugins under bun, so bun has to be installed.</span>', CARD_SUB],
-    ["tmux", "tmux", "set -g @plugin 'smejkaldesign/terminalcreature'",
-      '<span class="then">TPM line for your tmux config, then put</span> <code>#{creature}</code> <span class="then">anywhere in</span> <code>status-right</code><span class="then">. No TPM?</span> <code>terminalcreature snippet tmux</code> <span class="then">prints the plain version.</span>', CLI],
-    ["starship", "Starship", "terminalcreature snippet starship",
-      '<span class="then">prints a</span> <code>[custom.creature]</code> <span class="then">block to paste into your Starship config. It reads a cached line, so it never trips the 500 ms budget.</span>', CLI],
-    ["shell", "Shell prompt", "terminalcreature snippet zsh",
-      '<span class="then">prints a paste-in for your prompt. Swap</span> <code>zsh</code> <span class="then">for</span> <code>fish</code><span class="then">,</span> <code>omp</code> <span class="then">(oh-my-posh) or</span> <code>wezterm</code><span class="then">.</span>', CLI]
-  ];
-  var groups = document.getElementById("host-groups"), tabs = document.getElementById("host-tabs"), panel = document.getElementById("host-panel");
-  var heroCmd = document.getElementById("hero-cmd"), hostNote = document.getElementById("host-note"), hostSub = document.getElementById("host-sub");
+  var pick = document.getElementById("host-pick"), info = document.getElementById("host-info"), tier = document.getElementById("host-tier");
+  var what = document.getElementById("host-what"), step = document.getElementById("host-step"), one = document.getElementById("host-one");
   var byId = {};
-  INSTALL.forEach(function (h) { byId[h[0]] = h; });
-  var tabEls = [], current = [], curGroup = 0, curTab = 0;
-  function selectHost(i) {
-    var h = current[i];
-    curTab = i;
-    tabEls.forEach(function (b, k) { b.setAttribute("aria-selected", String(k === i)); b.tabIndex = k === i ? 0 : -1; });
-    panel.setAttribute("aria-labelledby", "tab-" + h[0]);
-    heroCmd.textContent = h[2]; hostNote.innerHTML = h[3]; hostSub.innerHTML = h[4];
-  }
-  // arrows move within a row. a group change rebuilds the tab row and lands on its first host
-  function arrow(e, i, n) { return e.key === "ArrowRight" ? (i + 1) % n : e.key === "ArrowLeft" ? (i + n - 1) % n : e.key === "Home" ? 0 : e.key === "End" ? n - 1 : -1; }
-  function selectGroup(g) {
-    curGroup = g;
-    groupEls.forEach(function (b, k) { b.setAttribute("aria-pressed", String(k === g)); b.tabIndex = k === g ? 0 : -1; });
-    current = GROUPS[g][2].map(function (id) { return byId[id]; });
-    tabs.innerHTML = "";
-    tabEls = current.map(function (h, i) {
-      var b = document.createElement("button");
-      b.type = "button"; b.className = "tab"; b.id = "tab-" + h[0];
-      b.setAttribute("role", "tab"); b.setAttribute("aria-controls", "host-panel");
-      b.textContent = h[1];
-      b.addEventListener("click", function () { selectHost(i); });
-      b.addEventListener("keydown", function (e) {
-        var n = arrow(e, i, current.length);
-        if (n < 0) return;
-        e.preventDefault(); selectHost(n); tabEls[n].focus();
-      });
-      tabs.appendChild(b);
-      return b;
-    });
-    selectHost(0);
-  }
-  var groupEls = GROUPS.map(function (g, i) {
-    var b = document.createElement("button");
-    b.type = "button"; b.className = "group"; b.id = "group-" + g[0];
-    b.setAttribute("aria-pressed", "false"); b.setAttribute("aria-controls", "host-tabs");
-    b.textContent = g[1];
-    b.addEventListener("click", function () { selectGroup(i); });
-    b.addEventListener("keydown", function (e) {
-      var n = arrow(e, i, GROUPS.length);
-      if (n < 0) return;
-      e.preventDefault(); selectGroup(n); groupEls[n].focus();
-    });
-    groups.appendChild(b);
-    return b;
+  HOSTS.forEach(function (h) {
+    byId[h[0]] = h;
+    var o = document.createElement("option");
+    o.value = h[0]; o.textContent = h[1];
+    pick.appendChild(o);
   });
-  selectGroup(0);
-  // the tab row, the stone and its note lines reserve the tallest group or host at this width, so switching never moves the terminal
+  function fill(h) {
+    tier.textContent = TIERS[h[2]];
+    what.innerHTML = '<span class="then">it shows up</span> ' + h[3];
+    step.innerHTML = '<span class="then">one-time step:</span> ' + h[4];
+    one.innerHTML = '<span class="then">' + (h[2] === "prompt" ? "the snippet:" : "just this one:") + '</span> <code>' + h[5] + "</code>";
+  }
+  pick.addEventListener("change", function () { fill(byId[pick.value]); });
+  // arrows step the pick on every platform; macOS would open the menu instead. space and enter still open it
+  pick.addEventListener("keydown", function (e) {
+    var i = pick.selectedIndex, n = HOSTS.length;
+    var k = e.key === "ArrowDown" || e.key === "ArrowRight" ? (i + 1) % n : e.key === "ArrowUp" || e.key === "ArrowLeft" ? (i + n - 1) % n : e.key === "Home" ? 0 : e.key === "End" ? n - 1 : -1;
+    if (k < 0 || e.altKey) return;
+    e.preventDefault(); pick.selectedIndex = k; fill(HOSTS[k]);
+  });
+  fill(HOSTS[0]);
+  // the notes reserve the tallest host at this width, so a different pick never moves the terminal below
   function reserve() {
-    var g0 = curGroup, t0 = curTab, cmd = heroCmd.textContent, note = hostNote.innerHTML, sub = hostSub.innerHTML, r = 0, p = 0, n = 0, s = 0;
-    var focused = document.activeElement && document.activeElement.id;
-    // whole pixels: offsetHeight rounds down, and a rounded-down floor lets the terminal drift a pixel on some hosts
-    var h = function (el) { return Math.ceil(el.getBoundingClientRect().height); };
-    [tabs, panel, hostNote, hostSub].forEach(function (el) { el.style.minHeight = "0"; });
-    GROUPS.forEach(function (_, k) { selectGroup(k); r = Math.max(r, h(tabs)); });
-    selectGroup(g0); selectHost(t0);
-    INSTALL.forEach(function (x) {
-      heroCmd.textContent = x[2]; hostNote.innerHTML = x[3]; hostSub.innerHTML = x[4];
-      p = Math.max(p, h(panel)); n = Math.max(n, h(hostNote)); s = Math.max(s, h(hostSub));
-    });
-    heroCmd.textContent = cmd; hostNote.innerHTML = note; hostSub.innerHTML = sub;
-    tabs.style.minHeight = r + "px"; panel.style.minHeight = p + "px"; hostNote.style.minHeight = n + "px"; hostSub.style.minHeight = s + "px";
-    // rebuilding the tab row drops focus, so a keyboard user mid-row gets it back on a resize
-    if (focused && focused.indexOf("tab-") === 0) { var f = document.getElementById(focused); if (f) f.focus({ preventScroll: true }); }
+    var cur = pick.value, m = 0;
+    info.style.minHeight = "0";
+    // whole pixels: a rounded-down floor lets the terminal drift a pixel on some hosts
+    HOSTS.forEach(function (h) { fill(h); m = Math.max(m, Math.ceil(info.getBoundingClientRect().height)); });
+    fill(byId[cur]);
+    info.style.minHeight = m + "px";
   }
   reserve();
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(reserve);
