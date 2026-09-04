@@ -1017,6 +1017,9 @@
   // the tab row, the stone and its note lines reserve the tallest group or host at this width, so switching never moves the terminal
   function reserve() {
     var g0 = curGroup, t0 = curTab, cmd = heroCmd.textContent, note = hostNote.innerHTML, sub = hostSub.innerHTML, r = 0, p = 0, n = 0, s = 0;
+    var focused = document.activeElement && document.activeElement.id;
+    // whole pixels: offsetHeight rounds down, and a rounded-down floor lets the terminal drift a pixel on some hosts
+    var h = function (el) { return Math.ceil(el.getBoundingClientRect().height); };
     [tabs, panel, hostNote, hostSub].forEach(function (el) { el.style.minHeight = "0"; });
     GROUPS.forEach(function (_, k) { selectGroup(k); r = Math.max(r, h(tabs)); });
     selectGroup(g0); selectHost(t0);
@@ -1026,6 +1029,8 @@
     });
     heroCmd.textContent = cmd; hostNote.innerHTML = note; hostSub.innerHTML = sub;
     tabs.style.minHeight = r + "px"; panel.style.minHeight = p + "px"; hostNote.style.minHeight = n + "px"; hostSub.style.minHeight = s + "px";
+    // rebuilding the tab row drops focus, so a keyboard user mid-row gets it back on a resize
+    if (focused && focused.indexOf("tab-") === 0) { var f = document.getElementById(focused); if (f) f.focus({ preventScroll: true }); }
   }
   reserve();
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(reserve);
