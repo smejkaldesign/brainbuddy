@@ -72,7 +72,36 @@ def session_gain(state, session_id, banked):
             for key in stale:
                 del sessions[key]
         return 0, True
-    return banked - row["at"], False
+    gain = banked - row["at"]
+    # a counter higher than the last one drawn is the moment it ate. stamp it,
+    # and ask to be saved, so the next renders can hold the happy face
+    if gain > row.get("seen", 0):
+        row["seen"] = gain
+        row["fed_at"] = time.time()
+        return gain, True
+    return gain, False
+
+
+# held long enough to be seen between redraws, short enough not to be a stuck face
+HAPPY_HOLD = 2.0
+# a blink is a beat, not a state: this many seconds out of every window
+BLINK_EVERY = 5.0
+BLINK_HOLD = 0.4
+
+
+def mood(state, session_id, now=None):
+    """The face to draw right now. "happy" for HAPPY_HOLD after the session's
+    counter last rose, else a "blink" for BLINK_HOLD out of every BLINK_EVERY
+    seconds, else None. Clock-based rather than counted: a statusline redraws
+    whenever the host feels like it, so a count would blink at random.
+    """
+    now = time.time() if now is None else now
+    row = (state.get("sessions") or {}).get(session_id) if session_id else None
+    if row and 0 <= now - row.get("fed_at", 0) < HAPPY_HOLD:
+        return "happy"
+    if (now % BLINK_EVERY) < BLINK_HOLD:
+        return "blink"
+    return None
 
 
 def migrate(data):

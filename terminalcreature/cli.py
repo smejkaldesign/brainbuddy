@@ -76,10 +76,10 @@ def _bank(st, session_id):
     if xp and state_mod.sync(st, xp):
         dirty = True
     c = state_mod.focused(st)
-    gain, is_new = state_mod.session_gain(st, session_id, c.get("xp_banked", 0) if c else 0)
-    if dirty or is_new:
+    gain, changed = state_mod.session_gain(st, session_id, c.get("xp_banked", 0) if c else 0)
+    if dirty or changed:
         state_mod.save(st)
-    return xp, counts, gain
+    return xp, counts, gain, state_mod.mood(st, session_id)
 
 
 def cmd_render(args):
@@ -88,8 +88,8 @@ def cmd_render(args):
         st = _load()
         if st["settings"].get("hidden"):
             return 0
-        xp, counts, gain = _bank(st, session)
-        line = render.segment(st, xp, counts, gain=gain)
+        xp, counts, gain, mood = _bank(st, session)
+        line = render.segment(st, xp, counts, gain=gain, mood=mood)
         if line:
             sys.stdout.write(line)
     except Exception:
@@ -112,8 +112,8 @@ def cmd_compose(args):
         if st["settings"].get("hidden"):
             sys.stdout.write(left)
             return 0
-        xp, counts, gain = _bank(st, session)
-        sys.stdout.write(render.compose(st, left, xp, counts, gain=gain))
+        xp, counts, gain, mood = _bank(st, session)
+        sys.stdout.write(render.compose(st, left, xp, counts, gain=gain, mood=mood))
     except Exception:
         sys.stdout.write(left)
     return 0

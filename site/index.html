@@ -4,12 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>terminalcreature</title>
-<meta name="description" content="A terminal pet that lives in your Claude Code statusline, hatches from an egg, and levels up as your memory system grows. Counts your notes, never reads them.">
+<meta name="description" content="Feed your terminal creature memories and watch it evolve. An egg in your Claude Code statusline that hatches and grows as you write notes. Counts your files, never reads them.">
 <meta property="og:title" content="terminalcreature">
-<meta property="og:description" content="Terminal creature. A statusline pet that levels off your Claude Code memory.">
+<meta property="og:description" content="Feed your terminal creature memories and watch it evolve. A statusline pet that levels off your Claude Code notes.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://terminalcreature.com/">
+<meta property="og:image" content="https://terminalcreature.com/assets/og.png">
+<meta property="og:image:width" content="1268">
+<meta property="og:image:height" content="622">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="terminalcreature">
+<meta name="twitter:description" content="Feed your terminal creature memories and watch it evolve.">
+<meta name="twitter:image" content="https://terminalcreature.com/assets/og.png">
 <meta name="theme-color" content="#000000">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%F0%9F%A5%9A%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -102,22 +110,22 @@
     min-height: 6.9em; display: flex; align-items: center; justify-content: center;
     font-weight: 500; white-space: pre; text-align: left;
   }
-  .portrait-caption { font-family: var(--mono); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--dim); margin-top: 12px; }
+  .portrait-caption { font-family: var(--mono); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--dim); margin-top: 24px; }
   .portrait-caption b { color: var(--muted); font-weight: 500; }
 
-  .toplinks { margin: 32px 0 18px; font-family: var(--mono); font-size: 13px; letter-spacing: .04em; color: var(--dim); }
+  .toplinks { margin: 64px 0 36px; font-family: var(--mono); font-size: 13px; letter-spacing: .04em; color: var(--dim); }
   .toplinks a { margin: 0 8px; }
 
-  h1 { margin: 10px 0 30px; }
+  h1 { margin: 20px 0 60px; }
   /* the wordmark, from the Figma export; keeps its own lime rather than the page accent */
   .logo { display: block; margin: 0 auto; width: min(420px, 82vw); height: auto; filter: drop-shadow(0 0 18px rgba(54,248,0,.35)); }
   .pill {
     display: inline-block; font-family: var(--mono); font-size: 12px; letter-spacing: .02em;
     color: var(--muted); border: 1px solid rgba(var(--gold-rgb), .35); border-radius: 6px;
-    padding: 6px 14px; background: rgba(var(--gold-rgb), .06); margin-bottom: 30px;
+    padding: 6px 14px; background: rgba(var(--gold-rgb), .06); margin-bottom: 60px;
   }
   .pill b { color: var(--gold); font-weight: 500; }
-  .lede { font-size: 19px; line-height: 1.6; color: var(--muted); max-width: 640px; margin: 0 auto 40px; text-wrap: pretty; }
+  .lede { font-size: 19px; line-height: 1.6; color: var(--muted); max-width: 640px; margin: 0 auto 80px; text-wrap: pretty; }
   .lede b { color: var(--gold); font-weight: 600; }
 
   .install {
@@ -135,7 +143,7 @@
   }
   .copy:hover { background: rgba(255,255,255,.12); color: #fff; }
   .copy.copied { color: var(--xp); border-color: var(--xp); }
-  .alt { font-family: var(--mono); font-size: 13px; color: var(--dim); margin: 18px 0 0; }
+  .alt { font-family: var(--mono); font-size: 13px; color: var(--dim); margin: 36px 0 0; }
   .alt code { background: none; border: 0; padding: 0; color: var(--gold); }
   .alt .then { color: var(--muted); }
 

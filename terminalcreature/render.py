@@ -174,7 +174,7 @@ def update_chip(settings, uni, word=True, available=None):
     return paint(icon + " update" if word else icon, UPDATE)
 
 
-def segment(st, xp=None, counts=None, gain=0):
+def segment(st, xp=None, counts=None, gain=0, mood=None):
     """One line for the statusline. Empty string means render nothing."""
     settings = st["settings"]
     uni = unicode_ok(settings)
@@ -199,7 +199,7 @@ def segment(st, xp=None, counts=None, gain=0):
         # wearing any of them has told you what's inside before you opened it
         idx, label = metric.EGG_SPRITE, "egg /creature-hatch"
         tint, mark, shiny = DIM, "", ""
-    f = sprites.face(full["species"], idx, uni)
+    f = sprites.face(full["species"], idx, uni, mood)
     # the name is chosen at the hatch, so before it there isn't one to show
     shown = full["name"] if state_mod.is_hatched(c) else "Unhatched"
 
@@ -213,7 +213,7 @@ def segment(st, xp=None, counts=None, gain=0):
 
     if settings.get("density") == "sprite":
         return sprite_block(full, "%s %s%s" % (shown, label, mark), idx, tint, settings,
-                            chip=update_chip(settings, uni, word=False, available=avail))
+                            chip=update_chip(settings, uni, word=False, available=avail), mood=mood)
     if settings.get("density") == "minimal":
         # one glyph is the whole point of minimal, so no counter and no chip
         return paint(sprites.glyph(idx, uni) + shiny, tint)
@@ -268,7 +268,7 @@ def _column_width(full, short):
     )
 
 
-def compose(st, left, xp=None, counts=None, gain=0):
+def compose(st, left, xp=None, counts=None, gain=0, mood=None):
     """Merge a caller's statusline text with the creature as a left column.
 
     The creature's first row shares row one with the bar, so it reads as a
@@ -293,7 +293,7 @@ def compose(st, left, xp=None, counts=None, gain=0):
     tint = RARITY_COLOR.get(full["rarity"], "") if hatched else DIM
 
     short = settings.get("sprite_height", 5) <= 3
-    art = _trim(sprites.sprite(full["species"], idx, full["shiny"], short=short))
+    art = _trim(sprites.sprite(full["species"], idx, full["shiny"], short=short, mood=mood))
 
     banked = c["xp_banked"]
     lo = metric.xp_for_level(level, settings["xp_max"])
@@ -355,7 +355,7 @@ def compose(st, left, xp=None, counts=None, gain=0):
     return "\n".join(rows)
 
 
-def sprite_block(full, label, stage_index, tint, settings, chip=""):
+def sprite_block(full, label, stage_index, tint, settings, chip="", mood=None):
     """Full creature on its own rows, for multi-line statuslines.
 
     Right-aligns to settings["columns"] because a statusline script can't learn
@@ -366,7 +366,7 @@ def sprite_block(full, label, stage_index, tint, settings, chip=""):
     would count its escapes as columns, and folding it into the DIM span
     would leave it dimmed instead of independently painted.
     """
-    art = sprites.sprite(full["species"], stage_index, full["shiny"], short=settings.get("sprite_height", 5) <= 3)
+    art = sprites.sprite(full["species"], stage_index, full["shiny"], short=settings.get("sprite_height", 5) <= 3, mood=mood)
     while art and not art[-1].strip():
         art.pop()
     cols = settings.get("columns") or 0

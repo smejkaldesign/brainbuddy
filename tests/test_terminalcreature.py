@@ -1299,6 +1299,46 @@ def test_seed_salt_is_pinned():
           "a known seed still derives the creature it always has")
 
 
+def test_moods():
+    """A blink closes the eyes for a beat; a feed holds a happy face for two
+    seconds; an egg has no eyes to move. Only the eyes change, never the width.
+    """
+    print("\nmoods")
+    from terminalcreature import sprites
+
+    base = sprites.sprite("Nim", 2)
+    blink = sprites.sprite("Nim", 2, mood="blink")
+    happy = sprites.sprite("Nim", 2, mood="happy")
+    check(base[1] != blink[1] and "- -" in blink[1], "a blink closes the eyes")
+    check("^ ^" in happy[1], "a feed raises them")
+    check([len(r) for r in base] == [len(r) for r in blink] == [len(r) for r in happy], "moods never change the width")
+    check([r for i, r in enumerate(base) if i != 1] == [r for i, r in enumerate(blink) if i != 1],
+          "and touch nothing but the eye row")
+    check(sprites.sprite("Nim", 0, mood="happy") == sprites.sprite("Nim", 0), "an egg has no eyes to move")
+    check("_ _" in sprites.sprite("Wisp", 2, mood="blink")[1], "Wisp rests on a dash, so its blink is an underscore")
+    check("* *" in sprites.sprite("Ember", 2, mood="happy")[1], "Ember rests raised, so its happy is a star")
+    check(sprites.face("Nim", 2, True, "blink") == "<-->" and sprites.face("Nim", 2, True, "happy") == "<^^>",
+          "the compact face swaps the same way")
+    check(sprites.face("Nim", 0, True, "happy") == sprites.face("Nim", 0, True), "the compact egg doesn't")
+
+    st = state_mod.default_state()
+    st["sessions"]["s1"] = {"at": 10, "ts": 0}
+    gain, save = state_mod.session_gain(st, "s1", 10)
+    check(gain == 0 and not save, "no gain, nothing to stamp")
+    gain, save = state_mod.session_gain(st, "s1", 13)
+    check(gain == 3 and save, "a rise stamps the feed and asks to be saved")
+    fed = st["sessions"]["s1"]["fed_at"]
+    gain, save = state_mod.session_gain(st, "s1", 13)
+    check(gain == 3 and not save, "the same counter again does not re-stamp")
+    check(state_mod.mood(st, "s1", now=fed + 1.9) == "happy", "happy holds for two seconds after the feed")
+    check(state_mod.mood(st, "s1", now=fed + 2.1) in (None, "blink"), "and lets go after")
+    quiet = 100 * state_mod.BLINK_EVERY  # a multiple, so a window starts here
+    check(state_mod.mood(st, None, now=quiet + 0.1) == "blink", "a blink lands in its window")
+    check(state_mod.mood(st, None, now=quiet + state_mod.BLINK_HOLD + 0.1) is None, "and only in its window")
+    st["sessions"]["s1"]["fed_at"] = quiet
+    check(state_mod.mood(st, "s1", now=quiet + 0.1) == "happy", "a feed beats a blink")
+
+
 if __name__ == "__main__":
     test_metric()
     test_update_chip()
@@ -1326,6 +1366,7 @@ if __name__ == "__main__":
     test_session_xp_counter()
     test_migrates_a_brainbuddy_install()
     test_seed_salt_is_pinned()
+    test_moods()
     print("\n%s" % ("-" * 46))
     if FAILURES:
         print("%d FAILED" % len(FAILURES))
