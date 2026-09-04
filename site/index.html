@@ -332,6 +332,9 @@
     .ledger-row:first-child .proof { display: none; }
     .install { flex-wrap: wrap; justify-content: center; padding: 12px 14px; font-size: 12.5px; }
     .terminal-body { font-size: 12px; }
+    /* the tables scroll sideways here; the host name stays put so a tick is never orphaned */
+    .matrix th:first-child, .matrix td:first-child { position: sticky; left: 0; z-index: 1; background: var(--card); border-right: 1px solid var(--line); }
+    .matrix th:first-child { background: var(--card-2); }
     section { padding-top: 104px; }
   }
   @media (prefers-reduced-motion: reduce) {
