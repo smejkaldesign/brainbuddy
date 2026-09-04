@@ -37,7 +37,12 @@ DEFAULT_SETTINGS = {
     "border": True,           # box the compose column. costs two rows of height
     "update_check": False,    # opt-in: refresh may ask pypi for the latest version once a day
     "update_check_asked": False,  # the one-time offer was shown; never show it again
+    "hookcard": "changes",    # turn-end card on hook hosts: "always" | "changes" | "off"
 }
+
+HOOKCARD_MODES = ("always", "changes", "off")
+# in "changes" mode a quiet session still gets a card this often, so it's not forgotten
+HOOKCARD_EVERY = 10
 
 
 # enough for the handful of sessions anyone has open at once. the oldest baseline
@@ -80,6 +85,34 @@ def session_gain(state, session_id, banked):
         row["fed_at"] = time.time()
         return gain, True
     return gain, False
+
+
+def hookcard_turn(state, session_id, gain, stage_index, mode):
+    """Whether this turn's card is shown, and whether the stage moved since the
+    last one shown. Counts the turn either way. (show, stage_changed).
+
+    "changes" shows the first turn, any turn where the session's xp or stage
+    moved since the card was last shown, and every HOOKCARD_EVERY-th turn
+    otherwise. Without a session id there is nothing to count against, so the
+    card shows: a creature that turns up beats one that never does.
+    """
+    if mode == "off":
+        return False, False
+    if not session_id:
+        return True, False
+    sessions = state.setdefault("sessions", {})
+    row = sessions.get(session_id)
+    if row is None:
+        row = sessions[session_id] = {"at": 0, "ts": int(time.time())}
+    row["turns"] = row.get("turns", 0) + 1
+    seen = "shown_gain" in row
+    stage_changed = seen and stage_index != row.get("shown_stage")
+    show = (mode == "always" or not seen or stage_changed or gain != row["shown_gain"]
+            or row["turns"] % HOOKCARD_EVERY == 0)
+    if show:
+        row["shown_gain"] = gain
+        row["shown_stage"] = stage_index
+    return show, stage_changed
 
 
 # held long enough to be seen between redraws, short enough not to be a stuck face

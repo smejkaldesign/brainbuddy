@@ -2555,8 +2555,251 @@ def test_plugin_hosts():
         shutil.rmtree(home)
 
 
+HOOK_SEEDS = {
+    # one user hook on our event and one on another, in a layout json.dumps would not produce
+    "codex": ('{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo MINE"}]}],'
+              '"SessionEnd":[{"hooks":[{"type":"command","command":"echo BYE"}]}]}}\n'),
+    "gemini": ('{"theme":"x","hooks":{"AfterAgent":[{"hooks":[{"name":"mine","type":"command","command":"echo MINE"}]}],'
+               '"BeforeTool":[{"matcher":"write_.*","hooks":[{"type":"command","command":"echo PRE"}]}]}}\n'),
+    "vibe": '[[hooks]]\nname = "mine"\ntype = "post_agent"\ncommand = "echo MINE"\n\n[[hooks]]\nname = "pre"\ntype = "pre_tool"\nmatch = "bash"\ncommand = "echo PRE"\n',
+    "auggie": ('{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"/x/mine.sh"}]}],'
+               '"PreToolUse":[{"matcher":"launch-process","hooks":[{"type":"command","command":"/x/pre.sh"}]}]}}\n'),
+}
+HOOK_OTHER_EVENT = {"codex": "SessionEnd", "gemini": "BeforeTool", "auggie": "PreToolUse"}
+
+
+def test_hook_hosts():
+    """install --host on a hook host adds one turn-end entry beside whatever
+    hooks the file already holds, hookcard answers in the host's envelope,
+    the cadence keeps it from being spam, and uninstall leaves the file as
+    it was found.
+    """
+    print("\nhook hosts")
+    import json
+    import stat
+    import subprocess
+
+    from terminalcreature import hosts, render
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+
+    def run(env, argv, raw=""):
+        return subprocess.run(cmd + argv, env=env, input=raw, capture_output=True, text=True)
+
+    def make_home():
+        home = tempfile.mkdtemp(prefix="bb-hook-")
+        # the shim looks for the installed lib; point it at the checkout
+        lib = os.path.join(home, ".claude", "terminalcreature", "lib")
+        os.makedirs(lib)
+        os.symlink(os.path.join(repo, "terminalcreature"), os.path.join(lib, "terminalcreature"))
+        return home, dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+
+    def payload(host, sid="s1"):
+        key = "conversation_id" if host == "auggie" else "session_id"
+        return json.dumps({key: sid, "hook_event_name": hosts.HOOK_REGISTRY[host]["event"], "cwd": "/w"})
+
+    for host, seed in HOOK_SEEDS.items():
+        home, env = make_home()
+        try:
+            spec = hosts.HOOK_REGISTRY[host]
+            path = os.path.join(home, spec["config"][2:])
+            os.makedirs(os.path.dirname(path))
+            with open(path, "w") as f:
+                f.write(seed)
+            shim = os.path.join(home, ".claude", "terminalcreature", spec["shim"])
+
+            r = run(env, ["install", "--host", host])
+            check(r.returncode == 0 and host in r.stdout and spec["event"] in r.stdout, "%s: install exits clean, names the host and the event" % host)
+            check(home not in r.stdout, "%s: the install message carries no path" % host)
+            with open(path) as f:
+                text = f.read()
+            if spec["format"] == "toml":
+                check(text.startswith(seed) and hosts.TOML_OPEN in text and hosts.TOML_CLOSE in text and shim in text,
+                      "vibe: the block is appended after the user's tables, which are untouched")
+                check(text.count("[[hooks]]") == 3 and 'type = "post_agent"' in text.split(hosts.TOML_OPEN)[1], "vibe: one post_agent table of ours")
+            else:
+                data = json.loads(text)
+                groups = data["hooks"][spec["event"]]
+                theirs = [h["command"] for g in groups for h in g["hooks"] if "terminalcreature" not in h["command"]]
+                ours = [h for g in groups for h in g["hooks"] if "terminalcreature" in h["command"]]
+                check(len(ours) == 1 and ours[0]["command"] == shim and ours[0]["type"] == "command", "%s: one entry of ours, pointing at the shim" % host)
+                check(theirs == [json.loads(seed)["hooks"][spec["event"]][0]["hooks"][0]["command"]], "%s: the user's hook on the same event is still there, first" % host)
+                check(data["hooks"][HOOK_OTHER_EVENT[host]] == json.loads(seed)["hooks"][HOOK_OTHER_EVENT[host]], "%s: the user's hook on another event is untouched" % host)
+                check(("name" in ours[0]) == spec["name"], "%s: the entry carries a name only when the host has one" % host)
+                if host == "gemini":
+                    check(data["theme"] == "x", "gemini: sibling settings survive")
+            with open(path + ".pre-terminalcreature.bak") as f:
+                check(f.read() == seed, "%s: the backup is the raw file" % host)
+            check(os.stat(shim).st_mode & stat.S_IXUSR, "%s: the shim is executable" % host)
+            with open(shim) as f:
+                shim_text = f.read()
+            check("TERMINALCREATURE_WRAPPING" in shim_text and "hookcard --host %s" % host in shim_text, "%s: the shim guards re-entry and names its host" % host)
+
+            r2 = run(env, ["install", "--host", host])
+            with open(path) as f:
+                check(r2.returncode == 0 and "already wired" in r2.stdout and f.read() == text, "%s: re-running is a no-op that says so" % host)
+
+            out = subprocess.run(["bash", shim], env=env, input=payload(host), capture_output=True, text=True)
+            reply = json.loads(out.stdout)
+            check(out.returncode == 0 and isinstance(reply.get(spec["field"]), str) and "buddy" in reply[spec["field"]],
+                  "%s: the shim answers with the envelope field %s" % (host, spec["field"]))
+            check(home not in out.stdout and "/" not in reply[spec["field"]].replace("/creature", ""), "%s: the card carries no path" % host)
+
+            d = run(env, ["doctor"])
+            check("%-8s %-19s card, wired" % (host, spec["label"]) in d.stdout, "%s: doctor says card, wired" % host)
+
+            u = run(env, ["uninstall", "--host", host])
+            with open(path) as f:
+                check(u.returncode == 0 and f.read() == seed, "%s: uninstall leaves the file byte for byte as found" % host)
+            check(not os.path.exists(shim), "%s: and drops the shim" % host)
+            d = run(env, ["doctor"])
+            check("%-8s %-19s card, not wired" % (host, spec["label"]) in d.stdout, "%s: doctor now says card, not wired" % host)
+
+            # edited since install: only our entry comes out, their edit stays
+            run(env, ["install", "--host", host])
+            with open(path, "a" if spec["format"] == "toml" else "r+") as f:
+                if spec["format"] == "toml":
+                    f.write('\n[[hooks]]\nname = "later"\ntype = "post_tool"\nmatch = "*"\ncommand = "echo L"\n')
+                else:
+                    data = json.load(f)
+                    data["later"] = True
+                    f.seek(0)
+                    f.truncate()
+                    json.dump(data, f)
+            u = run(env, ["uninstall", "--host", host])
+            with open(path) as f:
+                after = f.read()
+            if spec["format"] == "toml":
+                check(u.returncode == 0 and "terminalcreature" not in after and after.startswith(seed) and 'name = "later"' in after,
+                      "vibe: a file edited after install loses only our block")
+            else:
+                got = json.loads(after)
+                check(u.returncode == 0 and got["later"] is True and not hosts._has_our_hook(got, host)
+                      and len(got["hooks"][spec["event"]]) == 1 and HOOK_OTHER_EVENT[host] in got["hooks"],
+                      "%s: a file edited after install loses only our entry" % host)
+        finally:
+            shutil.rmtree(home)
+
+    # a config file that isn't there yet is created, and removed again when it held only ours
+    home, env = make_home()
+    try:
+        os.makedirs(os.path.join(home, ".codex"))
+        r = run(env, ["install", "--host", "codex"])
+        path = os.path.join(home, ".codex", "hooks.json")
+        with open(path) as f:
+            check(r.returncode == 0 and hosts._has_our_hook(json.load(f), "codex"), "codex: a missing hooks.json is created around our entry")
+        u = run(env, ["uninstall", "--host", "codex"])
+        check(u.returncode == 0 and not os.path.exists(path), "codex: and removed again when nothing else went in it")
+    finally:
+        shutil.rmtree(home)
+
+    # the cadence, against a hatched buddy
+    home, env = make_home()
+    try:
+        os.makedirs(os.path.join(home, ".codex"))
+        run(env, ["new", "--yes"])
+        run(env, ["hatch", "--from-zero", "--name", "Kein"])
+        state_path = os.path.join(home, ".claude", "terminalcreature", "state.json")
+
+        def turn(host="codex", sid="s1"):
+            return run(env, ["hookcard", "--host", host], payload(host, sid)).stdout
+
+        def bump(xp):
+            with open(state_path) as f:
+                st = json.load(f)
+            st["creatures"][0]["xp_banked"] = xp
+            with open(state_path, "w") as f:
+                json.dump(st, f)
+
+        first = json.loads(turn())
+        check("Kein" in first["systemMessage"] and "xp" not in first["systemMessage"], "changes: the first turn shows the card, with no counter yet")
+        check(turn() == "", "changes: a turn where nothing moved prints nothing on codex")
+        check(turn("gemini") == "{}\n", "changes: and an empty object on gemini, whose stdout is parsed")
+        quiet = [turn() for _ in range(6)]
+        check(all(q == "" for q in quiet), "changes: it stays quiet through the ninth turn")
+        tenth = turn()
+        check("Kein" in tenth, "changes: the tenth turn shows even with nothing moved")
+        check(turn() == "", "changes: then quiet again")
+        bump(40)
+        moved = json.loads(turn())
+        check("+40 xp" in moved["systemMessage"], "changes: xp landing this session shows the card with the counter")
+        check(turn() == "", "changes: the same counter again is quiet")
+        bump(400)
+        evolved = json.loads(turn())["systemMessage"]
+        check("evolved into" in evolved and "+400 xp" in evolved, "changes: a stage change shows the evolution")
+        check(len(evolved) < 80 and "\033" not in evolved, "the card is one plain line under 80 columns")
+        with open(state_path) as f:
+            row = json.load(f)["sessions"]["s1"]
+        check(row["turns"] == 14 and row["shown_gain"] == 400, "the turn counter and last-shown mark live in the session row")
+        other = json.loads(turn(sid="s2"))["systemMessage"]
+        check("Kein" in other and "xp" not in other, "another session starts its own count at +0")
+
+        r = run(env, ["config", "hookcard", "always"])
+        check(r.returncode == 0 and all("Kein" in turn() for _ in range(3)), "always: every turn shows")
+        r = run(env, ["config", "hookcard", "off"])
+        check(r.returncode == 0 and turn() == "" and turn("gemini") == "{}\n", "off: nothing on codex, an empty object on gemini")
+        r = run(env, ["config", "hookcard", "sometimes"])
+        check(r.returncode == 1 and "always, changes, off" in r.stdout, "a bad cadence is refused with the choices")
+        run(env, ["config", "hookcard", "changes"])
+        bump(500)
+        plain = run(env, ["hookcard", "--host", "opencode"], payload("codex", "o1")).stdout
+        check("Kein Lv" in plain and "{" not in plain and plain.count("\n") == 1, "opencode gets the bare line, no JSON")
+        # the plugins send exactly this and read one line back, or nothing
+        amp = run(env, ["hookcard", "--host", "amp"], '{"session_id": "a1"}').stdout
+        check("Kein Lv" in amp and "{" not in amp and amp.count("\n") == 1, "amp's plugin payload gets the bare line")
+        check(run(env, ["hookcard", "--host", "amp"], '{"session_id": "a1"}').stdout == "", "and a quiet turn prints nothing at all")
+        g = run(env, ["hookcard", "--host", "codex"], "not json at all")
+        check(g.returncode == 0, "garbage on stdin exits 0")
+        g = run(env, ["hookcard"], "")
+        check(g.returncode == 0, "no host and no stdin exits 0")
+        run(env, ["hide"])
+        check(turn(sid="s3") == "" and turn("gemini", "s3") == "{}\n", "hidden means a quiet envelope on every host")
+        run(env, ["show"])
+    finally:
+        shutil.rmtree(home)
+
+    # --host all on a machine with only ~/.codex
+    home, env = make_home()
+    try:
+        os.makedirs(os.path.join(home, ".codex"))
+        r = run(env, ["install", "--host", "all"])
+        with open(os.path.join(home, ".codex", "hooks.json")) as f:
+            check(r.returncode == 0 and "codex" in r.stdout and "hookcard-codex.sh" in f.read(), "all: wires codex when ~/.codex is here")
+        check("gemini" not in r.stdout and "vibe" not in r.stdout, "all: and says nothing about hook hosts that aren't")
+        u = run(env, ["uninstall", "--host", "all"])
+        check(u.returncode == 0 and "codex" in u.stdout and not os.path.exists(os.path.join(home, ".codex", "hooks.json")), "all: uninstall undoes codex")
+        r = run(env, ["install", "--host", "nope"])
+        check(r.returncode == 1 and "codex" in r.stdout and "opencode" in r.stdout, "an unknown host is refused with the hook and plugin hosts listed")
+    finally:
+        shutil.rmtree(home)
+
+    # the pieces on their own
+    check(hosts.hook_envelope("vibe", "x") == '{"system_message": "x"}' and hosts.hook_envelope("vibe", None) == "", "vibe's envelope and silence")
+    check(hosts.hook_envelope("amp", "x") == "x" and hosts.hook_envelope("amp", None) == "", "amp gets bare text")
+    check(hosts.hook_session_id('{"conversation_id": "c1"}', "auggie") == "c1", "auggie's conversation id is the session")
+    saved = {k: os.environ.pop(k) for k in ("GEMINI_SESSION_ID", "AUGMENT_CONVERSATION_ID") if k in os.environ}
+    try:
+        check(hosts.hook_session_id("", "codex") is None and hosts.hook_session_id("[1]", "codex") is None, "no id anywhere is None")
+        os.environ["GEMINI_SESSION_ID"] = "g1"
+        check(hosts.hook_session_id("{}", "gemini") == "g1", "the environment is the fallback for a payload without an id")
+    finally:
+        os.environ.pop("GEMINI_SESSION_ID", None)
+        os.environ.update(saved)
+    st = state_mod.default_state()
+    check(state_mod.hookcard_turn(st, None, 0, 1, "changes") == (True, False), "no session id shows rather than counting")
+    check(state_mod.hookcard_turn(st, "q", 5, 1, "off") == (False, False), "off never shows")
+    st = state_mod.default_state()
+    c = state_mod.create(st, name="Longnameislongnameislong")
+    state_mod.reveal(st)
+    c["xp_banked"] = 5000
+    line = render.card_line(st, gain=9999, evolved=True)
+    check(len(line) < 80 and "\033" not in line and "evolved into" in line, "a long name, a big counter and an evolution still fit in one line")
+
+
 if __name__ == "__main__":
     test_metric()
+    test_hook_hosts()
     test_snippets()
     test_tmux_plugin()
     test_refresh_pokes_tmux()
