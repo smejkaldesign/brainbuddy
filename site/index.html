@@ -66,6 +66,8 @@
   a { color: var(--gold); text-decoration: none; }
   a:hover { color: var(--gold-2); text-decoration: underline; text-underline-offset: 3px; }
   code, kbd, pre, .mono { font-family: var(--mono); }
+  /* the sprites lean on <| |> and _^_; ligatures would fuse them into other glyphs */
+  * { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
   code { color: var(--text); background: #101c15; border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-size: .88em; }
 
   /* matrix rain sits behind everything, faded, strongest at the top */
@@ -487,17 +489,13 @@
 <section id="features">
   <div class="wrap">
     <p class="label">Built for the statusline</p>
-    <h2>Small, polite, and fast on the hot path</h2>
-    <p class="desc">A statusline redraws on every prompt, so the whole thing is stdlib Python, reads a cache, and gets out of the way.</p>
+    <h2>Light, quiet, and easy to remove</h2>
+    <p class="desc">It runs every time your statusline redraws, so it stays small: plain Python and one cached read.</p>
     <div class="features">
-      <div class="feature"><div class="icon">┌┐</div><div><h3>Wraps, never edits</h3><p>Your statusline script is never modified. A generated shim runs your command on the same stdin and draws the creature beside it. <code>--uninstall</code> puts everything back.</p></div></div>
-      <div class="feature"><div class="icon">🥚</div><div><h3>Eggs bank XP while closed</h3><p>Waiting costs nothing. A fresh install's first egg inherits the memory you already have, so it usually hatches several forms in.</p></div></div>
-      <div class="feature"><div class="icon">▲</div><div><h3>High-water mark</h3><p>New XP is the delta above the highest total ever seen. Tidying up your notes is never punished.</p></div></div>
-      <div class="feature"><div class="icon">+8</div><div><h3>Session counter</h3><p>Right of the level bar: what your buddy ate in this session, baselined per session id. Hidden until there's something to show.</p></div></div>
-      <div class="feature"><div class="icon">≡</div><div><h3>A roster</h3><p>Keep several creatures. Only the focused one gains; the rest hold their level and wait. <code>focus</code>, <code>rename</code>, <code>retire</code>.</p></div></div>
-      <div class="feature"><div class="icon">◔</div><div><h3>Five densities</h3><p><code>minimal</code> is one glyph that fills as you evolve. <code>compact</code>, <code>full</code>, the 5-row <code>sprite</code>, or the boxed left column the installer sets up.</p></div></div>
-      <div class="feature"><div class="icon">⬆</div><div><h3>Update chip, opt-in</h3><p>Say yes once and a yellow <code>⬆ update</code> chip appears when a release is out, from one request a day. Say no and nothing terminalcreature runs ever touches the network.</p></div></div>
-      <div class="feature"><div class="icon">py</div><div><h3>Zero dependencies</h3><p>Stdlib Python 3.9 through 3.13, tested on each in CI. macOS, Linux, and Windows under WSL or Git Bash.</p></div></div>
+      <div class="feature"><div class="icon">┌┐</div><div><h3>Never edits your statusline</h3><p>Your existing statusline keeps running as it is. The creature is drawn beside it. One command puts everything back.</p></div></div>
+      <div class="feature"><div class="icon">py</div><div><h3>Nothing to install but Python</h3><p>Python 3.9 or newer and bash. No packages, no accounts. macOS, Linux, and Windows through WSL or Git Bash.</p></div></div>
+      <div class="feature"><div class="icon">▲</div><div><h3>XP only goes up</h3><p>Deleting or merging notes never lowers your creature's level. It remembers the most you have ever had.</p></div></div>
+      <div class="feature"><div class="icon">⬆</div><div><h3>Updates are opt-in</h3><p>Say yes once and a small chip appears when a new version is out. Say no and it never touches the network.</p></div></div>
     </div>
   </div>
 </section>
@@ -630,20 +628,21 @@
     ["dim", "  two names from the egg: Zask, Fimi · going with Zask"],
     ["gap"],
     ["gold", "  the egg cracks"],
-    ["art", "       _^_\n     ( ' ' )\n      /$$$\\\n       ^ ^"],
+    ["art", sprite(NIM, 3, true).split("\n").map(function (r) { return "  " + r.replace(/\s+$/, ""); }).join("\n")],
     ["gold", "  Zask, a Legendary Nim (shiny)"],
     ["gold", "  Lv41 Adept"],
     ["status"]
   ];
   var running = null;
   function statusHTML() {
-    return '<div class="t-status"><span class="frame">┌───────────┐</span>\n' +
-      '<span class="frame">│</span><span class="creature">    \\|/    </span><span class="frame">│</span>  <span class="bar">████░░░░░░</span>  my-notes ⎇ main\n' +
-      '<span class="frame">│</span><span class="creature">   ( \' \' ) </span><span class="frame">│</span>  🥚 Zask · Adept Lv41 <span class="bar">█░░░░░</span>\n' +
-      '<span class="frame">│</span><span class="creature">  <|$$$|>  </span><span class="frame">│</span>\n' +
-      '<span class="frame">│</span><span class="creature">   /|_|\\   </span><span class="frame">│</span>\n' +
-      '<span class="frame">│</span><span class="creature">   ^   ^   </span><span class="frame">│</span>\n' +
-      '<span class="frame">└───────────┘</span></div>';
+    var rows = sprite(NIM, 3, true).split("\n");
+    var right = ['  <span class="bar">████░░░░░░</span>  my-notes ⎇ main', '  🥚 Zask · Adept Lv41 <span class="bar">█░░░░░</span>', "", "", ""];
+    var edge = "─".repeat(WIDTH);
+    var out = '<div class="t-status"><span class="frame">┌' + edge + '┐</span>\n';
+    for (var k = 0; k < rows.length; k++) {
+      out += '<span class="frame">│</span><span class="creature">' + esc(rows[k]) + '</span><span class="frame">│</span>' + right[k] + "\n";
+    }
+    return out + '<span class="frame">└' + edge + '┘</span></div>';
   }
   function play() {
     if (running) clearTimeout(running);
