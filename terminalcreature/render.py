@@ -5,8 +5,11 @@ reach stdout can reach a screenshot, and memory filenames leak plenty on their
 own even though R2 means we never opened them.
 """
 
+import contextlib
 import os
+import re
 import sys
+import unicodedata
 
 from . import creature as creature_mod
 from . import metric, sprites, state as state_mod
@@ -40,12 +43,129 @@ EGG_ICON = "🥚"
 EGG_ICON_ASCII = "o"
 
 
+FORMATS = ("ansi", "tmux", "plain")
+
+# keyed on the escape, so the constants above stay the one place a colour is chosen
+TMUX_STYLE = {
+    "\033[37m": "#[fg=white]",
+    "\033[33m": "#[fg=yellow]",
+    "\033[36m": "#[fg=cyan]",
+    "\033[35m": "#[fg=magenta]",
+    "\033[32m": "#[fg=green]",
+    "\033[2m": "#[dim]",
+    "\033[1;33m": "#[fg=yellow,bold]",
+    "\033[1m": "#[bold]",
+    "\033[38;5;240m": "#[fg=colour240]",
+}
+TMUX_RESET = "#[default]"
+
+
 def color_ok():
     return os.environ.get("NO_COLOR") is None and os.environ.get("TERM") != "dumb"
 
 
+class Style:
+    """One paint per backend. ansi is the terminal's own escapes and honours
+    NO_COLOR. tmux speaks #[fg=] because tmux strips raw escapes out of a
+    status command's output and shows the bytes instead. plain is bare text,
+    for prompts that escape whatever they are handed.
+    """
+
+    def __init__(self, fmt="ansi"):
+        if fmt not in FORMATS:
+            raise ValueError("format must be one of %s" % ", ".join(FORMATS))
+        self.fmt = fmt
+
+    def paint(self, text, code):
+        if self.fmt == "plain":
+            return text
+        if self.fmt == "tmux":
+            style = TMUX_STYLE.get(code, "")
+            return "%s%s%s" % (style, text, TMUX_RESET) if style else text
+        return "%s%s%s" % (code, text, RESET) if color_ok() else text
+
+
+_active = Style("ansi")
+
+
 def paint(text, code):
-    return "%s%s%s" % (code, text, RESET) if color_ok() else text
+    return _active.paint(text, code)
+
+
+@contextlib.contextmanager
+def styled(fmt):
+    """Every paint inside the block goes through this backend. None means ansi,
+    so callers that never heard of formats keep the bytes they always got.
+    """
+    global _active
+    prev = _active
+    _active = Style(fmt or "ansi")
+    try:
+        yield
+    finally:
+        _active = prev
+
+
+# zero columns wide on screen: any CSI sequence (SGR included), an OSC such as
+# a hyperlink, a lone two-byte escape, and in tmux a #[] style. a host's own text
+# reaches fit through compose, so the whole family is skipped as a unit or a cap
+# could land inside one. ansi callers keep a literal #[ in that text as text
+_ESCAPE = r"\033\[[0-?]*[ -/]*[@-~]|\033\][^\033\a]*(?:\a|\033\\)?|\033[@-Z\\-_]"
+_DIRECTIVE = {
+    "ansi": re.compile(r"(%s)|(.)" % _ESCAPE, re.DOTALL),
+    None: re.compile(r"(%s|#\[[^\]]*\])|(.)" % _ESCAPE, re.DOTALL),
+}
+
+
+def _cell_width(ch):
+    if unicodedata.combining(ch) or unicodedata.category(ch) in ("Mn", "Me", "Cf"):
+        # marks, variation selectors and joiners ride on the glyph before them
+        return 0
+    # the egg icon and its kind take two cells; counting them as one would
+    # let a capped line run a column past where the host cuts it
+    return 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+
+
+def fit(text, width, fmt=None):
+    """Cap every line at width visible columns. Directives cost nothing, wide
+    glyphs cost two, and a cut lands after a whole word rather than inside one.
+    Whatever styling was open at the cut is closed, so the host's own text
+    after it doesn't inherit the creature's colour. fmt "ansi" reads #[ as
+    text; anything else treats a tmux style as a directive too.
+    """
+    if not width or width < 1:
+        return text
+    pattern = _DIRECTIVE.get(fmt, _DIRECTIVE[None])
+    return "\n".join(_fit_line(line, width, pattern) for line in text.split("\n"))
+
+
+def _fit_line(line, width, pattern):
+    kept, cols, cut = [], 0, False
+    for m in pattern.finditer(line):
+        directive, ch = m.group(1), m.group(2)
+        if directive:
+            kept.append((directive, True))
+            continue
+        w = _cell_width(ch)
+        if cols + w > width:
+            # a cut inside a word leaves a fragment, so back up to the last gap
+            if not ch.isspace():
+                gaps = [i for i, (t, d) in enumerate(kept) if not d and t.isspace()]
+                if gaps:
+                    kept = kept[:gaps[-1]]
+            cut = True
+            break
+        kept.append((ch, False))
+        cols += w
+    while kept and not kept[-1][1] and kept[-1][0].isspace():
+        kept.pop()
+    out = "".join(t for t, _ in kept)
+    if cut:
+        # only a colour directive needs closing; a hyperlink or cursor code doesn't
+        opened = [t for t, d in kept if d and (t.startswith("#[") or t.endswith("m"))]
+        if opened and opened[-1] not in (RESET, TMUX_RESET):
+            out += TMUX_RESET if opened[-1].startswith("#[") else RESET
+    return out
 
 
 def unicode_ok(settings):
@@ -116,7 +236,24 @@ def no_source_help(settings, status):
     state = status["state"]
     if state == "ok":
         return ""
-    provider = settings.get("provider", "claude")
+    # auto is a rule, not a layout, so the advice is for whatever it picked
+    provider = state_mod.resolve_provider(settings)
+    looked = ", ".join(a["label"] for a in metric.AGENT_ROOTS)
+
+    if provider == "agents":
+        # names only. the roots are home-relative and stay out of the output
+        if state == "empty":
+            return "\n".join([
+                "Found %s, but nothing written yet. Ask it to keep memory and your" % ", ".join(status.get("found", [])),
+                "buddy eats on the next render.",
+            ])
+        return "\n".join([
+            "No agent memory here to feed on. Looked for %s." % looked,
+            "",
+            "Ask your coding agent to start keeping one:",
+            "",
+            '  "' + SETUP_PROMPT + '"',
+        ])
 
     if state == "layout_mismatch":
         return "\n".join([
@@ -143,9 +280,20 @@ def no_source_help(settings, status):
 
     # provider is claude and the directory has never existed, so this is someone
     # who hasn't kept memory at all. the only branch that earns the long version.
-    return "\n".join([
+    lines = [
         "Buddies feed off memories, and there's nothing here to feed on yet. Your",
         "buddy grows as your second brain does, so it needs one to eat from.",
+    ]
+    if settings.get("provider", "auto") == "auto":
+        # one lone agent that isn't claude reads as zero here. name it, and the
+        # one setting that counts it, rather than claiming nothing was found
+        found = metric.found_agents()
+        if found:
+            lines += ["Found %s. auto only switches to agents with two or more installed:" % ", ".join(found),
+                      "  /creature config provider agents"]
+        else:
+            lines.append("Looked for %s. None of them have a memory folder." % looked)
+    return "\n".join(lines + [
         "",
         "Ask Claude Code to start keeping one:",
         "",
@@ -174,8 +322,17 @@ def update_chip(settings, uni, word=True, available=None):
     return paint(icon + " update" if word else icon, UPDATE)
 
 
-def segment(st, xp=None, counts=None, gain=0, mood=None):
-    """One line for the statusline. Empty string means render nothing."""
+def segment(st, xp=None, counts=None, gain=0, mood=None, fmt=None, width=None):
+    """One line for the statusline. Empty string means render nothing.
+
+    fmt picks the style backend, width caps the columns. Both default to what
+    Claude Code has always been handed.
+    """
+    with styled(fmt):
+        return fit(_segment(st, xp, counts, gain, mood), width, fmt or "ansi")
+
+
+def _segment(st, xp, counts, gain, mood):
     settings = st["settings"]
     uni = unicode_ok(settings)
     if xp is None:
@@ -268,7 +425,7 @@ def _column_width(full, short):
     )
 
 
-def compose(st, left, xp=None, counts=None, gain=0, mood=None):
+def compose(st, left, xp=None, counts=None, gain=0, mood=None, fmt=None, width=None):
     """Merge a caller's statusline text with the creature as a left column.
 
     The creature's first row shares row one with the bar, so it reads as a
@@ -276,6 +433,11 @@ def compose(st, left, xp=None, counts=None, gain=0, mood=None):
     rather than right because a fixed-width column needs no measurement: the
     host's box can be any width and the art still lands whole.
     """
+    with styled(fmt):
+        return fit(_compose(st, left, xp, counts, gain, mood), width, fmt or "ansi")
+
+
+def _compose(st, left, xp, counts, gain, mood):
     settings = st["settings"]
     if settings.get("density") == "ruler":
         return ruler()
@@ -418,7 +580,7 @@ def egg_card(st, c):
     return "\n".join(out)
 
 
-def card(st, xp=None, counts=None, hungry_note=True, art=True):
+def card(st, xp=None, counts=None, hungry_note=True, art=True, fmt=None, width=None):
     """The /creature view. Multi-line, safe to be verbose, except about paths.
 
     hungry_note=False for callers that answer the zero themselves. The card's
@@ -427,6 +589,11 @@ def card(st, xp=None, counts=None, hungry_note=True, art=True):
     creature, like the hatch ceremony: it drops the sprite and the name header
     rather than repeating them.
     """
+    with styled(fmt):
+        return fit(_card(st, xp, counts, hungry_note, art), width, fmt or "ansi")
+
+
+def _card(st, xp, counts, hungry_note, art):
     settings = st["settings"]
     uni = unicode_ok(settings)
     if xp is None:

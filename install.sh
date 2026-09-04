@@ -30,6 +30,7 @@ terminalcreature installer
   ./install.sh --no-wire           install the library only, wire it yourself
   ./install.sh --no-commands       skip the slash commands, something else ships them
   ./install.sh --uninstall         unwire and restore your old statusline
+  ./install.sh --host <name>       wire cursor, copilot, qwen, droid or all instead of claude
 EOF
 }
 
@@ -54,6 +55,7 @@ INLINE=0
 COMMANDS=1
 MODE=install
 STATUSLINE=""
+HOST=claude
 
 # shift 2 with nothing to shift trips set -e, so a missing value used to exit 1
 # with no output at all
@@ -66,6 +68,7 @@ while [ $# -gt 0 ]; do
     --vault) need_value --vault "${2:-}"; VAULT="$2"; shift 2 ;;
     --folder) need_value --folder "${2:-}"; FOLDER="$2"; shift 2 ;;
     --statusline) need_value --statusline "${2:-}"; STATUSLINE="$2"; shift 2 ;;
+    --host) need_value --host "${2:-}"; HOST="$2"; shift 2 ;;
     --inline) INLINE=1; shift ;;
     --no-wire) WIRE=0; shift ;;
     --no-commands) COMMANDS=0; shift ;;
@@ -76,6 +79,14 @@ while [ $# -gt 0 ]; do
 done
 
 command -v python3 >/dev/null 2>&1 || { echo "python3 not found. terminalcreature needs it."; exit 1; }
+
+# the other hosts are wired by the python adapters. this script stays the
+# claude path. the source tree is on the path too, for an uninstall run after
+# the library is already gone
+hostbb() { PYTHONPATH="$LIB:$SRC" python3 -m terminalcreature.cli "$@"; }
+HOSTARGS=(--host "$HOST")
+if [ "$INLINE" = 1 ]; then HOSTARGS+=(--inline); fi
+if [ -n "$STATUSLINE" ]; then HOSTARGS+=(--statusline "$STATUSLINE"); fi
 
 read_statusline() {
   python3 - "$SETTINGS" <<'PY'
@@ -244,6 +255,12 @@ migrate_from_brainbuddy() {
   esac
 }
 
+if [ "$MODE" = uninstall ] && [ "$HOST" != claude ]; then
+  hostbb uninstall --host "$HOST"
+  # one host unwired, the library stays for the others
+  if [ "$HOST" != all ]; then exit 0; fi
+fi
+
 if [ "$MODE" = uninstall ]; then
   PREVIOUS=""
   if [ -s "$WRAPPED" ]; then PREVIOUS="$(cat "$WRAPPED")"; fi
@@ -322,8 +339,17 @@ else
   case "$CURRENT_PROVIDER" in
     "vault "*) echo "  provider -> vault at ${CURRENT_PROVIDER#vault }  (unchanged)" ;;
     "folder "*) echo "  provider -> folder of notes at ${CURRENT_PROVIDER#folder }  (unchanged)" ;;
-    *) echo "  provider -> stock Claude Code memory (~/.claude/projects/*/memory)" ;;
+    "agents "*) echo "  provider -> every coding agent's memory on this machine  (unchanged)" ;;
+    "claude "*) echo "  provider -> stock Claude Code memory (~/.claude/projects/*/memory)  (unchanged)" ;;
+    *) echo "  provider -> auto (every coding agent's memory when two or more are installed, else stock Claude Code memory)" ;;
   esac
+fi
+
+HOSTWIRED=0
+if [ "$WIRE" = 1 ] && [ "$HOST" != claude ] && [ "$HOST" != all ]; then
+  hostbb install "${HOSTARGS[@]}"
+  HOSTWIRED=1
+  WIRE=0
 fi
 
 if [ "$WIRE" = 1 ]; then
@@ -370,6 +396,8 @@ if [ "$WIRE" = 1 ]; then
   # after the write, not before, so a refusal doesn't get announced as a success
   write_statusline "$SHIM"
   echo "$WIRED"
+  # claude is wired above, so the adapters report it as already done
+  if [ "$HOST" = all ]; then hostbb install "${HOSTARGS[@]}"; HOSTWIRED=1; fi
 fi
 
 echo
@@ -388,7 +416,7 @@ if [ -n "$SOURCE_HELP" ]; then echo "$SOURCE_HELP"; echo; fi
 # prompt off the roster, not off whether we just laid it, or a reinstall never
 # re-offers the one action the user still has to take
 if bb list 2>/dev/null | grep -q '^\*.*unhatched'; then
-  if [ "$WIRE" = 1 ] || [ -n "${HANDWIRED:-}" ]; then
+  if [ "$WIRE" = 1 ] || [ "$HOSTWIRED" = 1 ] || [ -n "${HANDWIRED:-}" ]; then
     echo "there's an egg in your statusline, and it's hungry. open it:"
   else
     # --no-wire promised "wire it yourself"; this is the how

@@ -25,7 +25,7 @@ UPDATE_TTL = 24 * 3600
 STATE_VERSION = 2
 
 DEFAULT_SETTINGS = {
-    "provider": "claude",       # "claude" | "vault"
+    "provider": "auto",         # "auto" | "agents" | "claude" | "vault" | "folder"
     "vault_root": "",
     "weights": {},
     "xp_max": metric.XP_MAX_DEFAULT,
@@ -186,13 +186,32 @@ def save(state, path=STATE_PATH, own_settings=False):
     os.replace(tmp, path)
 
 
+def resolve_provider(settings):
+    """The provider that will actually be measured. auto is decided here, off
+    directory existence alone, so the answer is the same on every call until
+    an agent is installed or removed.
+    """
+    provider = settings.get("provider") or "auto"
+    if provider != "auto":
+        return provider
+    if len(metric.found_agents()) >= metric.AUTO_MIN_AGENTS:
+        return "agents"
+    return "claude"
+
+
 def sources_for(settings):
-    provider = settings.get("provider")
+    """(root, sources). For agents the root is home and the sources are the
+    whole AGENT_ROOTS table: callers that only want a directory to name get
+    one, and the ones that measure branch on the table identity.
+    """
+    provider = resolve_provider(settings)
     root = os.path.expanduser(settings.get("vault_root") or "")
     if provider == "vault" and root:
         return root, metric.VAULT_SOURCES
     if provider == "folder" and root:
         return root, metric.FOLDER_SOURCES
+    if provider == "agents":
+        return os.path.expanduser("~"), metric.AGENT_ROOTS
     return metric.default_claude_root(), metric.CLAUDE_SOURCES
 
 
@@ -203,8 +222,21 @@ def source_status(settings):
     root that isn't there, a real root that's empty, and a root full of files
     the provider's layout doesn't match. Only the middle one means "keep
     writing", so they can't share one message.
+
+    The agents provider adds "agents" (per-agent counts), "found" and
+    "missing" (agent keys) so `sources` can say who was counted.
     """
     root, sources = sources_for(settings)
+    if sources is metric.AGENT_ROOTS:
+        xp, per_agent, found = metric.measure_agents(settings.get("weights"))
+        missing = [k for k in metric.agent_keys() if k not in found]
+        extra = {"agents": per_agent, "found": found, "missing": missing}
+        counts = metric.flatten_agent_counts(per_agent)
+        if not found:
+            return dict({"state": "missing_root", "xp": 0, "counts": {}}, **extra)
+        if xp:
+            return dict({"state": "ok", "xp": xp, "counts": counts}, **extra)
+        return dict({"state": "empty", "xp": 0, "counts": counts}, **extra)
     if not os.path.isdir(root):
         return {"state": "missing_root", "xp": 0, "counts": {}}
     xp, counts = metric.measure(root, sources, settings.get("weights"))
@@ -221,7 +253,13 @@ def source_status(settings):
 
 
 def measure_now(settings):
+    """(xp, counts). Agents fold to one count per source key, the shape the
+    cache, the card and the stats already read.
+    """
     root, sources = sources_for(settings)
+    if sources is metric.AGENT_ROOTS:
+        xp, per_agent, _ = metric.measure_agents(settings.get("weights"))
+        return xp, metric.flatten_agent_counts(per_agent)
     return metric.measure(root, sources, settings.get("weights"))
 
 

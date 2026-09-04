@@ -36,6 +36,16 @@ user's file. Both paths end where the clone path ends: an egg in the statusline 
 five command files into `~/.claude/commands`, and each one appears twice in the picker.
 Uninstall respects it too and leaves the plugin's copies alone.
 
+## Beyond Claude Code
+
+The plugin route wires Claude Code only, because that is the host the plugin system belongs
+to. The library it installs is the same one that drives every other surface, so once it is
+on disk the rest is a CLI call away: `terminalcreature install --host cursor|copilot|qwen|droid|all`
+wires another agent's native statusline, and `terminalcreature snippet tmux|starship|zsh|fish|omp|wezterm`
+prints the paste-in config for a prompt or multiplexer. XP counts the memory of every coding
+agent on the machine under the default `auto` provider, not just Claude Code's. The README's
+"Works with" section has the full compatibility tables.
+
 ## Marketplace repo, for RICK
 
 `marketplace.json` here is ready to copy, not live. Create a public repo

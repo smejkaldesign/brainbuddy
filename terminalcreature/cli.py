@@ -10,7 +10,7 @@ import sys
 
 from . import __version__
 from . import creature as creature_mod
-from . import metric, render, sprites
+from . import hosts, metric, render, sprites
 from . import state as state_mod
 
 USAGE = """terminalcreature - a terminal pet that evolves with your memory
@@ -18,6 +18,8 @@ USAGE = """terminalcreature - a terminal pet that evolves with your memory
   render              one-line statusline segment (what the statusline calls)
   compose "<text>"    your statusline text with the creature as a left column
   card                full creature card
+     render, compose and card take --format ansi|tmux|plain (default ansi, or
+     $TERMINALCREATURE_FORMAT) and --width N to cap the columns
   new [name]          lay a new egg (--replace or --add)
   hatch [--from-zero] open the egg; --from-zero starts at 0 instead of scoring
         [--name <n>]  what you've already written. --name names it as it opens
@@ -31,15 +33,26 @@ USAGE = """terminalcreature - a terminal pet that evolves with your memory
   hide / show         drop the creature from the statusline, or bring it back
   simulate <xp>       preview any level without touching your real state
   refresh             recompute the xp cache (run in the background by render)
+  snippet <surface>   paste-in config for tmux, starship, zsh, fish, omp or wezterm
   sources             what it can count, and what to do if that's nothing
   doctor [--check]    check what terminalcreature can see; --check also asks pypi
   update [--apply]    ask pypi whether there's a newer terminalcreature; --apply installs it
+  install [--host claude|cursor|copilot|qwen|droid|all] [--inline] [--statusline <cmd>]
+                      point a host's statusline at the creature, wrapping what it ran
+                      before. all wires every host that's installed. install.sh does
+                      the full claude setup; this only wires the statusline
+  uninstall [--host ...]
+                      put the host's statusline back and drop the shim
 
 update and doctor --check are the only commands that go online, and only when
 you run them. Everything else, the statusline included, is offline.
 
-provider is claude (stock Claude Code memory), vault (a structured vault) or
-folder (any directory of markdown, set vault_root to point at it).
+provider is auto (the default: agents when two or more coding agents are
+installed, else claude), agents (every agent's memory, sessions and rules:
+Claude Code, Codex, Gemini, Copilot, Cursor, Qwen, Droid, opencode, Amp, Goose,
+Continue, Kiro, Cline, Crush), claude (stock Claude Code memory), vault (a
+structured vault) or folder (any directory of markdown, set vault_root to
+point at it).
 """
 
 
@@ -61,12 +74,61 @@ def _stdin_text():
         return ""
 
 
-def _session_id(raw):
-    """Claude Code's statusline JSON carries the session id. Only that is read."""
+def _waiting_stdin():
+    """stdin, but only what is already there. doctor is run by hand, often
+    from a script holding a pipe open, and blocking on it would read as a hang.
+    """
     try:
-        return json.loads(raw).get("session_id") or None
-    except (ValueError, AttributeError):
-        return None
+        import select
+        if sys.stdin.isatty() or not select.select([sys.stdin], [], [], 0.05)[0]:
+            return ""
+    except Exception:
+        pass
+    return _stdin_text()
+
+
+def _session_id(raw):
+    """The session id out of whatever host piped its JSON, or None."""
+    return hosts.parse_session(raw)["session_id"]
+
+
+FORMAT_ENV = "TERMINALCREATURE_FORMAT"
+
+
+def _render_opts(args):
+    """Pull --format and --width out of args. Returns (fmt, width, rest, problem).
+
+    problem is a message rather than an exception because render and compose
+    must never crash a statusline: they fall back to ansi and no cap, and only
+    card, which a human runs, says what was wrong.
+    """
+    fmt = os.environ.get(FORMAT_ENV) or "ansi"
+    width, rest, problem = None, [], None
+    i = 0
+    while i < len(args):
+        key, eq, val = args[i].partition("=")
+        if key not in ("--format", "--width"):
+            rest.append(args[i])
+            i += 1
+            continue
+        if not eq and i + 1 < len(args):
+            i += 1
+            val = args[i]
+        i += 1
+        if key == "--format":
+            fmt = val
+        else:
+            try:
+                width = int(val)
+            except ValueError:
+                problem = "--width takes a number, not %r" % val
+    if fmt not in render.FORMATS:
+        problem = "--format takes ansi, tmux or plain, not %r" % fmt
+        fmt = "ansi"
+    if width is not None and width < 1:
+        problem = "--width must be positive"
+        width = None
+    return fmt, width, rest, problem
 
 
 def _bank(st, session_id):
@@ -84,12 +146,13 @@ def _bank(st, session_id):
 
 def cmd_render(args):
     try:
+        fmt, width, _, _ = _render_opts(args)
         session = _session_id(_stdin_text())
         st = _load()
         if st["settings"].get("hidden"):
             return 0
         xp, counts, gain, mood = _bank(st, session)
-        line = render.segment(st, xp, counts, gain=gain, mood=mood)
+        line = render.segment(st, xp, counts, gain=gain, mood=mood, fmt=fmt, width=width)
         if line:
             sys.stdout.write(line)
     except Exception:
@@ -99,6 +162,7 @@ def cmd_render(args):
 
 def cmd_compose(args):
     """Merge caller-supplied statusline text with the creature as a left column."""
+    fmt, width, args, _ = _render_opts(args)
     left = args[0] if args else ""
     try:
         raw = _stdin_text()
@@ -113,7 +177,7 @@ def cmd_compose(args):
             sys.stdout.write(left)
             return 0
         xp, counts, gain, mood = _bank(st, session)
-        sys.stdout.write(render.compose(st, left, xp, counts, gain=gain, mood=mood))
+        sys.stdout.write(render.compose(st, left, xp, counts, gain=gain, mood=mood, fmt=fmt, width=width))
     except Exception:
         sys.stdout.write(left)
     return 0
@@ -124,7 +188,12 @@ def cmd_refresh(args):
     # as long as the vault is big, and a roster held across it would revert any
     # egg laid or hatched meanwhile
     xp, counts = state_mod.measure_now(state_mod.load()["settings"])
+    before = state_mod.read_cache()
     state_mod.write_cache(xp, counts)
+    if before is None or before[0] != xp:
+        # tmux otherwise waits out status-interval to show the new level
+        from . import snippets
+        snippets.poke_tmux()
     st = _load()
     event = state_mod.sync(st, xp)
     state_mod.save(st)
@@ -140,11 +209,15 @@ def cmd_refresh(args):
 
 
 def cmd_card(args):
+    fmt, width, _, problem = _render_opts(args)
+    if problem:
+        print(problem)
+        return 1
     st = _load()
     xp, _ = render.current_xp(st)
     state_mod.sync(st, xp)
     state_mod.save(st)
-    print(render.card(st))
+    print(render.card(st, fmt=fmt, width=width))
     s = st["settings"]
     if not s.get("update_check") and not s.get("update_check_asked"):
         # the one-time offer. default-off would otherwise mean nobody who
@@ -436,6 +509,8 @@ PROVIDER_LABEL = {
     "claude": "stock Claude Code memory",
     "vault": "vault layout",
     "folder": "folder of notes",
+    "agents": "every coding agent's memory",
+    "auto": "agents when two or more are installed, else claude",
 }
 
 SHIM = "~/.claude/terminalcreature/statusline-terminalcreature.sh"
@@ -536,6 +611,15 @@ def cmd_doctor(args):
         bp = metric.progress(banked, settings["xp_max"])
         stage = bp["stage"] if state_mod.is_hatched(c) else "egg"
         print("%s banked %d -> level %d (%s)" % (c["name"], banked, bp["level"], stage))
+    # piped a host's statusline json? say which shape it was read as, so a
+    # sessionless render on a new host is one doctor run from an answer
+    raw = _waiting_stdin()
+    if raw.strip():
+        print(hosts.describe(hosts.parse_session(raw)))
+    else:
+        print("stdin: no session on stdin")
+    for line in hosts.doctor_lines():
+        print(line)
     override = _project_override()
     if override:
         print("\n" + override)
@@ -611,7 +695,38 @@ def cmd_sources(args):
         # nonzero so the installer can branch on the exit code. it used to match
         # on the first word of the success line, which reworded copy would break
         return 1
+    if "agents" in status:
+        # one line per agent found, counts by key in table order. names and
+        # numbers only, never the file it matched
+        for agent in metric.AGENT_ROOTS:
+            row = status["agents"].get(agent["key"])
+            if row is None:
+                continue
+            keys = []
+            for _, sources in agent["roots"]:
+                for source in sources:
+                    if source["key"] not in keys:
+                        keys.append(source["key"])
+            parts = ["%s %d" % (k, row.get(k, 0)) for k in keys if row.get(k, 0)]
+            print("%s: %s" % (agent["key"], ", ".join(parts) if parts else "nothing yet"))
+        if status["missing"]:
+            print("not found: %s" % ", ".join(status["missing"]))
+        print("counting %d xp of memory across %d agents. /creature shows your buddy." % (
+            status["xp"], len(status["found"])))
+        return 0
     print("counting %d xp of memory. /creature shows your buddy." % status["xp"])
+    return 0
+
+
+def cmd_snippet(args):
+    """A paste-in config for one surface outside the agent's statusline."""
+    from . import snippets
+
+    text = snippets.render_snippet(args[0]) if args else None
+    if text is None:
+        print("terminalcreature snippet <surface>. surfaces: %s" % ", ".join(snippets.SURFACES))
+        return 1
+    print(text)
     return 0
 
 
@@ -636,12 +751,85 @@ def cmd_show(args):
     return _set_hidden(False)
 
 
+def _host_args(args):
+    """(host, inline, statusline) out of install/uninstall args, or (None, problem)."""
+    host, inline, statusline, i = "claude", False, None, 0
+    while i < len(args):
+        key, eq, val = args[i].partition("=")
+        if key == "--inline":
+            inline = True
+        elif key in ("--host", "--statusline"):
+            if not eq:
+                i += 1
+                if i >= len(args):
+                    return None, "%s needs a value" % key
+                val = args[i]
+            if key == "--host":
+                host = val
+            else:
+                statusline = val
+        else:
+            return None, "unknown option %s. hosts are %s, or all" % (args[i], ", ".join(hosts.HOSTS))
+        i += 1
+    if host != "all" and host not in hosts.HOSTS:
+        return None, "unknown host %s. hosts are %s, or all" % (host, ", ".join(hosts.HOSTS))
+    return (host, inline, statusline), None
+
+
+def _host_targets(host, uninstall=False):
+    """all means every host that's here; on uninstall, every host still wired too."""
+    if host != "all":
+        return [host]
+    if uninstall:
+        return [h for h in hosts.HOSTS if hosts.installed(h) or os.path.exists(hosts.shim_path(h))]
+    return [h for h in hosts.HOSTS if hosts.installed(h)]
+
+
+def cmd_install(args):
+    parsed, problem = _host_args(args)
+    if problem:
+        print(problem)
+        return 1
+    host, inline, statusline = parsed
+    targets = _host_targets(host)
+    if host == "all" and not targets:
+        print("no supported host is installed here, nothing to wire")
+        return 0
+    if host == "all" and targets == ["claude"]:
+        print("only claude is installed here, nothing else to wire")
+    failed = False
+    for h in targets:
+        ok, message = hosts.wire(h, inline=inline, statusline=statusline)
+        print("  %-8s %s" % (h, message))
+        failed = failed or not ok
+    return 1 if failed else 0
+
+
+def cmd_uninstall(args):
+    parsed, problem = _host_args(args)
+    if problem:
+        print(problem)
+        return 1
+    host = parsed[0]
+    targets = _host_targets(host, uninstall=True)
+    if host == "all" and not targets:
+        print("no host is wired here, nothing to undo")
+        return 0
+    failed = False
+    for h in targets:
+        ok, message = hosts.unwire(h)
+        print("  %-8s %s" % (h, message))
+        failed = failed or not ok
+    return 1 if failed else 0
+
+
 COMMANDS = {
     "render": cmd_render, "compose": cmd_compose, "refresh": cmd_refresh, "card": cmd_card,
     "new": cmd_new, "hatch": cmd_hatch, "names": cmd_names, "focus": cmd_focus, "list": cmd_list,
     "rename": cmd_rename, "retire": cmd_retire, "config": cmd_config,
     "simulate": cmd_simulate, "doctor": cmd_doctor, "sources": cmd_sources,
-    "hide": cmd_hide, "show": cmd_show, "update": cmd_update,
+    "hide": cmd_hide, "show": cmd_show, "update": cmd_update, "snippet": cmd_snippet,
+    "install": cmd_install, "uninstall": cmd_uninstall,
 }
 
 

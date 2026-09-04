@@ -5,9 +5,11 @@ touched, so nothing here can leak a memory filename into CI output (R12).
 """
 
 import os
+import re
 import shutil
 import sys
 import tempfile
+import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -1425,8 +1427,814 @@ def test_moods():
     check(state_mod.mood(st, "s1", now=quiet + 0.1) == "happy", "a feed beats a blink")
 
 
+def _styled_state():
+    st = state_mod.default_state()
+    c = _hatched(st, name="Zask")
+    c["xp_banked"] = 80
+    st["settings"]["unicode"] = True
+    return st
+
+
+def _visible(text):
+    """Columns a row takes on screen: directives free, wide glyphs two."""
+    plain = re.sub(r"\x1b\[[0-9;]*m|#\[[^\]]*\]", "", text)
+    return max(sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in row) for row in plain.split("\n"))
+
+
+def test_render_formats():
+    """tmux strips raw escapes out of a status command and shows the bytes, so
+    its backend speaks #[fg=] and never emits one. plain is bare text. ansi is
+    the bytes Claude Code has always been handed, NO_COLOR included.
+    """
+    print("\nrender formats")
+    from terminalcreature import render
+
+    os.environ.pop("NO_COLOR", None)
+    try:
+        st = _styled_state()
+        for name, draw in (
+            ("segment", lambda fmt: render.segment(st, xp=80, counts={}, gain=5, fmt=fmt)),
+            ("compose", lambda fmt: render.compose(st, "BAR", xp=80, counts={}, gain=5, fmt=fmt)),
+            ("card", lambda fmt: render.card(st, xp=80, counts={"memories": 3}, fmt=fmt)),
+        ):
+            ansi, tmux, plain = draw("ansi"), draw("tmux"), draw("plain")
+            check("\x1b[" in ansi, "%s ansi carries escapes with colour on" % name)
+            check(draw(None) == ansi, "%s with no format is ansi byte for byte" % name)
+            check("\x1b" not in tmux and "#[" in tmux, "%s tmux has #[ styles and zero raw escapes" % name)
+            check("#[default]" in tmux, "%s tmux closes what it opens" % name)
+            check("\x1b" not in plain and "#[" not in plain, "%s plain has neither" % name)
+            word = "Lv" if name == "segment" else "Zask"
+            check(word in plain and word in tmux, "%s says the same thing in every format" % name)
+        check(render.paint("x", render.BOLD) == "\x1b[1mx\x1b[0m", "the default backend is still ansi after a styled block")
+
+        os.environ["NO_COLOR"] = "1"
+        check("\x1b" not in render.segment(st, xp=80, counts={}, fmt="ansi"), "NO_COLOR still strips ansi")
+        check("#[" in render.segment(st, xp=80, counts={}, fmt="tmux"), "and leaves tmux styles alone, tmux paints those itself")
+
+        try:
+            render.Style("html")
+        except ValueError:
+            check(True, "an unknown format is refused, not guessed")
+        else:
+            check(False, "an unknown format is refused, not guessed")
+    finally:
+        os.environ.pop("NO_COLOR", None)
+
+
+def test_width_cap():
+    """--width counts what lands on screen: directives are free, the egg icon
+    is two cells, and a cut drops the trailing fragment of a word.
+    """
+    print("\nwidth cap")
+    from terminalcreature import render
+
+    fit = render.fit
+    check(fit("hello world", 8) == "hello", "a cut backs up to the last whole word")
+    check(fit("hello world", 11) == "hello world", "a line that fits is untouched")
+    check(fit("hello world", 6) == "hello", "a cut right after the gap keeps the word and drops the gap")
+    check(fit("supercalifragilistic", 5) == "super", "a single word too long is cut, not dropped")
+    check(fit("hello world", 0) == "hello world", "no width means no cap")
+    check(fit("a\nbb\nccc", 2) == "a\nbb\ncc", "each line is capped on its own")
+    check(fit("\x1b[32mgreen\x1b[0m stuff", 5) == "\x1b[32mgreen\x1b[0m", "ansi escapes cost no columns")
+    check(fit("\x1b[32mgreen fields\x1b[0m", 5) == "\x1b[32mgreen\x1b[0m", "a cut inside a span closes it")
+    check(fit("#[fg=green]green fields#[default]", 5) == "#[fg=green]green#[default]", "same for tmux styles")
+    check(fit("\U0001f95a egg here", 5) == "\U0001f95a", "the icon is two cells wide, so five columns is not enough for egg")
+    check(fit("\U0001f95a egg here", 6) == "\U0001f95a egg", "and six is")
+    link = "\x1b]8;;http://x.y\x1b\\go\x1b]8;;\x1b\\ branch"
+    check(fit(link, 2) == "\x1b]8;;http://x.y\x1b\\go\x1b]8;;\x1b\\", "an osc hyperlink is one zero-width unit, never cut inside")
+    check(fit("ab\x1b[2Kcd ef", 3) == "ab\x1b[2Kc", "a non-sgr csi code is skipped whole and not closed with a reset")
+    check(fit("\x1b[1;32mgo\x1b[2K wide\x1b[0m", 2) == "\x1b[1;32mgo\x1b[2K\x1b[0m", "a cut inside a colour span still closes it past a later csi")
+    check(fit("PR #[12] open", 9, fmt="ansi") == "PR #[12]", "ansi output keeps a host's literal #[ as text")
+    check(fit("PR #[12] open", 9) == "PR #[12] open", "and without a format a #[ style costs no column")
+    check(fit("e\ufe0f\u200d x", 1) == "e\ufe0f\u200d", "a variation selector and a joiner cost no column")
+
+    os.environ.pop("NO_COLOR", None)
+    try:
+        st = _styled_state()
+        for fmt in ("ansi", "tmux", "plain"):
+            for name, cap, out in (
+                ("segment", 8, render.segment(st, xp=80, counts={}, gain=5, fmt=fmt, width=8)),
+                ("compose", 14, render.compose(st, "a long bar of host text", xp=80, counts={}, fmt=fmt, width=14)),
+                ("card", 20, render.card(st, xp=80, counts={"memories": 3}, fmt=fmt, width=20)),
+            ):
+                widest = _visible(out)
+                check(widest <= cap, "%s %s capped at %d visible columns, widest row is %d" % (name, fmt, cap, widest))
+                check(out.strip() != "", "%s %s still shows something under the cap" % (name, fmt))
+        wide = render.segment(st, xp=80, counts={}, gain=5, fmt="ansi")
+        check(render.segment(st, xp=80, counts={}, gain=5, fmt="ansi", width=200) == wide, "a generous cap changes nothing")
+    finally:
+        os.environ.pop("NO_COLOR", None)
+
+
+# one payload per host, in the shape its docs or a live capture show.
+# droid's is derived from docs only; nobody has captured its stdin yet
+HOST_PAYLOADS = {
+    "claude": {
+        "hook_event_name": "Status", "session_id": "c-1", "transcript_path": "/x/t.jsonl", "cwd": "/x",
+        "model": {"id": "claude-opus-5", "display_name": "Opus"},
+        "workspace": {"current_dir": "/x", "project_dir": "/x"},
+        "version": "2.1.0", "output_style": {"name": "default"},
+        "cost": {"total_cost_usd": 0.1, "total_duration_ms": 1000},
+        "context_window": {"total_input_tokens": 1000, "total_output_tokens": 100, "context_window_size": 200000,
+                           "used_percentage": 12.5, "remaining_percentage": 87.5},
+        "exceeds_200k_tokens": False,
+    },
+    "cursor": {
+        # the key set the cursor cli 2026.09 bundle builds, values made up
+        "session_id": "u-1", "transcript_path": "/x/t.jsonl", "render_width_chars": 76, "cwd": "/x",
+        "autorun": False, "model": {"id": "composer-2", "display_name": "composer"},
+        "workspace": {"current_dir": "/x", "project_dir": "/x", "added_dirs": []},
+        "version": "2026.09.02", "output_style": {"name": "default"},
+        "context_window": {"total_input_tokens": 100, "total_output_tokens": 10, "context_window_size": 200000,
+                           "used_percentage": 40, "remaining_percentage": 60, "current_usage": 80000},
+        "session_name": "fix tests", "worktree": {"name": "main", "path": "/x"},
+    },
+    # the key set the copilot cli 1.0.82 bundle builds for its statusLine command,
+    # values made up. it never ran live here, but the field names are the binary's own
+    "copilot": {
+        "cwd": "/x", "session_id": "p-1", "session_name": "fix tests", "transcript_path": "/x/t.jsonl",
+        "model": {"id": "gpt-5", "display_name": "gpt"}, "workspace": {"current_dir": "/x"},
+        "username": "someone", "remote": {"connected": False}, "version": "1.0.82",
+        "cost": {"total_api_duration_ms": 10, "total_lines_added": 0, "total_lines_removed": 0,
+                 "total_duration_ms": 10, "total_premium_requests": 0},
+        "context_window": {"total_input_tokens": 1000, "total_output_tokens": 100, "total_cache_read_tokens": 0,
+                           "total_cache_write_tokens": 0, "total_reasoning_tokens": 0, "total_tokens": 1100,
+                           "context_window_size": 200000, "used_percentage": 33, "remaining_percentage": 67,
+                           "remaining_tokens": 134000, "last_call_input_tokens": 10, "last_call_output_tokens": 5,
+                           "current_context_tokens": 66000, "displayed_context_limit": 200000,
+                           "current_context_used_percentage": 33},
+        "ai_used": {"total_nano_aiu": 0, "formatted": "0"}, "allow_all_enabled": False,
+    },
+    "qwen": {
+        "session_id": "q-1", "version": "0.14.1", "model": {"display_name": "qwen-3-235b"},
+        "context_window": {"context_window_size": 131072, "used_percentage": 34.3, "remaining_percentage": 65.7,
+                           "current_usage": 45000, "total_input_tokens": 30000, "total_output_tokens": 15000},
+        "workspace": {"current_dir": "/x"},
+        "metrics": {"models": {}, "files": {"total_lines_added": 0, "total_lines_removed": 0}},
+    },
+    "droid": {"sessionId": "d-1", "model": "claude-opus", "workingDirectory": "/x", "contextWindow": {"usedPercentage": 5}},
+}
+
+
+def test_host_stdin():
+    """Every host copies Claude Code's contract with its own field names, so one
+    map reads them all. Anything else renders without a session, never a crash.
+    """
+    print("\nhost stdin")
+    import json
+    import subprocess
+
+    from terminalcreature import hosts
+
+    for host, payload in HOST_PAYLOADS.items():
+        s = hosts.parse_session(json.dumps(payload))
+        check(s["host"] == host, "%s payload is read as %s, got %s" % (host, host, s["host"]))
+        check(s["session_id"] == (payload.get("session_id") or payload.get("sessionId")), "%s session id lands" % host)
+        check(isinstance(s["model"], str) and s["model"], "%s model lands as a string" % host)
+        check(s["workspace"] == "/x", "%s workspace lands" % host)
+        check(isinstance(s["context_used_pct"], float), "%s context percent lands as a float" % host)
+        check(sorted(s) == ["context_used_pct", "host", "model", "session_id", "workspace"], "%s carries exactly the five fields" % host)
+
+    for label, raw in (("empty", ""), ("not json", "not json"), ("empty object", "{}"), ("a list", "[1, 2]"),
+                       ("a bare string", '"hi"'), ("unknown keys", '{"foo": 1}'), ("None", None)):
+        s = hosts.parse_session(raw)
+        check(s["host"] == "unknown" and all(v is None for k, v in s.items() if k != "host"),
+              "%s stdin is host unknown with every field None" % label)
+    check(hosts.parse_session('{"session_id": "x"}')["host"] == "claude", "bare claude keys read as claude")
+    check(hosts.parse_session('{"session_id": 7}')["session_id"] is None, "a non-string id is dropped, not passed on")
+    check("/x" not in hosts.describe(hosts.parse_session(json.dumps(HOST_PAYLOADS["claude"]))), "doctor's line never carries the workspace path")
+    check("unknown schema" in hosts.describe(hosts.parse_session("")), "and calls an unknown shape unknown")
+
+    # a real render with each shape, and with junk, in a scratch home
+    home = tempfile.mkdtemp(prefix="bb-hosts-")
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+    env.pop("TERMINALCREATURE_FORMAT", None)
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+
+    def run(argv, raw="", **extra):
+        return subprocess.run(cmd + argv, input=raw, env=dict(env, **extra), capture_output=True, text=True)
+
+    try:
+        run(["new"])
+        run(["hatch", "--from-zero", "--name", "Zask"])
+        run(["config", "update_check_asked", "true"])  # or card appends the one-time offer
+        for label, raw in [("unknown", "not json at all"), ("empty", "")] + [(h, json.dumps(p)) for h, p in HOST_PAYLOADS.items()]:
+            r = run(["render"], raw)
+            check(r.returncode == 0 and "Lv" in r.stdout, "render with %s stdin still prints the segment" % label)
+        r = run(["render", "--format", "tmux"], json.dumps(HOST_PAYLOADS["qwen"]))
+        check("\x1b" not in r.stdout and "#[" in r.stdout, "render --format tmux through the cli emits tmux styles only")
+        r = run(["render", "--format=plain", "--width", "3"])
+        check(r.returncode == 0 and 0 < len(r.stdout) <= 3, "render --format=plain --width 3 caps the segment")
+        r = run(["render", "--format", "html"])
+        check(r.returncode == 0 and "Lv" in r.stdout, "a bad format on render falls back rather than blanking the statusline")
+        r = run(["compose", "--format", "tmux", "BAR"], "{}")
+        check("BAR" in r.stdout and "#[" in r.stdout and "\x1b" not in r.stdout, "compose takes the flags ahead of its text")
+        r = run(["card", "--width", "abc"])
+        check(r.returncode == 1 and "--width" in r.stdout, "card, which a human runs, says what was wrong")
+        r = run(["card", "--format", "plain", "--width", "30"])
+        check(r.returncode == 0 and "Zask" in r.stdout and _visible(r.stdout) <= 30, "card takes both flags")
+        r = run(["doctor"], json.dumps(HOST_PAYLOADS["cursor"]))
+        check("stdin: cursor schema" in r.stdout and "/x" not in r.stdout, "doctor names the schema it read, without the path")
+        r = run(["doctor"])
+        check("no session on stdin" in r.stdout, "and says so when nothing was piped")
+        r = run(["render"], "{}", TERMINALCREATURE_FORMAT="tmux")
+        check("#[" in r.stdout, "TERMINALCREATURE_FORMAT picks the backend when no flag does")
+    finally:
+        shutil.rmtree(home)
+
+
+
+def make_agent_home(files):
+    """A fake home holding whichever agent trees the test lists, one path per
+    file. Filenames carry a marker no real note would, so the leak checks
+    below have something concrete to look for in the output.
+    """
+    home = tempfile.mkdtemp(prefix="bb-agents-")
+    for rel in files:
+        path = os.path.join(home, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        open(path, "w").close()
+    return home
+
+
+def test_agents_provider():
+    """The agents provider counts every agent's memory off one fake home, auto
+    only switches to it at two roots, and nothing that leaves the process is a
+    path. Runs in-process against HOME, then through the cli in a subprocess.
+    """
+    print("\nagents provider")
+    import builtins
+    import io
+    import json
+    import subprocess
+
+    from terminalcreature import render
+
+    mark = "zqxv"
+    files = [
+        ".claude/projects/p1/memory/%s-a.md" % mark,
+        ".claude/projects/p1/memory/%s-b.md" % mark,
+        ".claude/projects/p1/memory/MEMORY.md",
+        ".claude/projects/p2/memory/%s-c.md" % mark,
+        ".codex/memories/%s-m1.md" % mark,
+        ".codex/memories/deep/%s-m2.md" % mark,
+        ".codex/AGENTS.md",
+        ".codex/sessions/2026/09/%s-s1.jsonl" % mark,
+        ".codex/sessions/2026/09/%s-s2.jsonl" % mark,
+        ".codex/sessions/2026/09/notes.txt",
+        ".cursor/rules/%s-r.mdc" % mark,
+        ".cursor/proj/rules/%s-r2.mdc" % mark,
+        ".cursor/chats/x/%s-chat.json" % mark,
+        ".local/share/goose/sessions/sessions.db",
+        ".config/goose/.goosehints",
+        ".config/opencode/AGENTS.md",
+    ]
+    real_home = os.environ.get("HOME")
+
+    def at_home(home):
+        os.environ["HOME"] = home
+
+    home = make_agent_home(files)
+    try:
+        at_home(home)
+        opened = []
+        real_open, real_io_open = builtins.open, io.open
+
+        def trap(factory):
+            def guard(file, *a, **kw):
+                if str(file).startswith(home):
+                    opened.append(str(file))
+                return factory(file, *a, **kw)
+            return guard
+
+        builtins.open = trap(real_open)
+        io.open = trap(real_io_open)
+        try:
+            xp, counts, found = metric.measure_agents()
+        finally:
+            builtins.open, io.open = real_open, real_io_open
+        check(opened == [], "measure_agents opens nothing under the fake home, got %d" % len(opened))
+        check(found == ["claude", "codex", "cursor", "opencode", "goose"], "found agents in table order, got %s" % found)
+        check(counts["claude"] == {"memories": 3}, "claude counts memories and skips MEMORY.md, got %s" % counts.get("claude"))
+        check(counts["codex"] == {"memories": 2, "instructions": 1, "sessions": 2},
+              "codex counts memories recursively, AGENTS.md and only jsonl sessions, got %s" % counts.get("codex"))
+        check(counts["cursor"] == {"rules": 2, "sessions": 1}, "cursor finds rules at any depth, got %s" % counts.get("cursor"))
+        check(counts["goose"] == {"sessions": 1, "instructions": 1}, "goose spans two roots and sees a dotfile, got %s" % counts.get("goose"))
+        check(counts["opencode"] == {"sessions": 0, "instructions": 1}, "opencode counts from the one root that exists, got %s" % counts.get("opencode"))
+        check("gemini" not in counts, "an agent with no root gets no row")
+        check(xp == 32, "weights are 3 memory, 3 instructions, 2 rules, 1 sessions: 32 xp, got %d" % xp)
+        check(metric.measure_agents({"sessions": 5})[0] == 48, "weights override by source key across agents")
+        check(metric.flatten_agent_counts(counts) == {"memories": 5, "instructions": 3, "sessions": 4, "rules": 2},
+              "flattened counts fold by source key")
+
+        settings = dict(state_mod.DEFAULT_SETTINGS)
+        check(settings["provider"] == "auto", "the default provider is auto")
+        check(state_mod.resolve_provider(settings) == "agents", "auto resolves to agents with several roots")
+        s = state_mod.source_status(settings)
+        check(s["state"] == "ok" and s["xp"] == 32, "source status counts through auto, got %s" % s["state"])
+        check(s["counts"] == {"memories": 5, "instructions": 3, "sessions": 4, "rules": 2}, "status counts are flat")
+        check("gemini" in s["missing"] and s["found"] == found, "status names found and missing agents")
+        check(state_mod.measure_now(settings) == (32, s["counts"]), "measure_now feeds the cache the flat shape")
+        check(render.no_source_help(settings, s) == "", "a working agents source gets no lecture")
+        settings["provider"] = "claude"
+        check(state_mod.measure_now(settings) == (9, {"memories": 3}), "an explicit claude provider is untouched by the table")
+        check(state_mod.sources_for(dict(settings, provider="folder", vault_root=home))[1] is metric.FOLDER_SOURCES,
+              "folder still resolves to its own sources")
+    finally:
+        shutil.rmtree(home)
+
+    # one root: auto stays on claude and behaves exactly as before
+    home = make_agent_home([".claude/projects/p1/memory/%s-a.md" % mark])
+    try:
+        at_home(home)
+        settings = dict(state_mod.DEFAULT_SETTINGS)
+        check(state_mod.resolve_provider(settings) == "claude", "auto resolves to claude with one root")
+        check(state_mod.measure_now(settings) == (3, {"memories": 1}), "and measures the claude layout")
+        check(state_mod.resolve_provider(dict(settings, provider="agents")) == "agents", "an explicit agents provider is kept")
+        check(state_mod.source_status(dict(settings, provider="agents"))["found"] == ["claude"], "and counts the one root it has")
+    finally:
+        shutil.rmtree(home)
+
+    # a lone agent that isn't claude: auto reads as zero, and the help says why
+    home = make_agent_home([".codex/AGENTS.md"])
+    try:
+        at_home(home)
+        settings = dict(state_mod.DEFAULT_SETTINGS)
+        s = state_mod.source_status(settings)
+        help_text = render.no_source_help(settings, s)
+        check(s["state"] == "missing_root" and "config provider agents" in help_text and "codex" in help_text,
+              "a lone codex under auto points at the agents provider")
+        check(mark not in help_text and home not in help_text, "and names no path")
+    finally:
+        shutil.rmtree(home)
+
+    # zero agents: auto falls back to claude and says what it looked for
+    home = make_agent_home([])
+    try:
+        at_home(home)
+        settings = dict(state_mod.DEFAULT_SETTINGS)
+        help_text = render.no_source_help(settings, state_mod.source_status(settings))
+        check("Looked for" in help_text and "Codex" in help_text and "Crush" in help_text, "with no agents the help lists what it looked for")
+        check(home not in help_text, "without a path")
+        s = state_mod.source_status(dict(settings, provider="agents"))
+        check(s["state"] == "missing_root" and s["found"] == [], "an explicit agents provider over nothing is missing_root")
+        check("Looked for" in render.no_source_help(dict(settings, provider="agents"), s), "and gets the same list")
+    finally:
+        if real_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = real_home
+        shutil.rmtree(home)
+
+    check(state_mod.migrate({"settings": {"provider": "claude"}})["settings"]["provider"] == "claude",
+          "migrate keeps an install's explicit provider")
+    check(state_mod.migrate({"settings": {"density": "full"}})["settings"]["provider"] == "auto",
+          "and only a missing provider key becomes auto")
+
+    # the cli end to end in a scratch home: config accepts the names, sources
+    # prints counts and never a path
+    home = make_agent_home(files)
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+
+    def run(argv):
+        return subprocess.run(cmd + argv, env=env, capture_output=True, text=True)
+
+    try:
+        r = run(["config"])
+        check(json.loads(r.stdout)["provider"] == "auto", "a fresh install shows provider auto")
+        check(run(["config", "provider", "agents"]).returncode == 0, "config provider agents is accepted")
+        check(run(["config", "provider", "nope"]).returncode == 1, "and an unknown provider is refused")
+        for provider in ("agents", "auto"):
+            run(["config", "provider", provider])
+            r = run(["sources"])
+            out = r.stdout
+            check(r.returncode == 0, "sources exits 0 under %s" % provider)
+            check("codex: memories 2, instructions 1, sessions 2" in out, "sources lists codex counts by key under %s" % provider)
+            check("goose: sessions 1, instructions 1" in out and "claude: memories 3" in out, "and the other agents found")
+            check("not found: gemini, copilot, qwen, droid, amp, continue, kiro, cline, crush" in out,
+                  "and the agents it didn't find, on one line")
+            check("counting 32 xp of memory across 5 agents" in out, "then the total")
+            check(mark not in out and home not in out and "/memory/" not in out and "AGENTS.md" not in out,
+                  "sources prints no path fragment from the fake home under %s" % provider)
+        r = run(["doctor"])
+        check("memories   5" in r.stdout and mark not in r.stdout and home not in r.stdout, "doctor shows the flat counts, no paths")
+        r = run(["refresh"])
+        cache = json.load(open(os.path.join(home, ".claude", "terminalcreature", "xp.cache")))
+        check(cache == {"xp": 32, "counts": {"memories": 5, "instructions": 3, "sessions": 4, "rules": 2}},
+              "refresh writes the flat shape to the cache, got %s" % cache)
+    finally:
+        shutil.rmtree(home)
+
+    home = make_agent_home([])
+    try:
+        r = subprocess.run(cmd + ["sources"], env=dict(env, HOME=home), capture_output=True, text=True)
+        check(r.returncode == 1 and "Looked for" in r.stdout and home not in r.stdout,
+              "sources on an empty machine exits 1, lists what it looked for, prints no path")
+    finally:
+        shutil.rmtree(home)
+
+
+
+HOST_SEEDS = {
+    "claude": ('{"theme": "dark", "statusLine": {"type": "command", "command": "echo CL"}}\n', "echo CL"),
+    "cursor": ('{"display": {"mode": "zen"}, "statusLine": {"type": "command", "command": "echo CUR"}}\n', "echo CUR"),
+    # jsonc with a trailing comma, the way copilot's file is allowed to look
+    "copilot": ('{\n  // footer prefs\n  "footer": {"showBranch": true},\n  /* mine */\n'
+                '  "statusLine": {"type": "command", "command": "echo COP", "padding": 1,},\n}\n', "echo COP"),
+    "qwen": ('{"ui": {"theme": "x", "statusLine": {"type": "command", "command": "echo QW", "refreshInterval": 3}}}\n', "echo QW"),
+    "droid": ('{"model": "m", "statusLine": {"command": "echo DR", "maxRows": 2}}\n', "echo DR"),
+}
+
+
+def test_host_adapters():
+    """install --host wraps each host's statusline the way install.sh wraps
+    claude's: key repointed at a per-host shim, old command kept, the settings
+    file backed up as raw bytes, and uninstall puts every byte back.
+    """
+    print("\nhost adapters")
+    import json
+    import subprocess
+
+    from terminalcreature import hosts
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+
+    def run(env, argv, raw=""):
+        return subprocess.run(cmd + argv, env=env, input=raw, capture_output=True, text=True)
+
+    for host, (seed, previous) in HOST_SEEDS.items():
+        home = tempfile.mkdtemp(prefix="bb-host-")
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+        try:
+            spec = hosts.REGISTRY[host]
+            path = os.path.join(home, spec["settings"][2:])
+            os.makedirs(os.path.dirname(path))
+            with open(path, "w") as f:
+                f.write(seed)
+            state = os.path.join(home, ".claude", "terminalcreature")
+            shim, wrapped = os.path.join(state, spec["shim"]), os.path.join(state, spec["wrapped"])
+
+            r = run(env, ["install", "--host", host])
+            check(r.returncode == 0 and host in r.stdout, "%s: install exits clean and names the host" % host)
+            with open(path) as f:
+                data = json.load(f)
+            check(hosts.get_command(data, host) == shim, "%s: the key points at our shim" % host)
+            node = data["ui"]["statusLine"] if host == "qwen" else data["statusLine"]
+            check(("type" in node) == spec["typed"], "%s: the value carries type only when the host wants it" % host)
+            with open(wrapped) as f:
+                check(f.read() == previous, "%s: the old command is recorded" % host)
+            with open(path + ".pre-terminalcreature.bak") as f:
+                check(f.read() == seed, "%s: the backup is the raw file, comments and all" % host)
+            with open(shim) as f:
+                text = f.read()
+            check("TERMINALCREATURE_WRAPPING" in text and spec["wrapped"] in text, "%s: the shim guards re-entry and reads its own wrapped file" % host)
+            check(("cli render" if spec["inline"] else "cli compose") in text, "%s: the shim picks the host's default mode" % host)
+            out = subprocess.run(["bash", shim], env=env, input="{}", capture_output=True, text=True).stdout
+            check(previous.split()[-1] in out, "%s: the shim still runs what it wrapped" % host)
+
+            if host == "cursor":
+                check(data["display"]["mode"] == "zen", "cursor: sibling keys survive")
+            if host == "copilot":
+                check(data["footer"]["showBranch"] is True and node["padding"] == 1, "copilot: comments stripped, siblings kept")
+                check("plain JSON" in r.stdout, "copilot: install says the comments live in the backup now")
+            if host == "qwen":
+                check(node["refreshInterval"] == 3 and node["respectUserColors"] is True and data["ui"]["theme"] == "x",
+                      "qwen: refreshInterval kept, respectUserColors added, ui siblings kept")
+            if host == "droid":
+                check(node["maxRows"] == 2, "droid: maxRows kept")
+
+            r2 = run(env, ["install", "--host", host])
+            with open(path) as f:
+                check(r2.returncode == 0 and "already wired" in r2.stdout and json.load(f) == data, "%s: re-running is a no-op that says so" % host)
+
+            u = run(env, ["uninstall", "--host", host])
+            with open(path) as f:
+                check(u.returncode == 0 and f.read() == seed, "%s: uninstall restores the file byte for byte" % host)
+            check(not os.path.exists(shim) and not os.path.exists(wrapped), "%s: and drops the shim and wrapped file" % host)
+
+            if host == "copilot":
+                # edited since install: only our key comes out, their edit stays
+                run(env, ["install", "--host", host])
+                with open(path) as f:
+                    data = json.load(f)
+                data["footer"]["showQuota"] = False
+                with open(path, "w") as f:
+                    json.dump(data, f)
+                u = run(env, ["uninstall", "--host", host])
+                with open(path) as f:
+                    after = json.load(f)
+                check(after["statusLine"]["command"] == previous and after["footer"]["showQuota"] is False,
+                      "copilot: a file edited after install gets only our key undone")
+        finally:
+            shutil.rmtree(home)
+
+    # claude through the adapter writes the very shim install.sh writes
+    home = tempfile.mkdtemp(prefix="bb-host-")
+    try:
+        env = dict(os.environ, HOME=home)
+        subprocess.run(["bash", os.path.join(repo, "install.sh"), "--no-commands"], env=env, input="", capture_output=True, text=True)
+        with open(os.path.join(home, ".claude", "terminalcreature", "statusline-terminalcreature.sh")) as f:
+            check(f.read() == hosts.shim_text("claude", False), "the python claude shim is byte for byte install.sh's")
+    finally:
+        shutil.rmtree(home)
+
+    # --host all on a machine with qwen and droid, and nothing else
+    home = tempfile.mkdtemp(prefix="bb-host-")
+    env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+    try:
+        for host in ("qwen", "droid"):
+            path = os.path.join(home, hosts.REGISTRY[host]["settings"][2:])
+            os.makedirs(os.path.dirname(path))
+            with open(path, "w") as f:
+                f.write(HOST_SEEDS[host][0])
+        r = run(env, ["install", "--host", "all"])
+        check(r.returncode == 0 and "qwen" in r.stdout and "droid" in r.stdout, "all: wires both hosts that are here")
+        check("cursor" not in r.stdout and "copilot" not in r.stdout, "all: and says nothing about hosts that aren't")
+        for host in ("qwen", "droid"):
+            with open(os.path.join(home, hosts.REGISTRY[host]["settings"][2:])) as f:
+                check(hosts.REGISTRY[host]["shim"] in f.read(), "all: %s points at its shim" % host)
+        d = run(env, ["doctor"])
+        check("qwen     Qwen Code           native, wired" in d.stdout and "native, wired" in d.stdout.split("droid")[1].split("\n")[0],
+              "doctor lists the wired hosts")
+        check("cursor   Cursor CLI          not installed" in d.stdout, "doctor calls an absent host not installed")
+        check("terminalcreature snippet" in d.stdout, "doctor points prompt surfaces at the snippet command")
+        check("/" + "Users" not in d.stdout and home not in d.stdout, "doctor's hosts block carries no paths")
+        u = run(env, ["uninstall", "--host", "all"])
+        for host in ("qwen", "droid"):
+            with open(os.path.join(home, hosts.REGISTRY[host]["settings"][2:])) as f:
+                check(u.returncode == 0 and f.read() == HOST_SEEDS[host][0], "all: uninstall restores %s" % host)
+        r = run(env, ["install", "--host", "nope"])
+        check(r.returncode == 1 and "unknown host" in r.stdout, "an unknown host is refused with the list")
+    finally:
+        shutil.rmtree(home)
+
+    # install.sh --host hands the wiring to the adapter and leaves claude alone
+    home = tempfile.mkdtemp(prefix="bb-host-")
+    env = dict(os.environ, HOME=home, NO_COLOR="1")
+    try:
+        os.makedirs(os.path.join(home, ".qwen"))
+        r = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--host", "qwen", "--statusline", "echo QW", "--no-commands"],
+                           env=env, input="", capture_output=True, text=True)
+        qwen = os.path.join(home, ".qwen", "settings.json")
+        with open(qwen) as f:
+            data = json.load(f)
+        check(r.returncode == 0 and "statusline-terminalcreature-qwen.sh" in data["ui"]["statusLine"]["command"], "install.sh --host qwen wires qwen")
+        check(os.path.isdir(os.path.join(home, ".claude", "terminalcreature", "lib", "terminalcreature")), "and still installs the library")
+        check(not os.path.exists(os.path.join(home, ".claude", "settings.json")), "and leaves claude's settings alone")
+        check("/creature-hatch" in r.stdout, "and still offers the egg")
+        u = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--uninstall", "--host", "qwen", "--no-commands"],
+                           env=env, input="", capture_output=True, text=True)
+        with open(qwen) as f:
+            data = json.load(f)
+        check(u.returncode == 0 and data["ui"]["statusLine"]["command"] == "echo QW", "install.sh --uninstall --host qwen puts the command back")
+        check(os.path.isdir(os.path.join(home, ".claude", "terminalcreature", "lib")), "and keeps the library for the other hosts")
+    finally:
+        shutil.rmtree(home)
+
+
+def test_snippets():
+    """Every surface gets a paste-in config that calls the installed binary with
+    the format its host can show, and no snippet ever carries an expanded home.
+    """
+    print("\nsnippets")
+    import subprocess
+
+    from terminalcreature import cli, snippets
+
+    home = os.path.expanduser("~")
+    fake_home = tempfile.mkdtemp(prefix="bb-snip-")
+    found = os.path.join(home, ".local", "bin", "terminalcreature")
+    on_path = snippets.resolve_binary(which=lambda name: found)
+    missing = snippets.resolve_binary(state_dir=os.path.join(home, ".claude", "terminalcreature"),
+                                      which=lambda name: None)
+    check(on_path["shell"] == "~/.local/bin/terminalcreature", "an entry point under home is written ~-relative")
+    check(missing["shell"] == "env PYTHONPATH=$HOME/.claude/terminalcreature/lib python3 -m terminalcreature.cli",
+          "no entry point falls back to the installed lib the way the shim runs it")
+    check(missing["argv"][1] == "PYTHONPATH=~/.claude/terminalcreature/lib", "and the argv form keeps ~ for hosts that expand it themselves")
+    check(snippets.resolve_binary(which=lambda name: "/opt/homebrew/bin/terminalcreature")["shell"] == "/opt/homebrew/bin/terminalcreature",
+          "a path outside home is left alone")
+
+    formats = {"tmux": "--format tmux", "starship": "--format ansi", "zsh": "--format ansi",
+               "fish": "--format ansi", "omp": "plain", "wezterm": "'--format', 'plain'"}
+    os.environ.pop("TMUX", None)
+    try:
+        for binary, label in ((on_path, "on PATH"), (missing, "lib fallback")):
+            for surface in snippets.SURFACES:
+                text = snippets.render_snippet(surface, binary=binary)
+                check(text is not None and text.startswith(("#", "//", "--")), "%s (%s) opens with a comment saying where it goes" % (surface, label))
+                check("terminalcreature" in text, "%s (%s) names the binary" % (surface, label))
+                check(formats[surface] in text, "%s (%s) asks for the format its host can show" % (surface, label))
+                check(home not in text and fake_home not in text, "%s (%s) carries no expanded home path" % (surface, label))
+                check("\u2014" not in text, "%s (%s) has no em dash" % (surface, label))
+        tmux = snippets.render_snippet("tmux", binary=on_path)
+        check("status-right-length 80" in tmux and "default is 40" in tmux, "tmux raises status-right-length and says why")
+        check("--width 40" in tmux and "@plugin 'smejkaldesign/terminalcreature'" in tmux and "#{creature}" in tmux,
+              "tmux caps the width and shows the tpm form with its placeholder")
+        check("status-interval" in tmux, "tmux mentions status-interval")
+        star = snippets.render_snippet("starship", binary=on_path)
+        check("[custom.creature]" in star and "when = true" in star and 'style = ""' in star and "command_timeout" in star,
+              "starship is a custom module with an empty style and a timeout note")
+        zsh = snippets.render_snippet("zsh", binary=on_path)
+        check("setopt PROMPT_SUBST" in zsh and "RPROMPT='$(" in zsh and "precmd" in zsh and "zsh-async" in zsh,
+              "zsh sets PROMPT_SUBST, an RPROMPT, and mentions precmd and zsh-async")
+        check("function fish_right_prompt" in snippets.render_snippet("fish", binary=on_path), "fish is a fish_right_prompt function")
+        omp = snippets.render_snippet("omp", binary=on_path)
+        check('{{ cmd \\"terminalcreature\\" \\"render\\" \\"--format\\" \\"plain\\" }}' in omp and '"type": "text"' in omp,
+              "omp is a text segment using the multi-argument cmd form")
+        check(".Env.HOME" not in omp, "omp on PATH needs no home expansion, so no caveat about it")
+        check(".Env.HOME" in snippets.render_snippet("omp", binary=missing), "omp's lib fallback expands home through the template")
+        wez = snippets.render_snippet("wezterm", binary=on_path)
+        check("wezterm.on('update-status'" in wez and "run_child_process" in wez and "set_right_status" in wez
+              and "status_update_interval = 1000" in wez, "wezterm hooks update-status and sets the interval")
+        check("wezterm.home_dir .. '/.local/bin/terminalcreature'" in wez, "wezterm expands home in lua, since nothing else will")
+        check(snippets.render_snippet("kitty") is None, "an unknown surface is None, not a guess")
+
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env = dict(os.environ, HOME=fake_home, PYTHONPATH=repo)
+        env.pop("TMUX", None)
+        cmd = [sys.executable, "-m", "terminalcreature.cli", "snippet"]
+        r = subprocess.run(cmd + ["kitty"], env=env, capture_output=True, text=True)
+        check(r.returncode == 1 and all(s in r.stdout for s in snippets.SURFACES), "snippet kitty exits 1 and lists the surfaces")
+        r = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        check(r.returncode == 1 and "wezterm" in r.stdout, "bare snippet does the same")
+        r = subprocess.run(cmd + ["tmux"], env=env, capture_output=True, text=True)
+        check(r.returncode == 0 and "--format tmux" in r.stdout and home not in r.stdout, "snippet tmux prints the config, exit 0, no home path")
+        check("snippet" in cli.USAGE, "usage lists it")
+    finally:
+        shutil.rmtree(fake_home)
+
+
+def test_tmux_plugin():
+    """The tpm plugin swaps #{creature} for a call to its own helper, against a
+    throwaway tmux server so nothing of the user's is touched.
+    """
+    print("\ntmux plugin")
+    import subprocess
+
+    if not shutil.which("tmux"):
+        print("  skip tmux is not installed here")
+        return
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    plugin = os.path.join(repo, "tmux", "terminalcreature.tmux")
+    helper = os.path.join(repo, "tmux", "creature.sh")
+    check(os.access(plugin, os.X_OK) and os.access(helper, os.X_OK), "plugin and helper are executable")
+    check(os.access(os.path.join(repo, "terminalcreature.tmux"), os.X_OK), "the root shim tpm actually sources is executable too")
+    check(len(open(os.path.join(repo, "tmux", "README.md")).read().strip().splitlines()) <= 10, "the readme is ten lines or fewer")
+
+    sock = "tctest-%d" % os.getpid()
+    t = lambda *a: subprocess.run(["tmux", "-L", sock] + list(a), capture_output=True, text=True)
+    r = t("-f", "/dev/null", "new-session", "-d")
+    if r.returncode != 0:
+        print("  skip could not start a tmux server: %s" % r.stderr.strip()[-100:])
+        return
+    try:
+        t("set-option", "-g", "status-right", "cpu #{creature} %H:%M")
+        t("set-option", "-g", "status-left", "[#S]")
+        path = t("display-message", "-p", "#{socket_path}").stdout.strip()
+        env = dict(os.environ, TMUX="%s,0,0" % path)
+        for entry in (plugin, os.path.join(repo, "terminalcreature.tmux")):
+            t("set-option", "-g", "status-right", "cpu #{creature} %H:%M")
+            r = subprocess.run([entry], env=env, capture_output=True, text=True)
+            check(r.returncode == 0, "%s runs clean (%s)" % (os.path.relpath(entry, repo), r.stderr.strip()[-100:]))
+            right = t("show-option", "-gv", "status-right").stdout.strip()
+            check("render --format tmux" in right and "#{creature}" not in right, "the placeholder became a render call")
+            check(right.startswith("cpu #(") and right.endswith(") %H:%M"), "and the rest of status-right survived around it")
+            named = right[right.find("#(") + 2:right.find(" render")]
+            check(os.path.realpath(named) == os.path.realpath(helper),
+                  "the call names the helper by absolute path, so tpm's clone location doesn't matter")
+        check(t("show-option", "-gv", "status-left").stdout.strip() == "[#S]", "an option without the placeholder is left alone")
+        # a home with the installer's lib layout and no entry point on PATH, so
+        # the helper has to take its fallback route to reach this checkout
+        home = tempfile.mkdtemp(prefix="bb-helper-")
+        lib = os.path.join(home, ".claude", "terminalcreature", "lib")
+        os.makedirs(lib)
+        os.symlink(os.path.join(repo, "terminalcreature"), os.path.join(lib, "terminalcreature"))
+        env = dict(os.environ, HOME=home, PATH=os.pathsep.join([os.path.dirname(sys.executable), "/usr/bin", "/bin"]))
+        r = subprocess.run([helper, "simulate", "10"], env=env, capture_output=True, text=True)
+        check(r.returncode == 0 and "Lv" in r.stdout, "the helper reaches terminalcreature through the lib (%s)" % r.stderr.strip()[-80:])
+        shutil.rmtree(home)
+    finally:
+        t("kill-server")
+
+
+def test_refresh_pokes_tmux():
+    """After the cache changes, refresh asks tmux to redraw, and only then.
+    tmux is a stub on PATH that logs what it was asked, so nothing real is poked.
+    """
+    print("\nrefresh pokes tmux")
+    import subprocess
+    import time as _t
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    home = tempfile.mkdtemp(prefix="bb-poke-")
+    stub_dir = os.path.join(home, "bin")
+    os.makedirs(stub_dir)
+    log = os.path.join(home, "tmux.log")
+    stub = os.path.join(stub_dir, "tmux")
+    with open(stub, "w") as f:
+        f.write("#!/bin/sh\necho \"$@\" >> %s\n" % log)
+    os.chmod(stub, 0o755)
+
+    def refresh(tmux, cached):
+        if os.path.exists(log):
+            os.remove(log)
+        child = "from terminalcreature import cli, state as sm\n"
+        if cached is not None:
+            child += "sm.write_cache(%d, {})\n" % cached
+        child += "cli.main(['refresh'])\n"
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo, PATH=stub_dir + os.pathsep + os.environ.get("PATH", ""))
+        env.pop("TMUX", None)
+        if tmux:
+            env["TMUX"] = "/tmp/fake,0,0"
+        r = subprocess.run([sys.executable, "-c", child], env=env, capture_output=True, text=True)
+        deadline = _t.time() + 5
+        while _t.time() < deadline and not os.path.exists(log):
+            _t.sleep(0.1)
+        _t.sleep(0.2)
+        lines = open(log).read().splitlines() if os.path.exists(log) else []
+        return r.returncode, lines
+
+    try:
+        # an empty fabricated home measures 0 xp, so a cache of 999 is a change
+        rc, lines = refresh(True, 999)
+        check(rc == 0 and lines == ["refresh-client -S"], "xp changed under tmux: one refresh-client -S, got %r" % lines)
+        rc, lines = refresh(True, None)
+        check(rc == 0 and lines == [], "same xp again: no poke, got %r" % lines)
+        rc, lines = refresh(False, 999)
+        check(rc == 0 and lines == [], "xp changed outside tmux: no poke, got %r" % lines)
+        os.chmod(stub, 0o644)
+        rc, lines = refresh(True, 999)
+        check(rc == 0 and lines == [], "a tmux that can't run is silent, refresh still exits 0")
+    finally:
+        shutil.rmtree(home)
+
+
+def test_host_settings_edge_cases():
+    """The bytes hosts and editors actually produce: a byte order mark, a comma
+    inside a string value, a private file mode. None of them may refuse the
+    install, corrupt a value, or loosen the file.
+    """
+    print("\nhost settings edge cases")
+    import json
+    import stat
+    import subprocess
+
+    from terminalcreature import hosts
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+
+    check(hosts._strip_jsonc('{"u": "a,}", "l": [1,], /* c */ "k": 1, // t\n}') == '{"u": "a,}", "l": [1],  "k": 1 \n}',
+          "a trailing comma goes only outside strings, and past comments")
+    check(json.loads(hosts._strip_jsonc('{"a": 1, /* x */ }')) == {"a": 1}, "a comment between comma and closer still counts as trailing")
+
+    home = tempfile.mkdtemp(prefix="bb-host-")
+    env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+    try:
+        path = os.path.join(home, ".copilot", "settings.json")
+        os.makedirs(os.path.dirname(path))
+        seed = b'\xef\xbb\xbf{"url": "http://x/a,}", "statusLine": {"type": "command", "command": "echo COP"},}\r\n'
+        with open(path, "wb") as f:
+            f.write(seed)
+        os.chmod(path, 0o600)
+        r = subprocess.run(cmd + ["install", "--host", "copilot"], env=env, capture_output=True, text=True)
+        check(r.returncode == 0 and "wrapping" in r.stdout, "a file with a byte order mark and CRLF wires")
+        with open(path) as f:
+            data = json.load(f)
+        check(data["url"] == "http://x/a,}", "a comma before a brace inside a string survives")
+        check(stat.S_IMODE(os.stat(path).st_mode) == 0o600, "a 0600 settings file is still 0600 after the write")
+        u = subprocess.run(cmd + ["uninstall", "--host", "copilot"], env=env, capture_output=True, text=True)
+        with open(path, "rb") as f:
+            check(u.returncode == 0 and f.read() == seed, "uninstall puts the mark and the CRLF back")
+    finally:
+        shutil.rmtree(home)
+
+    empty = tempfile.mkdtemp(prefix="bb-host-")
+    env = dict(os.environ, HOME=empty, PYTHONPATH=repo)
+    try:
+        r = subprocess.run(cmd + ["install", "--host", "all"], env=env, capture_output=True, text=True)
+        check(r.returncode == 0 and "nothing to wire" in r.stdout, "all with no host present says so instead of printing nothing")
+        u = subprocess.run(cmd + ["uninstall", "--host", "all"], env=env, capture_output=True, text=True)
+        check(u.returncode == 0 and "nothing to undo" in u.stdout, "and so does uninstall")
+    finally:
+        shutil.rmtree(empty)
+
+
 if __name__ == "__main__":
     test_metric()
+    test_snippets()
+    test_tmux_plugin()
+    test_refresh_pokes_tmux()
+    test_agents_provider()
+    test_render_formats()
+    test_width_cap()
+    test_host_stdin()
+    test_host_adapters()
+    test_host_settings_edge_cases()
     test_update_chip()
     test_hatch_naming()
     test_refresh_never_reverts_concurrent_writes()
