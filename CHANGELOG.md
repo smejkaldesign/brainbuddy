@@ -3,6 +3,64 @@
 Notable changes, newest first. Versions follow semver; the version lives in
 `terminalcreature/__init__.py` and each release is the matching `v*` tag.
 
+## 3.1.0 (2026-09-04)
+
+The turn-end card. Six agents with no statusline get the creature anyway: a
+one-line card the host shows when a turn ends, through its own hook or plugin
+channel, crediting session XP the same way the statusline does.
+
+### Added
+
+- Card hosts: Codex CLI, Gemini CLI, Mistral Vibe, Augment auggie, opencode
+  and Amp. `terminalcreature install --host <name>` writes one hook entry
+  (Codex: `Stop` in `~/.codex/hooks.json`; Gemini: `hooks.AfterAgent` in
+  `~/.gemini/settings.json`; Vibe: a marked `post_agent` block in
+  `~/.vibe/hooks.toml`; auggie: `hooks.Stop` in `~/.augment/settings.json`)
+  or one plugin file (`~/.config/opencode/plugins/terminalcreature.js` on
+  opencode's `session.idle`, `~/.config/amp/plugins/terminalcreature/index.js`
+  on Amp's `agent.end`). All six contracts, the four hook schemas and both
+  plugin APIs, were confirmed from the hosts' docs as of September 2026; none
+  was guessed. Hooks you already had on the same event stay, `uninstall
+  --host` removes only ours and restores the backup byte for byte when nothing
+  else changed, and `--host all` now covers the hook hosts whose config dir
+  exists (plugin hosts are named outright). Codex runs hooks only after a
+  one-time `/hooks` approval in its TUI, and the install message says so.
+  `./install.sh --host <name>` passes the card hosts through.
+- `terminalcreature hookcard --host <name>`, what those hooks run. It reads
+  the host's JSON on stdin, credits session XP like `render` does, and prints
+  the host's envelope (`{"systemMessage": …}` for Codex, Gemini and auggie,
+  `{"system_message": …}` for Vibe, a bare line for the opencode and Amp
+  plugins) around a plain one-line card: short sprite, name, level, bar, `+N
+  xp` this session, and the evolution when a stage moved. No escape codes,
+  never a path, always exit 0.
+- The `hookcard` setting picks the cadence. `changes`, the default, shows the
+  first turn of a session, then whenever the session's XP or stage changed,
+  otherwise every tenth turn; `always` shows every turn; `off` shows none and
+  leaves the hook in place. A quiet turn prints nothing, except on Gemini,
+  which parses the reply and gets `{}`.
+- `doctor` lists the card hosts after the statusline hosts, then the plugin
+  hosts, with a note when bun or node is missing for a wired plugin.
+- `install --box`, the opposite of `--inline`, for Cursor and Qwen where inline
+  is the default. Passing both is an error.
+
+### Changed
+
+- Cursor hands the shim its `render_width_chars`, and the segment is capped to
+  it when no `--width` is given.
+- `snippet` and the settings commands quote paths, so a home directory with a
+  space in it works.
+- Every host shim, Claude Code's included, falls back to a `terminalcreature`
+  on PATH when `~/.claude/terminalcreature/lib` is missing, so a `pipx`
+  install wires the same way the bootstrap does.
+
+### Notes
+
+- No breaking change. Nothing is written to a card host until you run
+  `install --host <name>` for it, and a 3.0 install keeps its statuslines,
+  roster and provider as they were.
+- Vibe and auggie get a card but don't feed XP yet: the `agents` provider
+  still counts the fourteen agents it did in 3.0.
+
 ## 3.0.0 (2026-09-04)
 
 Any terminal, any agent. The creature is no longer a Claude Code accessory:
