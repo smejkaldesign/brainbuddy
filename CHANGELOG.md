@@ -3,6 +3,14 @@
 Notable changes, newest first. Versions follow semver; the version lives in
 `brainbuddy/__init__.py` and each release is the matching `v*` tag.
 
+## 1.3.0
+
+- brainbuddy is now **terminalcreature**. This is the last release under the
+  old name and it changes nothing else. To move over, re-run the bootstrap you
+  installed with (the old URL redirects), or `pipx install terminalcreature`.
+  Your creature, roster, and settings migrate in place. New home:
+  <https://github.com/smejkaldesign/terminalcreature>.
+
 ## 1.2.0
 
 - Opt-in update alert: `config update_check true` lets the background refresh

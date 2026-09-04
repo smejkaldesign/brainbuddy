@@ -58,11 +58,11 @@ def status_line(status, latest, current=__version__):
     if status == "unreachable":
         return "couldn't reach pypi just now. you're on %s, try again when it's back." % current
     if _parts(latest) > _parts(current):
-        return "brainbuddy %s is out, you're on %s; re-run your installer, pipx upgrade brainbuddy, or take the plugin update." % (
+        return "brainbuddy %s is out, you're on %s; re-run your installer, pipx upgrade brainbuddy, or take the plugin update. (brainbuddy is becoming terminalcreature; the installer handles the move.)" % (
             latest, current)
     if _parts(latest) < _parts(current):
         return "you're on %s and pypi has %s, so you're ahead of the release." % (current, latest)
-    return "brainbuddy %s is the latest. nothing to do." % current
+    return "brainbuddy %s is the latest under this name, and the last: it's now terminalcreature. re-run your bootstrap, or pipx install terminalcreature." % current
 
 
 def check():
