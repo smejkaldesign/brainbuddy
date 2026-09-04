@@ -9,8 +9,8 @@ Notable changes, newest first. Versions follow semver; the version lives in
   clock, so the statusline's own redraw timing doesn't matter. When the
   session counter rises it holds a happy face for two seconds. Eyes only:
   the art never changes width, and an egg has no eyes to move.
-- Site: green egg favicon, social image for link previews, story lede,
-  more room in the hero.
+- Site: updated wordmark, ASCII-creature favicon, social image rendered
+  from the wordmark for link previews, story lede, more room in the hero.
 
 ## 2.0.0
 
