@@ -5,9 +5,11 @@ touched, so nothing here can leak a memory filename into CI output (R12).
 """
 
 import os
+import re
 import shutil
 import sys
 import tempfile
+import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -1425,8 +1427,206 @@ def test_moods():
     check(state_mod.mood(st, "s1", now=quiet + 0.1) == "happy", "a feed beats a blink")
 
 
+def _styled_state():
+    st = state_mod.default_state()
+    c = _hatched(st, name="Zask")
+    c["xp_banked"] = 80
+    st["settings"]["unicode"] = True
+    return st
+
+
+def _visible(text):
+    """Columns a row takes on screen: directives free, wide glyphs two."""
+    plain = re.sub(r"\x1b\[[0-9;]*m|#\[[^\]]*\]", "", text)
+    return max(sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in row) for row in plain.split("\n"))
+
+
+def test_render_formats():
+    """tmux strips raw escapes out of a status command and shows the bytes, so
+    its backend speaks #[fg=] and never emits one. plain is bare text. ansi is
+    the bytes Claude Code has always been handed, NO_COLOR included.
+    """
+    print("\nrender formats")
+    from terminalcreature import render
+
+    os.environ.pop("NO_COLOR", None)
+    try:
+        st = _styled_state()
+        for name, draw in (
+            ("segment", lambda fmt: render.segment(st, xp=80, counts={}, gain=5, fmt=fmt)),
+            ("compose", lambda fmt: render.compose(st, "BAR", xp=80, counts={}, gain=5, fmt=fmt)),
+            ("card", lambda fmt: render.card(st, xp=80, counts={"memories": 3}, fmt=fmt)),
+        ):
+            ansi, tmux, plain = draw("ansi"), draw("tmux"), draw("plain")
+            check("\x1b[" in ansi, "%s ansi carries escapes with colour on" % name)
+            check(draw(None) == ansi, "%s with no format is ansi byte for byte" % name)
+            check("\x1b" not in tmux and "#[" in tmux, "%s tmux has #[ styles and zero raw escapes" % name)
+            check("#[default]" in tmux, "%s tmux closes what it opens" % name)
+            check("\x1b" not in plain and "#[" not in plain, "%s plain has neither" % name)
+            word = "Lv" if name == "segment" else "Zask"
+            check(word in plain and word in tmux, "%s says the same thing in every format" % name)
+        check(render.paint("x", render.BOLD) == "\x1b[1mx\x1b[0m", "the default backend is still ansi after a styled block")
+
+        os.environ["NO_COLOR"] = "1"
+        check("\x1b" not in render.segment(st, xp=80, counts={}, fmt="ansi"), "NO_COLOR still strips ansi")
+        check("#[" in render.segment(st, xp=80, counts={}, fmt="tmux"), "and leaves tmux styles alone, tmux paints those itself")
+
+        try:
+            render.Style("html")
+        except ValueError:
+            check(True, "an unknown format is refused, not guessed")
+        else:
+            check(False, "an unknown format is refused, not guessed")
+    finally:
+        os.environ.pop("NO_COLOR", None)
+
+
+def test_width_cap():
+    """--width counts what lands on screen: directives are free, the egg icon
+    is two cells, and a cut drops the trailing fragment of a word.
+    """
+    print("\nwidth cap")
+    from terminalcreature import render
+
+    fit = render.fit
+    check(fit("hello world", 8) == "hello", "a cut backs up to the last whole word")
+    check(fit("hello world", 11) == "hello world", "a line that fits is untouched")
+    check(fit("hello world", 6) == "hello", "a cut right after the gap keeps the word and drops the gap")
+    check(fit("supercalifragilistic", 5) == "super", "a single word too long is cut, not dropped")
+    check(fit("hello world", 0) == "hello world", "no width means no cap")
+    check(fit("a\nbb\nccc", 2) == "a\nbb\ncc", "each line is capped on its own")
+    check(fit("\x1b[32mgreen\x1b[0m stuff", 5) == "\x1b[32mgreen\x1b[0m", "ansi escapes cost no columns")
+    check(fit("\x1b[32mgreen fields\x1b[0m", 5) == "\x1b[32mgreen\x1b[0m", "a cut inside a span closes it")
+    check(fit("#[fg=green]green fields#[default]", 5) == "#[fg=green]green#[default]", "same for tmux styles")
+    check(fit("\U0001f95a egg here", 5) == "\U0001f95a", "the icon is two cells wide, so five columns is not enough for egg")
+    check(fit("\U0001f95a egg here", 6) == "\U0001f95a egg", "and six is")
+
+    os.environ.pop("NO_COLOR", None)
+    try:
+        st = _styled_state()
+        for fmt in ("ansi", "tmux", "plain"):
+            for name, cap, out in (
+                ("segment", 8, render.segment(st, xp=80, counts={}, gain=5, fmt=fmt, width=8)),
+                ("compose", 14, render.compose(st, "a long bar of host text", xp=80, counts={}, fmt=fmt, width=14)),
+                ("card", 20, render.card(st, xp=80, counts={"memories": 3}, fmt=fmt, width=20)),
+            ):
+                widest = _visible(out)
+                check(widest <= cap, "%s %s capped at %d visible columns, widest row is %d" % (name, fmt, cap, widest))
+                check(out.strip() != "", "%s %s still shows something under the cap" % (name, fmt))
+        wide = render.segment(st, xp=80, counts={}, gain=5, fmt="ansi")
+        check(render.segment(st, xp=80, counts={}, gain=5, fmt="ansi", width=200) == wide, "a generous cap changes nothing")
+    finally:
+        os.environ.pop("NO_COLOR", None)
+
+
+# one payload per host, in the shape its docs or a live capture show.
+# droid's is derived from docs only; nobody has captured its stdin yet
+HOST_PAYLOADS = {
+    "claude": {
+        "hook_event_name": "Status", "session_id": "c-1", "transcript_path": "/x/t.jsonl", "cwd": "/x",
+        "model": {"id": "claude-opus-5", "display_name": "Opus"},
+        "workspace": {"current_dir": "/x", "project_dir": "/x"},
+        "version": "2.1.0", "output_style": {"name": "default"},
+        "cost": {"total_cost_usd": 0.1, "total_duration_ms": 1000},
+        "context_window": {"total_input_tokens": 1000, "total_output_tokens": 100, "context_window_size": 200000,
+                           "used_percentage": 12.5, "remaining_percentage": 87.5},
+        "exceeds_200k_tokens": False,
+    },
+    "cursor": {
+        "conversation_id": "u-1", "session_id": "u-1", "model": {"display_name": "composer"},
+        "cursor_version": "2026.08.01", "workspace_roots": ["/x"], "_agent_type": "cursor",
+        "workspace": {"current_dir": "/x"}, "context_usage": {"used_percentage": 40},
+    },
+    "copilot": {
+        "session_id": "p-1", "session_name": "fix tests", "transcript_path": "/x/t.jsonl", "cwd": "/x",
+        "username": "someone", "version": "1.0", "model": {"display_name": "gpt"},
+        "workspace": {"current_dir": "/x"}, "remote": {"host": ""},
+        "context_window": {"used_percentage": 33}, "cost": {"total_duration_ms": 10},
+    },
+    "qwen": {
+        "session_id": "q-1", "version": "0.14.1", "model": {"display_name": "qwen-3-235b"},
+        "context_window": {"context_window_size": 131072, "used_percentage": 34.3, "remaining_percentage": 65.7,
+                           "current_usage": 45000, "total_input_tokens": 30000, "total_output_tokens": 15000},
+        "workspace": {"current_dir": "/x"},
+        "metrics": {"models": {}, "files": {"total_lines_added": 0, "total_lines_removed": 0}},
+    },
+    "droid": {"sessionId": "d-1", "model": "claude-opus", "workingDirectory": "/x", "contextWindow": {"usedPercentage": 5}},
+}
+
+
+def test_host_stdin():
+    """Every host copies Claude Code's contract with its own field names, so one
+    map reads them all. Anything else renders without a session, never a crash.
+    """
+    print("\nhost stdin")
+    import json
+    import subprocess
+
+    from terminalcreature import hosts
+
+    for host, payload in HOST_PAYLOADS.items():
+        s = hosts.parse_session(json.dumps(payload))
+        check(s["host"] == host, "%s payload is read as %s, got %s" % (host, host, s["host"]))
+        check(s["session_id"] == (payload.get("session_id") or payload.get("sessionId")), "%s session id lands" % host)
+        check(isinstance(s["model"], str) and s["model"], "%s model lands as a string" % host)
+        check(s["workspace"] == "/x", "%s workspace lands" % host)
+        check(isinstance(s["context_used_pct"], float), "%s context percent lands as a float" % host)
+        check(sorted(s) == ["context_used_pct", "host", "model", "session_id", "workspace"], "%s carries exactly the five fields" % host)
+
+    for label, raw in (("empty", ""), ("not json", "not json"), ("empty object", "{}"), ("a list", "[1, 2]"),
+                       ("a bare string", '"hi"'), ("unknown keys", '{"foo": 1}'), ("None", None)):
+        s = hosts.parse_session(raw)
+        check(s["host"] == "unknown" and all(v is None for k, v in s.items() if k != "host"),
+              "%s stdin is host unknown with every field None" % label)
+    check(hosts.parse_session('{"session_id": "x"}')["host"] == "claude", "bare claude keys read as claude")
+    check(hosts.parse_session('{"session_id": 7}')["session_id"] is None, "a non-string id is dropped, not passed on")
+    check("/x" not in hosts.describe(hosts.parse_session(json.dumps(HOST_PAYLOADS["claude"]))), "doctor's line never carries the workspace path")
+    check("unknown schema" in hosts.describe(hosts.parse_session("")), "and calls an unknown shape unknown")
+
+    # a real render with each shape, and with junk, in a scratch home
+    home = tempfile.mkdtemp(prefix="bb-hosts-")
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+    env.pop("TERMINALCREATURE_FORMAT", None)
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+
+    def run(argv, raw="", **extra):
+        return subprocess.run(cmd + argv, input=raw, env=dict(env, **extra), capture_output=True, text=True)
+
+    try:
+        run(["new"])
+        run(["hatch", "--from-zero", "--name", "Zask"])
+        run(["config", "update_check_asked", "true"])  # or card appends the one-time offer
+        for label, raw in [("unknown", "not json at all"), ("empty", "")] + [(h, json.dumps(p)) for h, p in HOST_PAYLOADS.items()]:
+            r = run(["render"], raw)
+            check(r.returncode == 0 and "Lv" in r.stdout, "render with %s stdin still prints the segment" % label)
+        r = run(["render", "--format", "tmux"], json.dumps(HOST_PAYLOADS["qwen"]))
+        check("\x1b" not in r.stdout and "#[" in r.stdout, "render --format tmux through the cli emits tmux styles only")
+        r = run(["render", "--format=plain", "--width", "3"])
+        check(r.returncode == 0 and 0 < len(r.stdout) <= 3, "render --format=plain --width 3 caps the segment")
+        r = run(["render", "--format", "html"])
+        check(r.returncode == 0 and "Lv" in r.stdout, "a bad format on render falls back rather than blanking the statusline")
+        r = run(["compose", "--format", "tmux", "BAR"], "{}")
+        check("BAR" in r.stdout and "#[" in r.stdout and "\x1b" not in r.stdout, "compose takes the flags ahead of its text")
+        r = run(["card", "--width", "abc"])
+        check(r.returncode == 1 and "--width" in r.stdout, "card, which a human runs, says what was wrong")
+        r = run(["card", "--format", "plain", "--width", "30"])
+        check(r.returncode == 0 and "Zask" in r.stdout and _visible(r.stdout) <= 30, "card takes both flags")
+        r = run(["doctor"], json.dumps(HOST_PAYLOADS["cursor"]))
+        check("stdin: cursor schema" in r.stdout and "/x" not in r.stdout, "doctor names the schema it read, without the path")
+        r = run(["doctor"])
+        check("no session on stdin" in r.stdout, "and says so when nothing was piped")
+        r = run(["render"], "{}", TERMINALCREATURE_FORMAT="tmux")
+        check("#[" in r.stdout, "TERMINALCREATURE_FORMAT picks the backend when no flag does")
+    finally:
+        shutil.rmtree(home)
+
+
 if __name__ == "__main__":
     test_metric()
+    test_render_formats()
+    test_width_cap()
+    test_host_stdin()
     test_update_chip()
     test_hatch_naming()
     test_refresh_never_reverts_concurrent_writes()

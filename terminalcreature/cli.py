@@ -10,7 +10,7 @@ import sys
 
 from . import __version__
 from . import creature as creature_mod
-from . import metric, render, sprites
+from . import hosts, metric, render, sprites
 from . import state as state_mod
 
 USAGE = """terminalcreature - a terminal pet that evolves with your memory
@@ -18,6 +18,8 @@ USAGE = """terminalcreature - a terminal pet that evolves with your memory
   render              one-line statusline segment (what the statusline calls)
   compose "<text>"    your statusline text with the creature as a left column
   card                full creature card
+     render, compose and card take --format ansi|tmux|plain (default ansi, or
+     $TERMINALCREATURE_FORMAT) and --width N to cap the columns
   new [name]          lay a new egg (--replace or --add)
   hatch [--from-zero] open the egg; --from-zero starts at 0 instead of scoring
         [--name <n>]  what you've already written. --name names it as it opens
@@ -61,12 +63,61 @@ def _stdin_text():
         return ""
 
 
-def _session_id(raw):
-    """Claude Code's statusline JSON carries the session id. Only that is read."""
+def _waiting_stdin():
+    """stdin, but only what is already there. doctor is run by hand, often
+    from a script holding a pipe open, and blocking on it would read as a hang.
+    """
     try:
-        return json.loads(raw).get("session_id") or None
-    except (ValueError, AttributeError):
-        return None
+        import select
+        if sys.stdin.isatty() or not select.select([sys.stdin], [], [], 0.05)[0]:
+            return ""
+    except Exception:
+        pass
+    return _stdin_text()
+
+
+def _session_id(raw):
+    """The session id out of whatever host piped its JSON, or None."""
+    return hosts.parse_session(raw)["session_id"]
+
+
+FORMAT_ENV = "TERMINALCREATURE_FORMAT"
+
+
+def _render_opts(args):
+    """Pull --format and --width out of args. Returns (fmt, width, rest, problem).
+
+    problem is a message rather than an exception because render and compose
+    must never crash a statusline: they fall back to ansi and no cap, and only
+    card, which a human runs, says what was wrong.
+    """
+    fmt = os.environ.get(FORMAT_ENV) or "ansi"
+    width, rest, problem = None, [], None
+    i = 0
+    while i < len(args):
+        key, eq, val = args[i].partition("=")
+        if key not in ("--format", "--width"):
+            rest.append(args[i])
+            i += 1
+            continue
+        if not eq and i + 1 < len(args):
+            i += 1
+            val = args[i]
+        i += 1
+        if key == "--format":
+            fmt = val
+        else:
+            try:
+                width = int(val)
+            except ValueError:
+                problem = "--width takes a number, not %r" % val
+    if fmt not in render.FORMATS:
+        problem = "--format takes ansi, tmux or plain, not %r" % fmt
+        fmt = "ansi"
+    if width is not None and width < 1:
+        problem = "--width must be positive"
+        width = None
+    return fmt, width, rest, problem
 
 
 def _bank(st, session_id):
@@ -84,12 +135,13 @@ def _bank(st, session_id):
 
 def cmd_render(args):
     try:
+        fmt, width, _, _ = _render_opts(args)
         session = _session_id(_stdin_text())
         st = _load()
         if st["settings"].get("hidden"):
             return 0
         xp, counts, gain, mood = _bank(st, session)
-        line = render.segment(st, xp, counts, gain=gain, mood=mood)
+        line = render.segment(st, xp, counts, gain=gain, mood=mood, fmt=fmt, width=width)
         if line:
             sys.stdout.write(line)
     except Exception:
@@ -99,6 +151,7 @@ def cmd_render(args):
 
 def cmd_compose(args):
     """Merge caller-supplied statusline text with the creature as a left column."""
+    fmt, width, args, _ = _render_opts(args)
     left = args[0] if args else ""
     try:
         raw = _stdin_text()
@@ -113,7 +166,7 @@ def cmd_compose(args):
             sys.stdout.write(left)
             return 0
         xp, counts, gain, mood = _bank(st, session)
-        sys.stdout.write(render.compose(st, left, xp, counts, gain=gain, mood=mood))
+        sys.stdout.write(render.compose(st, left, xp, counts, gain=gain, mood=mood, fmt=fmt, width=width))
     except Exception:
         sys.stdout.write(left)
     return 0
@@ -140,11 +193,15 @@ def cmd_refresh(args):
 
 
 def cmd_card(args):
+    fmt, width, _, problem = _render_opts(args)
+    if problem:
+        print(problem)
+        return 1
     st = _load()
     xp, _ = render.current_xp(st)
     state_mod.sync(st, xp)
     state_mod.save(st)
-    print(render.card(st))
+    print(render.card(st, fmt=fmt, width=width))
     s = st["settings"]
     if not s.get("update_check") and not s.get("update_check_asked"):
         # the one-time offer. default-off would otherwise mean nobody who
@@ -536,6 +593,13 @@ def cmd_doctor(args):
         bp = metric.progress(banked, settings["xp_max"])
         stage = bp["stage"] if state_mod.is_hatched(c) else "egg"
         print("%s banked %d -> level %d (%s)" % (c["name"], banked, bp["level"], stage))
+    # piped a host's statusline json? say which shape it was read as, so a
+    # sessionless render on a new host is one doctor run from an answer
+    raw = _waiting_stdin()
+    if raw.strip():
+        print(hosts.describe(hosts.parse_session(raw)))
+    else:
+        print("stdin: no session on stdin")
     override = _project_override()
     if override:
         print("\n" + override)
