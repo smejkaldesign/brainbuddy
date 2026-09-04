@@ -177,7 +177,9 @@ def measure_agents(weights=None):
     xp = 0
     for agent in AGENT_ROOTS:
         present = False
-        row = {}
+        # every key seeded, so a root that isn't there reads as zero rather
+        # than as a key that went missing
+        row = dict((s["key"], 0) for _, sources in agent["roots"] for s in sources)
         for root, sources in agent["roots"]:
             root = os.path.expanduser(root)
             if not os.path.isdir(root):
@@ -186,7 +188,7 @@ def measure_agents(weights=None):
             for source in sources:
                 n = count_source(root, source)
                 # a key can appear twice under one agent, so add rather than set
-                row[source["key"]] = row.get(source["key"], 0) + n
+                row[source["key"]] += n
                 xp += n * weights.get(source["key"], source["weight"])
         if present:
             counts[agent["key"]] = row
