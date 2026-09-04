@@ -353,6 +353,12 @@
     .matrix th:first-child { background: var(--card-2); }
     section { padding-top: 104px; }
   }
+    /* five columns on a phone: headers wrap to two lines and the agents table drops its desktop floor, so more than one tick column is in view beside the sticky name */
+    #matrix-agents { min-width: 0; }
+    .matrix th, .matrix th.c { white-space: normal; line-height: 1.35; padding: 10px 10px; }
+    .matrix th .nb { white-space: nowrap; }
+    .matrix td { padding: 9px 10px; }
+    .matrix th:first-child, .matrix td:first-child { padding-left: 14px; }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     .t-cursor { animation: none; }
@@ -814,7 +820,7 @@
   // compat matrix. cells: YES draws a check, NO a dash. rows: name, statusline, turn-end card, prompt or tmux, feeds xp.
   // Goose has hooks but no confirmed line shown to the user, so its card cell stays a dash.
   var YES = 1, NO = 0;
-  var AGENT_COLS = ["Agent", "Statusline", "Turn-end card", "Prompt or tmux", "Feeds XP"];
+  var AGENT_COLS = ["Agent", "Statusline", '<span class="nb">Turn-end</span> card', '<span class="nb">Prompt or</span> tmux', "Feeds XP"];
   var AGENTS = [
     ["Claude Code", YES, NO, YES, YES],
     ["Cursor CLI", YES, NO, YES, YES],
