@@ -92,15 +92,34 @@ GLYPHS_UNICODE = ["\u25cc", "\u25cb", "\u25d4", "\u25d1", "\u25d5", "\u25cf"]
 GLYPHS_ASCII = [".", "o", "c", "C", "O", "@"]
 
 
+# Moods swap the eyes and nothing else. A blink is a closed pair, happy is a
+# raised pair; species whose resting eyes already look like one get the other
+# shape so the change still reads. (sprite pair, compact pair)
+MOOD_EYES = {
+    "blink": {"default": ("- -", "--"), "Wisp": ("_ _", "__")},
+    "happy": {"default": ("^ ^", "^^"), "Ember": ("* *", "**")},
+}
+
+
 def look(species):
     return SPECIES_LOOK.get(species, SPECIES_LOOK["Mote"])[:2]
 
 
-def face(species, stage_index, unicode_ok=True):
+def mood_eyes(species, mood, compact=False):
+    table = MOOD_EYES.get(mood)
+    if not table:
+        return None
+    pair = table.get(species, table["default"])
+    return pair[1] if compact else pair[0]
+
+
+def face(species, stage_index, unicode_ok=True, mood=None):
     """Tiny creature for the statusline. Eyes come from the species, the
     bracket grows with the stage, and an egg has no eyes yet.
     """
     eyes = SPECIES_LOOK.get(species, SPECIES_LOOK["Mote"])[2]
+    if stage_index > 0 and mood:
+        eyes = mood_eyes(species, mood, compact=True) or eyes
     if not unicode_ok and any(ord(c) > 127 for c in eyes):
         eyes = "oo"
     table = FACE_WRAP_UNICODE if unicode_ok else FACE_WRAP_ASCII
@@ -113,15 +132,18 @@ def glyph(stage_index, unicode_ok=True):
     return table[max(0, min(len(table) - 1, stage_index))]
 
 
-def sprite(species, stage_index, shiny=False, short=False):
+def sprite(species, stage_index, shiny=False, short=False, mood=None):
     """Rows for a species at a stage, padded to equal width."""
     motif, eyes = look(species)
     if stage_index == 0:
         # stage 0 is the egg, and motif and shiny's `$` both come off the seed,
         # so drawing them here gives away what's inside. every egg looks alike.
         motif = SPECIES_LOOK["Mote"][0]
-    elif shiny:
-        motif = motif.upper() if motif.isalpha() else "$"
+    else:
+        if shiny:
+            motif = motif.upper() if motif.isalpha() else "$"
+        if mood:
+            eyes = mood_eyes(species, mood) or eyes
     table = SHORT_TEMPLATES if short else STAGE_TEMPLATES
     rows = table[max(0, min(len(table) - 1, stage_index))]
     out = [r.replace("{m}", motif).replace("{e}", eyes) for r in rows]
