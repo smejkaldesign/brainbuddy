@@ -3,7 +3,7 @@
 Notable changes, newest first. Versions follow semver; the version lives in
 `terminalcreature/__init__.py` and each release is the matching `v*` tag.
 
-## Unreleased
+## 2.2.0
 
 - `/creature-update` and `terminalcreature update --apply`: check pypi for a
   newer release and, if there is one, download it and run its installer over
