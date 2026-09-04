@@ -5,7 +5,7 @@
 <h3 align="center">A small creature lives in your statusline. It is always hungry.</h3>
 
 <p align="center">
-  An egg sits in your Claude Code statusline, and it eats what you remember.<br />
+  An egg sits in your terminal's statusline, and it eats what you remember.<br />
   Every note you write is a meal, every meal is XP. Keep it fed and it hatches, then grows through five forms<br />
   across eight species, with a one-in-a-hundred shiny. It counts your files and never reads them. How rare is yours?
 </p>
@@ -80,6 +80,44 @@ $ terminalcreature hatch
   Lv41 Adept
 ```
 
+## Works with
+
+One creature, any terminal, any agent. It lives in an agent's own statusline where the agent has one, and in tmux or your prompt everywhere else. XP comes from whichever coding agents have written memory on this machine, not just the one you're looking at.
+
+| Agent | Native statusline | Prompt or tmux | Feeds XP |
+| :--- | :---: | :---: | :---: |
+| Claude Code | ✓ | ✓ | ✓ |
+| Cursor CLI | ✓ | ✓ | ✓ |
+| GitHub Copilot CLI | ✓ | ✓ | ✓ |
+| Qwen Code | ✓ | ✓ | ✓ |
+| Factory Droid | ✓ | ✓ | ✓ |
+| Codex CLI | - ¹ | ✓ | ✓ |
+| Gemini CLI | - ¹ | ✓ | ✓ |
+| opencode | - ¹ | ✓ | ✓ |
+| Amp | - ¹ | ✓ | ✓ |
+| Goose | - ¹ | ✓ | ✓ |
+| Continue | - | ✓ | ✓ |
+| Kiro | - | ✓ | ✓ |
+| Cline | - | ✓ | ✓ |
+| Crush | - | ✓ | ✓ |
+| aider | - | ✓ | - |
+| Warp | - | ✓ | - |
+
+<sub>¹ No statusline to wire yet, so the creature lives in tmux or the prompt. A hooks card is coming in 3.1.</sub>
+
+**Native statusline** means `install --host <name>` wires it and the session counter works. The Cursor and Copilot contracts were read off the shipped CLI bundles and exercised live; Qwen's comes from its docs. Droid's is docs-only and has not been run against a real install, so treat it as a first draft and file a bug if it misbehaves.
+
+| Surface | How |
+| :--- | :--- |
+| tmux | `terminalcreature snippet tmux`, or the tpm plugin |
+| Starship | `terminalcreature snippet starship` |
+| zsh | `terminalcreature snippet zsh`, as the right prompt |
+| fish | `terminalcreature snippet fish` |
+| oh-my-posh | `terminalcreature snippet omp` |
+| WezTerm | `terminalcreature snippet wezterm` |
+| Kitty, Zellij, iTerm2 | manual: call `render --format plain` from their status hooks |
+| Ghostty, Alacritty, Windows Terminal | no status area of their own; use the prompt or tmux inside them |
+
 ---
 
 ## Quick Start
@@ -141,12 +179,38 @@ Later eggs inherit the first two answers. The name is asked for every egg.
 | `--no-wire` | install the library and commands only, wire it yourself |
 | `--no-commands` | skip the slash commands, when something else already ships them |
 | `--uninstall` | unwire, restore your old statusline, remove the commands |
+| `--host <name>` | wire `cursor`, `copilot`, `qwen`, `droid` or `all` instead of Claude Code |
 
 Re-running is safe and is how you pick up new commands. It won't wrap itself twice and it leaves an existing buddy alone.
 
+### Cursor, Copilot, Qwen, Droid
+
+The bootstrap above installs the library and wires Claude Code. The same installer wires the other native hosts, one at a time or all at once:
+
+```bash
+./install.sh --host cursor       # or copilot, qwen, droid
+./install.sh --host all          # every host that's installed on this machine
+```
+
+Once the library is in place the CLI does the same without the installer, and undoes it:
+
+```bash
+terminalcreature install --host copilot [--inline] [--statusline <cmd>]
+terminalcreature uninstall --host copilot
+```
+
+Each host gets its own shim and its own backup of its settings file, so wiring Cursor never touches Claude Code's `settings.json`. Two things worth knowing:
+
+- **Cursor and Qwen default to inline.** Their custom statusline replaces the native footer rather than adding rows to it, so the one-line segment keeps whatever the wrapped command printed on the same line. On the other hosts `--inline` opts in.
+- **Copilot's settings file is JSONC.** Comments are tolerated on read, the file is written back as plain JSON, and the backup keeps the commented original. `uninstall` restores that backup byte for byte when nothing else has changed since.
+
+`terminalcreature doctor` lists every host it knows, whether it's installed, and whether it's wired.
+
 ### How the wiring works
 
-The installer **wraps** your existing statusline rather than editing it. It points `statusLine.command` at a small generated shim; the shim runs whatever command was there before, on the same stdin Claude Code hands it, then draws the creature to the left of that output. Your own script is never modified. It keeps a `settings.json.pre-terminalcreature.bak`, and `--uninstall` puts the original command back.
+The installer **wraps** your existing statusline rather than editing it. It points `statusLine.command` at a small generated shim; the shim runs whatever command was there before, on the same stdin the host hands it, then draws the creature to the left of that output. Your own script is never modified. It keeps a `settings.json.pre-terminalcreature.bak`, and `--uninstall` puts the original command back.
+
+Every host follows the same pattern under `~/.claude/terminalcreature/`. Claude Code keeps `statusline-terminalcreature.sh` and `wrapped-command`; the others get `statusline-terminalcreature-<host>.sh` and `wrapped-command-<host>`, and each host's settings file gets its own `.pre-terminalcreature.bak` next to it. The shim works out which host is calling from the JSON on stdin, so the session counter reads the right fields in every one of them.
 
 **Project-level statuslines need one manual step.** The installer only touches `~/.claude/settings.json`. If a repo sets its own `statusLine` in `<repo>/.claude/settings.json`, wrap it explicitly, then point the project at the shim:
 
@@ -232,28 +296,53 @@ $ terminalcreature card
 
 ### Where XP comes from
 
-XP is a weighted count of markdown files in a memory system, so terminalcreature needs one to point at. Three providers, set with `/creature config provider <name>`:
+XP is a weighted count of files in a memory system, so terminalcreature needs one to point at. Five providers, set with `/creature config provider <name>`:
 
 | Provider | Counts | Point it somewhere |
 | :--- | :--- | :--- |
-| `claude` | stock Claude Code memory, `~/.claude/projects/*/memory/*.md` | default, nothing to set |
+| `auto` | `agents` when two or more coding agents are installed, else `claude` | default, nothing to set |
+| `agents` | the memory, rules and session logs of every coding agent on this machine | nothing to set |
+| `claude` | stock Claude Code memory, `~/.claude/projects/*/memory/*.md` | nothing to set |
 | `folder` | every `.md` under a directory, recursively | `config vault_root ~/notes` |
 | `vault` | a structured vault, weighted per directory | `config vault_root ~/brain` |
 
-`terminalcreature doctor` says which one is live, whether the root is there, what it counted, and what your buddy banked of that:
+`agents` knows fourteen of them and counts whichever have a root directory here: Claude Code, Codex, Gemini CLI, Copilot CLI, Cursor, Qwen Code, Droid, opencode, Amp, Goose, Continue, Kiro, Cline and Crush. An agent that isn't installed reads as absent rather than as an agent with nothing written. `terminalcreature sources` shows the count per agent, names and numbers only, never a file:
+
+```
+$ terminalcreature sources
+claude: memories 2
+codex: memories 1, instructions 1, sessions 1
+gemini: instructions 1
+cursor: rules 1
+not found: copilot, qwen, droid, opencode, amp, goose, continue, kiro, cline, crush
+counting 18 xp of memory across 4 agents. /creature shows your buddy.
+```
+
+`terminalcreature doctor` says which provider is live, whether the root is there, what it counted, what your buddy banked of that, and which hosts it can draw in:
 
 ```
 $ terminalcreature doctor
-provider: folder (folder of notes)
-root: ~/notes (found)
-  notes      9
-source xp 18 -> level 10
+provider: auto (agents when two or more are installed, else claude)
+root: ~ (found)
+  instructions 2
+  memories   3
+  rules      1
+  sessions   1
+source xp 18 -> level 10 (what a new egg would bank)
 Zask banked 18 -> level 10 (Hatchling)
+stdin: no session on stdin
+hosts:
+  claude   Claude Code         native, wired
+  cursor   Cursor CLI          native, not wired
+  copilot  GitHub Copilot CLI  not installed
+  qwen     Qwen Code           not installed
+  droid    Factory Droid       not installed
+prompt surfaces (tmux, starship, shells): see `terminalcreature snippet`
 ```
 
 A zero reading has three causes, and `doctor` names the one you've got:
 
-- **the root isn't there**: wrong path, or Claude Code hasn't written memory yet
+- **the root isn't there**: wrong path, or no agent has written memory yet
 - **the root is real but empty**: nothing to do but write things down
 - **the root has markdown the provider's layout doesn't match**: pointing `vault` at a plain notes folder does this, and the fix is `provider folder`
 
@@ -263,7 +352,7 @@ A zero reading has three causes, and `doctor` names the one you've got:
 
 ### How levelling works
 
-Durable facts are worth more than session logs because they cost more to produce, and generated index files are excluded so they can't inflate the count for free. `claude` counts one source at ×3, `folder` counts every note at ×2, and `vault` weights per directory:
+Durable facts are worth more than session logs because they cost more to produce, and generated index files are excluded so they can't inflate the count for free. `claude` counts one source at ×3, `folder` counts every note at ×2, `agents` weights by kind across every agent (memories and instruction files ×3, rules ×2, session logs ×1), and `vault` weights per directory:
 
 | Source | Glob | Weight | Excluded |
 | :--- | :--- | :--- | :--- |
@@ -331,6 +420,35 @@ Either way the column is pinned to the creature's **widest** form, so your text 
 
 `/creature-hide` takes the creature out without uninstalling anything. XP keeps banking while it's hidden.
 
+### tmux, your prompt, and other terminals
+
+The same `render` draws anywhere that can run a command. `snippet` prints a paste-in config for each surface it knows:
+
+```
+terminalcreature snippet tmux | starship | zsh | fish | omp | wezterm
+```
+
+The tmux one, for example:
+
+```
+$ terminalcreature snippet tmux
+# ~/.tmux.conf. the creature in the right status, redrawn every status-interval
+# seconds (tmux's default is 15; the refresh also pokes tmux when xp changes)
+set -g status-interval 5
+# tmux's default is 40, which cuts the creature off mid-word
+set -g status-right-length 80
+set -g status-right '#(env PYTHONPATH=$HOME/.claude/terminalcreature/lib python3 -m terminalcreature.cli render --format tmux --width 40) %H:%M'
+```
+
+Or with tpm, add the plugin and put `#{creature}` wherever you like:
+
+```
+set -g @plugin 'smejkaldesign/terminalcreature'
+set -g status-right '#{creature} %H:%M'
+```
+
+`render`, `compose` and `card` take `--format ansi|tmux|plain` (`ansi` is the default, or set `TERMINALCREATURE_FORMAT`) and `--width N` to cap the columns. `tmux` writes `#[fg=…]` styles instead of escape codes; `plain` is for anything that shows colours as literal codes, which is what the WezTerm and oh-my-posh snippets use. Inside tmux, the background refresh runs `tmux refresh-client -S` when XP changes, so the status line redraws the moment a note lands rather than on the next interval.
+
 ### The roster
 
 Keep several creatures. Only the **focused** one gains XP; the others hold their level and wait.
@@ -368,6 +486,10 @@ terminalcreature update            ask pypi whether there's a newer terminalcrea
 terminalcreature update --apply    and install it if there is, keeping your creature
 terminalcreature render            the one-line statusline segment
 terminalcreature compose "<text>"  your statusline text, creature as a left column
+    render, compose and card take --format ansi|tmux|plain and --width <n>
+terminalcreature snippet <surface> paste-in config for tmux, starship, zsh, fish, omp or wezterm
+terminalcreature install --host <h>   wire a host's statusline: claude, cursor, copilot, qwen, droid or all
+terminalcreature uninstall --host <h> put that host's statusline back and drop its shim
 terminalcreature refresh           recompute the xp cache
 ```
 
@@ -381,7 +503,7 @@ alias terminalcreature='PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 
 
 | Setting | Values | Default |
 | :--- | :--- | :--- |
-| `provider` | `claude`, `folder` or `vault` | `claude` |
+| `provider` | `auto`, `agents`, `claude`, `folder` or `vault` | `auto` |
 | `vault_root` | path, for `folder` and `vault` | |
 | `xp_max` | XP at level 100, the pace dial | `1500` |
 | `density` | `minimal` `compact` `full` `sprite` `ruler` | `compact` |
@@ -398,10 +520,10 @@ alias terminalcreature='PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 
 
 Short enough to check yourself.
 
-- **It counts your files without ever opening them.** The only filesystem calls in `metric.py` are `glob` and `stat`. It never calls `open()` on a note, never reads a byte of content, never parses frontmatter. That isn't a promise about what it does with your data; it's a statement that it never has your data.
-- **It never prints a path it matched**, in any mode including `doctor`, which reports a home-relative root and counts rather than filenames.
-- **All state is local**, at `~/.claude/terminalcreature/`: the roster, your settings, and the XP cache. Nothing else, nowhere else.
-- **The render never opens a socket, and by default neither does anything it starts.** No telemetry, no analytics, no phone-home.
+- **It counts your files without ever opening them.** The only filesystem calls in `metric.py` are `glob` and `stat`, and that holds across every agent the `agents` provider counts. It never calls `open()` on a note, a rules file or a session log, never reads a byte of content, never parses frontmatter. That isn't a promise about what it does with your data; it's a statement that it never has your data.
+- **It never prints a path it matched**, in any mode including `doctor` and `sources`, which report a home-relative root, product names and counts rather than filenames. An agent it can't find is named as not found, never as a path it looked in.
+- **All state is local**, at `~/.claude/terminalcreature/`: the roster, your settings, the XP cache, and the per-host shims. Nothing else, nowhere else.
+- **The render never opens a socket, and by default neither does anything it starts.** No telemetry, no analytics, no phone-home. Inside tmux the refresh runs `tmux refresh-client -S`, a call to your own tmux server on this machine, and that's the whole list.
 - **The only network calls are the ones you allowed.** The installer (and `terminalcreature update --apply`) downloading a release tarball from `api.github.com`; `terminalcreature update` and `doctor --check` reading pypi's public package metadata; and, if you opt in with `config update_check true`, that same version request once a day from the background refresh so the yellow `⬆ update` chip can appear. It's off by default and asked as a question. Every one is an unauthenticated GET that sends nothing about you or your memory.
 
 Three tests enforce this. A runtime trap patches every file-reading builtin and asserts none fire during a measurement. A static pass tokenizes `metric.py` and fails if a reader appears in the code at all. A third guards every socket call, including in the background processes a render spawns: opted out, an aged cache plus a render produces zero network from any process; opted in, exactly one attempt per day, never from the render itself. A leak guard runs in CI and as a `pre-push` hook, failing the build if an absolute home path or a vault-shaped filename ever reaches the repo.
@@ -412,7 +534,8 @@ Three tests enforce this. A runtime trap patches every file-reading builtin and 
 
 | | |
 | :--- | :--- |
-| **The shim wraps, it doesn't edit** | `statusLine.command` points at a generated shim; your original command is saved next to it and run by it. A script that already calls terminalcreature is detected and left alone. |
+| **The shim wraps, it doesn't edit** | `statusLine.command` points at a generated shim, one per host; your original command is saved next to it and run by it. A script that already calls terminalcreature is detected and left alone. |
+| **One render, three dialects** | `ansi` for terminals and prompts, `tmux` for its `#[…]` styles, `plain` for the rest. The art never changes width between them. |
 | **A cache on the hot path** | `render` reads a cached XP value and spawns the recount in the background, blocking only on a cold start. |
 | **High-water mark** | New XP is the delta above the highest total ever seen, so deleting notes can't take a level away, and a render before your first hatch can't burn the XP waiting for it. |
 | **Derived beats persisted** | Species, rarity, shiny, and accent are recomputed from the seed on every load and overwrite whatever is on disk. Only id, seed, name, hatch time, and banked XP persist. |
@@ -427,9 +550,12 @@ terminalcreature/
 │   ├── render.py          #   statusline segment, compose, card
 │   ├── state.py           #   roster, settings, xp cache
 │   ├── metric.py          #   providers: glob + stat, nothing else
+│   ├── hosts.py           #   per-host statusline adapters and stdin shapes
+│   ├── snippets.py        #   paste-in configs for tmux, starship, shells, wezterm
 │   ├── creature.py        #   seed → species, rarity, shiny
 │   └── sprites.py         #   stage templates × species motifs
-├── commands/              # the five Claude Code slash commands
+├── commands/              # the Claude Code slash commands
+├── tmux/                  # the tpm plugin behind #{creature}
 ├── site/                  # the website, deployed by pages.yml
 ├── install.sh             # wraps your statusline, lays the egg
 ├── bootstrap.sh           # curl | bash entry: fetches a release, runs install.sh
