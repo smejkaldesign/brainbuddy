@@ -2186,6 +2186,50 @@ def test_refresh_pokes_tmux():
         shutil.rmtree(home)
 
 
+def test_box_flag():
+    """--box is the opposite of --inline: it puts the creature on the left for a
+    host whose default is the one-line segment. Neither flag means the host's
+    default, both at once is a mistake to say so about.
+    """
+    print("\nbox flag")
+    import subprocess
+
+    from terminalcreature import hosts
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+    for host in ("cursor", "qwen"):
+        home = tempfile.mkdtemp(prefix="bb-box-")
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+        shim = os.path.join(home, ".claude", "terminalcreature", hosts.REGISTRY[host]["shim"])
+
+        def run(argv):
+            return subprocess.run(cmd + argv, env=env, input="", capture_output=True, text=True)
+
+        def mode():
+            with open(shim) as f:
+                last = f.read().rstrip("\n").split("\n")[-1]
+            return "render" if " render " in last else "compose" if " compose " in last else "?"
+
+        try:
+            r = run(["install", "--host", host, "--box", "--statusline", "echo X"])
+            check(r.returncode == 0 and "creature on the left" in r.stdout and mode() == "compose", "%s: --box writes the compose shim and says so" % host)
+            run(["uninstall", "--host", host])
+            r = run(["install", "--host", host])
+            check(r.returncode == 0 and "segment after it" in r.stdout and mode() == "render", "%s: no flag keeps the host's inline default" % host)
+            r = run(["install", "--host", host, "--box"])
+            check(r.returncode == 0 and "already wired" in r.stdout and mode() == "compose", "%s: --box over a wired host swaps the shim's mode" % host)
+            r = run(["install", "--host", host, "--inline"])
+            check(r.returncode == 0 and mode() == "render", "%s: and --inline swaps it back" % host)
+            for argv in (["--inline", "--box"], ["--box", "--inline"]):
+                r = run(["install", "--host", host] + argv)
+                check(r.returncode == 1 and "opposites" in r.stdout and mode() == "render", "%s: %s is refused and changes nothing" % (host, " ".join(argv)))
+            u = run(["uninstall", "--host", host])
+            check(u.returncode == 0 and not os.path.exists(shim), "%s: uninstall still drops the shim" % host)
+        finally:
+            shutil.rmtree(home)
+
+
 def test_host_settings_edge_cases():
     """The bytes hosts and editors actually produce: a byte order mark, a comma
     inside a string value, a private file mode. None of them may refuse the
@@ -2248,6 +2292,7 @@ if __name__ == "__main__":
     test_host_stdin()
     test_host_adapters()
     test_host_settings_edge_cases()
+    test_box_flag()
     test_update_chip()
     test_hatch_naming()
     test_refresh_never_reverts_concurrent_writes()

@@ -37,10 +37,12 @@ USAGE = """terminalcreature - a terminal pet that evolves with your memory
   sources             what it can count, and what to do if that's nothing
   doctor [--check]    check what terminalcreature can see; --check also asks pypi
   update [--apply]    ask pypi whether there's a newer terminalcreature; --apply installs it
-  install [--host claude|cursor|copilot|qwen|droid|all] [--inline] [--statusline <cmd>]
+  install [--host claude|cursor|copilot|qwen|droid|all] [--inline|--box] [--statusline <cmd>]
                       point a host's statusline at the creature, wrapping what it ran
-                      before. all wires every host that's installed. install.sh does
-                      the full claude setup; this only wires the statusline
+                      before. all wires every host that's installed. --inline puts the
+                      creature after the host's text, --box on the left as a column;
+                      each host has its own default. install.sh does the full claude
+                      setup; this only wires the statusline
   uninstall [--host ...]
                       put the host's statusline back and drop the shim
 
@@ -752,12 +754,16 @@ def cmd_show(args):
 
 
 def _host_args(args):
-    """(host, inline, statusline) out of install/uninstall args, or (None, problem)."""
-    host, inline, statusline, i = "claude", False, None, 0
+    """(host, inline, statusline) out of install/uninstall args, or (None, problem).
+    inline is None until --inline or --box says, so each host keeps its own default.
+    """
+    host, inline, statusline, i = "claude", None, None, 0
     while i < len(args):
         key, eq, val = args[i].partition("=")
-        if key == "--inline":
-            inline = True
+        if key in ("--inline", "--box"):
+            if inline is not None and inline != (key == "--inline"):
+                return None, "--inline and --box are opposites, pick one"
+            inline = key == "--inline"
         elif key in ("--host", "--statusline"):
             if not eq:
                 i += 1

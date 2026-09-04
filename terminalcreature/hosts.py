@@ -424,8 +424,10 @@ def write_shim(host, inline):
     os.chmod(path, 0o755)
 
 
-def wire(host, inline=False, statusline=None):
-    """Point the host at our shim, wrapping whatever it ran before. (ok, message)."""
+def wire(host, inline=None, statusline=None):
+    """Point the host at our shim, wrapping whatever it ran before. (ok, message).
+    inline None takes the host's default; True or False overrides it.
+    """
     spec = REGISTRY[host]
     data, raw, problem = read_settings(host)
     if problem:
@@ -435,14 +437,16 @@ def wire(host, inline=False, statusline=None):
     if already:
         # re-installing over ourselves, so keep what we wrapped last time
         existing = _read_wrapped(host)
-    write_shim(host, inline or spec["inline"])
+    if inline is None:
+        inline = spec["inline"]
+    write_shim(host, inline)
     if already and statusline is None:
         return True, "already wired, shim refreshed"
     with open(wrapped_path(host), "w") as f:
         f.write(existing)
     set_command(data, host, shim_path(host))
     write_settings(host, data, raw)
-    how = "segment after it" if (inline or spec["inline"]) else "creature on the left"
+    how = "segment after it" if inline else "creature on the left"
     if existing:
         what = "wrapping your existing command, %s" % how
     else:
