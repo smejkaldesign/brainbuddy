@@ -1622,8 +1622,201 @@ def test_host_stdin():
         shutil.rmtree(home)
 
 
+def make_agent_home(files):
+    """A fake home holding whichever agent trees the test lists, one path per
+    file. Filenames carry a marker no real note would, so the leak checks
+    below have something concrete to look for in the output.
+    """
+    home = tempfile.mkdtemp(prefix="bb-agents-")
+    for rel in files:
+        path = os.path.join(home, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        open(path, "w").close()
+    return home
+
+
+def test_agents_provider():
+    """The agents provider counts every agent's memory off one fake home, auto
+    only switches to it at two roots, and nothing that leaves the process is a
+    path. Runs in-process against HOME, then through the cli in a subprocess.
+    """
+    print("\nagents provider")
+    import builtins
+    import io
+    import json
+    import subprocess
+
+    from terminalcreature import render
+
+    mark = "zqxv"
+    files = [
+        ".claude/projects/p1/memory/%s-a.md" % mark,
+        ".claude/projects/p1/memory/%s-b.md" % mark,
+        ".claude/projects/p1/memory/MEMORY.md",
+        ".claude/projects/p2/memory/%s-c.md" % mark,
+        ".codex/memories/%s-m1.md" % mark,
+        ".codex/memories/deep/%s-m2.md" % mark,
+        ".codex/AGENTS.md",
+        ".codex/sessions/2026/09/%s-s1.jsonl" % mark,
+        ".codex/sessions/2026/09/%s-s2.jsonl" % mark,
+        ".codex/sessions/2026/09/notes.txt",
+        ".cursor/rules/%s-r.mdc" % mark,
+        ".cursor/proj/rules/%s-r2.mdc" % mark,
+        ".cursor/chats/x/%s-chat.json" % mark,
+        ".local/share/goose/sessions/sessions.db",
+        ".config/goose/.goosehints",
+        ".config/opencode/AGENTS.md",
+    ]
+    real_home = os.environ.get("HOME")
+
+    def at_home(home):
+        os.environ["HOME"] = home
+
+    home = make_agent_home(files)
+    try:
+        at_home(home)
+        opened = []
+        real_open, real_io_open = builtins.open, io.open
+
+        def trap(factory):
+            def guard(file, *a, **kw):
+                if str(file).startswith(home):
+                    opened.append(str(file))
+                return factory(file, *a, **kw)
+            return guard
+
+        builtins.open = trap(real_open)
+        io.open = trap(real_io_open)
+        try:
+            xp, counts, found = metric.measure_agents()
+        finally:
+            builtins.open, io.open = real_open, real_io_open
+        check(opened == [], "measure_agents opens nothing under the fake home, got %d" % len(opened))
+        check(found == ["claude", "codex", "cursor", "opencode", "goose"], "found agents in table order, got %s" % found)
+        check(counts["claude"] == {"memories": 3}, "claude counts memories and skips MEMORY.md, got %s" % counts.get("claude"))
+        check(counts["codex"] == {"memories": 2, "instructions": 1, "sessions": 2},
+              "codex counts memories recursively, AGENTS.md and only jsonl sessions, got %s" % counts.get("codex"))
+        check(counts["cursor"] == {"rules": 2, "sessions": 1}, "cursor finds rules at any depth, got %s" % counts.get("cursor"))
+        check(counts["goose"] == {"sessions": 1, "instructions": 1}, "goose spans two roots and sees a dotfile, got %s" % counts.get("goose"))
+        check(counts["opencode"] == {"sessions": 0, "instructions": 1}, "opencode counts from the one root that exists, got %s" % counts.get("opencode"))
+        check("gemini" not in counts, "an agent with no root gets no row")
+        check(xp == 32, "weights are 3 memory, 3 instructions, 2 rules, 1 sessions: 32 xp, got %d" % xp)
+        check(metric.measure_agents({"sessions": 5})[0] == 48, "weights override by source key across agents")
+        check(metric.flatten_agent_counts(counts) == {"memories": 5, "instructions": 3, "sessions": 4, "rules": 2},
+              "flattened counts fold by source key")
+
+        settings = dict(state_mod.DEFAULT_SETTINGS)
+        check(settings["provider"] == "auto", "the default provider is auto")
+        check(state_mod.resolve_provider(settings) == "agents", "auto resolves to agents with several roots")
+        s = state_mod.source_status(settings)
+        check(s["state"] == "ok" and s["xp"] == 32, "source status counts through auto, got %s" % s["state"])
+        check(s["counts"] == {"memories": 5, "instructions": 3, "sessions": 4, "rules": 2}, "status counts are flat")
+        check("gemini" in s["missing"] and s["found"] == found, "status names found and missing agents")
+        check(state_mod.measure_now(settings) == (32, s["counts"]), "measure_now feeds the cache the flat shape")
+        check(render.no_source_help(settings, s) == "", "a working agents source gets no lecture")
+        settings["provider"] = "claude"
+        check(state_mod.measure_now(settings) == (9, {"memories": 3}), "an explicit claude provider is untouched by the table")
+        check(state_mod.sources_for(dict(settings, provider="folder", vault_root=home))[1] is metric.FOLDER_SOURCES,
+              "folder still resolves to its own sources")
+    finally:
+        shutil.rmtree(home)
+
+    # one root: auto stays on claude and behaves exactly as before
+    home = make_agent_home([".claude/projects/p1/memory/%s-a.md" % mark])
+    try:
+        at_home(home)
+        settings = dict(state_mod.DEFAULT_SETTINGS)
+        check(state_mod.resolve_provider(settings) == "claude", "auto resolves to claude with one root")
+        check(state_mod.measure_now(settings) == (3, {"memories": 1}), "and measures the claude layout")
+        check(state_mod.resolve_provider(dict(settings, provider="agents")) == "agents", "an explicit agents provider is kept")
+        check(state_mod.source_status(dict(settings, provider="agents"))["found"] == ["claude"], "and counts the one root it has")
+    finally:
+        shutil.rmtree(home)
+
+    # a lone agent that isn't claude: auto reads as zero, and the help says why
+    home = make_agent_home([".codex/AGENTS.md"])
+    try:
+        at_home(home)
+        settings = dict(state_mod.DEFAULT_SETTINGS)
+        s = state_mod.source_status(settings)
+        help_text = render.no_source_help(settings, s)
+        check(s["state"] == "missing_root" and "config provider agents" in help_text and "codex" in help_text,
+              "a lone codex under auto points at the agents provider")
+        check(mark not in help_text and home not in help_text, "and names no path")
+    finally:
+        shutil.rmtree(home)
+
+    # zero agents: auto falls back to claude and says what it looked for
+    home = make_agent_home([])
+    try:
+        at_home(home)
+        settings = dict(state_mod.DEFAULT_SETTINGS)
+        help_text = render.no_source_help(settings, state_mod.source_status(settings))
+        check("Looked for" in help_text and "Codex" in help_text and "Crush" in help_text, "with no agents the help lists what it looked for")
+        check(home not in help_text, "without a path")
+        s = state_mod.source_status(dict(settings, provider="agents"))
+        check(s["state"] == "missing_root" and s["found"] == [], "an explicit agents provider over nothing is missing_root")
+        check("Looked for" in render.no_source_help(dict(settings, provider="agents"), s), "and gets the same list")
+    finally:
+        if real_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = real_home
+        shutil.rmtree(home)
+
+    check(state_mod.migrate({"settings": {"provider": "claude"}})["settings"]["provider"] == "claude",
+          "migrate keeps an install's explicit provider")
+    check(state_mod.migrate({"settings": {"density": "full"}})["settings"]["provider"] == "auto",
+          "and only a missing provider key becomes auto")
+
+    # the cli end to end in a scratch home: config accepts the names, sources
+    # prints counts and never a path
+    home = make_agent_home(files)
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+
+    def run(argv):
+        return subprocess.run(cmd + argv, env=env, capture_output=True, text=True)
+
+    try:
+        r = run(["config"])
+        check(json.loads(r.stdout)["provider"] == "auto", "a fresh install shows provider auto")
+        check(run(["config", "provider", "agents"]).returncode == 0, "config provider agents is accepted")
+        check(run(["config", "provider", "nope"]).returncode == 1, "and an unknown provider is refused")
+        for provider in ("agents", "auto"):
+            run(["config", "provider", provider])
+            r = run(["sources"])
+            out = r.stdout
+            check(r.returncode == 0, "sources exits 0 under %s" % provider)
+            check("codex: memories 2, instructions 1, sessions 2" in out, "sources lists codex counts by key under %s" % provider)
+            check("goose: sessions 1, instructions 1" in out and "claude: memories 3" in out, "and the other agents found")
+            check("not found: gemini, copilot, qwen, droid, amp, continue, kiro, cline, crush" in out,
+                  "and the agents it didn't find, on one line")
+            check("counting 32 xp of memory across 5 agents" in out, "then the total")
+            check(mark not in out and home not in out and "/memory/" not in out and "AGENTS.md" not in out,
+                  "sources prints no path fragment from the fake home under %s" % provider)
+        r = run(["doctor"])
+        check("memories   5" in r.stdout and mark not in r.stdout and home not in r.stdout, "doctor shows the flat counts, no paths")
+        r = run(["refresh"])
+        cache = json.load(open(os.path.join(home, ".claude", "terminalcreature", "xp.cache")))
+        check(cache == {"xp": 32, "counts": {"memories": 5, "instructions": 3, "sessions": 4, "rules": 2}},
+              "refresh writes the flat shape to the cache, got %s" % cache)
+    finally:
+        shutil.rmtree(home)
+
+    home = make_agent_home([])
+    try:
+        r = subprocess.run(cmd + ["sources"], env=dict(env, HOME=home), capture_output=True, text=True)
+        check(r.returncode == 1 and "Looked for" in r.stdout and home not in r.stdout,
+              "sources on an empty machine exits 1, lists what it looked for, prints no path")
+    finally:
+        shutil.rmtree(home)
+
+
 if __name__ == "__main__":
     test_metric()
+    test_agents_provider()
     test_render_formats()
     test_width_cap()
     test_host_stdin()
