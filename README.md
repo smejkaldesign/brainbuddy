@@ -91,17 +91,17 @@ One creature, any terminal, any agent. It lives in an agent's own statusline whe
 | GitHub Copilot CLI | ✓ | ✓ | ✓ |
 | Qwen Code | ✓ | ✓ | ✓ |
 | Factory Droid | ✓ | ✓ | ✓ |
-| Codex CLI | - ¹ | ✓ | ✓ |
-| Gemini CLI | - ¹ | ✓ | ✓ |
-| opencode | - ¹ | ✓ | ✓ |
-| Amp | - ¹ | ✓ | ✓ |
-| Goose | - ¹ | ✓ | ✓ |
-| Continue | - | ✓ | ✓ |
-| Kiro | - | ✓ | ✓ |
-| Cline | - | ✓ | ✓ |
-| Crush | - | ✓ | ✓ |
-| aider | - | ✓ | - |
-| Warp | - | ✓ | - |
+| Codex CLI | – ¹ | ✓ | ✓ |
+| Gemini CLI | – ¹ | ✓ | ✓ |
+| opencode | – ¹ | ✓ | ✓ |
+| Amp | – ¹ | ✓ | ✓ |
+| Goose | – ¹ | ✓ | ✓ |
+| Continue | – | ✓ | ✓ |
+| Kiro | – | ✓ | ✓ |
+| Cline | – | ✓ | ✓ |
+| Crush | – | ✓ | ✓ |
+| aider | – | ✓ | – |
+| Warp | – | ✓ | – |
 
 <sub>¹ No statusline to wire yet, so the creature lives in tmux or the prompt. A hooks card is coming in 3.1.</sub>
 

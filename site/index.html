@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>terminalcreature: any terminal, any agent</title>
-<meta name="description" content="A small creature lives in your terminal, and it is always hungry. It hatches in your Claude Code statusline and follows you into Cursor, Copilot, Qwen, Droid, tmux and your shell prompt: one creature, one XP number. Feed it what you remember: every memory file from every agent is a meal, every meal is XP. It counts your files and never reads them.">
+<meta name="description" content="Always hungry, never reads a file. It hatches in your Claude Code statusline, follows you into Cursor, Copilot, tmux and your prompt, and grows on every memory you write.">
 <meta property="og:title" content="terminalcreature">
-<meta property="og:description" content="An egg in your statusline, always hungry for what you remember. One creature that follows you from Claude Code into Cursor, Copilot, tmux and your prompt. Feed it memories, watch it hatch and evolve. How rare is yours?">
+<meta property="og:description" content="An egg in your statusline, always hungry for what you remember. It follows you from Claude Code into Cursor, Copilot, tmux and your prompt. Feed it memories and see what hatches.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://terminalcreature.com/">
 <meta property="og:image" content="https://terminalcreature.com/assets/og.png">
@@ -152,8 +152,12 @@
   }
   .copy:hover { background: rgba(255,255,255,.12); color: #fff; }
   .copy.copied { color: var(--xp); border-color: var(--xp); }
+  /* the stone keeps the hero width whichever tab is up, so nothing below it moves */
+  #host-panel { width: 100%; min-height: 70px; }
+  #host-panel code { flex: 1; }
+  #host-note, #host-sub { min-height: 3.2em; }
   .alt { font-family: var(--mono); font-size: 13px; color: var(--dim); margin: 36px 0 0; }
-  .alt code { background: none; border: 0; padding: 0; color: var(--gold); }
+  .alt code { background: none; border: 0; padding: 0; color: var(--gold); white-space: nowrap; }
   .alt .then { color: var(--muted); }
 
   /* ---------- terminal ---------- */
@@ -191,17 +195,18 @@
   .matrix-title:first-of-type { margin-top: 0; }
   .matrix-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line-2); border-radius: 10px; background: var(--card); }
   .matrix { width: 100%; min-width: 540px; border-collapse: collapse; font-size: 14px; }
-  .matrix th { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); font-weight: 500; text-align: left; padding: 12px 16px; background: var(--card-2); border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .matrix th { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 500; text-align: left; padding: 12px 16px; background: var(--card-2); border-bottom: 1px solid var(--line); white-space: nowrap; }
   .matrix td { padding: 9px 16px; border-top: 1px solid var(--line); color: var(--body); vertical-align: middle; }
   .matrix tbody tr:first-child td { border-top: 0; }
   .matrix .c { text-align: center; width: 1%; white-space: nowrap; }
   .matrix .name { color: var(--text); font-weight: 500; white-space: nowrap; }
   .matrix .tick, .legend .tick { font-family: var(--mono); color: var(--xp); font-weight: 700; }
-  .matrix .dash, .legend .dash { font-family: var(--mono); color: var(--dim); }
-  .matrix sup, .legend sup { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-left: 2px; }
+  .matrix .dash, .legend .dash { font-family: var(--mono); color: var(--muted); }
+  /* baseline-aligned so the footnote never drops the dash it marks */
+  .matrix sup, .legend sup { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-left: 3px; vertical-align: baseline; position: relative; top: -.45em; }
   .matrix .how { font-size: 13px; color: var(--muted); line-height: 1.5; }
   .matrix .how code { font-size: 12px; }
-  .legend { font-family: var(--mono); font-size: 12px; color: var(--dim); margin: 14px 0 0; line-height: 1.8; }
+  .legend { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 14px 0 0; line-height: 1.8; }
 
   /* species grid */
   .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
@@ -300,7 +305,7 @@
   .ledger { border: 1px solid var(--line-2); border-radius: 10px; overflow: hidden; background: var(--card); }
   .ledger-row { display: grid; grid-template-columns: 26px 1fr 1fr; gap: 18px; padding: 24px 22px; border-top: 1px solid var(--line); align-items: start; }
   .ledger-row:first-child { border-top: 0; background: var(--card-2); padding: 12px 20px; }
-  .ledger-row:first-child div { font-family: var(--mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+  .ledger-row:first-child div { font-family: var(--mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
   .ledger .tick { font-family: var(--mono); color: var(--xp); font-weight: 700; }
   .ledger .promise { color: var(--text); font-size: 15px; }
   .ledger .promise small { display: block; color: var(--muted); font-size: 13px; margin-top: 3px; }
@@ -332,6 +337,11 @@
     .ledger-row:first-child .proof { display: none; }
     .install { flex-wrap: wrap; justify-content: center; padding: 12px 14px; font-size: 12.5px; }
     .terminal-body { font-size: 12px; }
+    /* the demo's tmux bar drops its window list so the creature stays in frame */
+    .t-tmux .win { display: none; }
+    /* the tables scroll sideways here; the host name stays put so a tick is never orphaned */
+    .matrix th:first-child, .matrix td:first-child { position: sticky; left: 0; z-index: 1; background: var(--card); border-right: 1px solid var(--line); }
+    .matrix th:first-child { background: var(--card-2); }
     section { padding-top: 104px; }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -793,11 +803,11 @@
     ["opencode", SOON, YES, YES],
     ["Amp", SOON, YES, YES],
     ["Goose", SOON, YES, YES],
-    ["aider", NO, YES, NO],
-    ["Crush", NO, YES, YES],
+    ["Continue", NO, YES, YES],
     ["Kiro", NO, YES, YES],
     ["Cline", NO, YES, YES],
-    ["Continue", NO, YES, YES],
+    ["Crush", NO, YES, YES],
+    ["aider", NO, YES, NO],
     ["Warp", NO, YES, NO]
   ];
   var SURFACE_COLS = ["Surface", "Snippet", "How"];
@@ -829,7 +839,7 @@
   matrix("matrix-surfaces", SURFACE_COLS, SURFACES, function (r) {
     return '<td class="name">' + r[0] + '</td><td class="c">' + cell(r[1]) + '</td><td class="how">' + r[2] + "</td>";
   });
-  document.getElementById("matrix-legend").innerHTML = '<span class="tick">✓</span> works today · <span class="dash">–</span> not there · <sup>1</sup> a hooks card at the end of each turn is coming in 3.1; their memory already feeds XP · Prompt or tmux means the creature sits in your prompt or tmux bar next to the agent, on any of them.';
+  document.getElementById("matrix-legend").innerHTML = '<span class="tick">✓</span> works today · <span class="dash">–</span> not there · <sup>1</sup> no statusline to wire yet; a hooks card at the end of each turn is coming in 3.1, and their memory already feeds XP · Prompt or tmux means the creature sits in your prompt or tmux bar next to the agent, on any of them.';
 
   // species cards: click flips to shiny
   var grid = document.getElementById("species-grid");
