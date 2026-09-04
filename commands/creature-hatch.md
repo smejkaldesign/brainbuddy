@@ -1,10 +1,10 @@
 ---
-name: brainbuddy-hatch
-description: "Open a brainbuddy egg and reveal the creature inside. Use when the user asks to hatch, open the egg, crack it, or see what their new buddy turned out to be."
+name: creature-hatch
+description: "Open a terminalcreature egg and reveal the creature inside. Use when the user asks to hatch, open the egg, crack it, or see what their new buddy turned out to be."
 user_invocable: true
 ---
 
-# /brainbuddy-hatch
+# /creature-hatch
 
 Open the egg. Buddies feed off memories, so a **first** hatch is a short guided setup: ask what
 it gets to eat, ask whether the existing pile counts, ask what to call it, then open it.
@@ -12,14 +12,14 @@ it gets to eat, ask whether the existing pile counts, ask what to call it, then 
 ## Step 1: is this a first hatch?
 
 ```bash
-PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli sources
+PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli sources
 ```
 
 Exit 0 means it's already counting something. Exit 1 means it isn't, and the output says why.
 
 **Ask questions 2a and 2b when** this is the roster's first hatch, or `sources` exited 1.
 Otherwise skip those two, don't re-ask on every egg, and go straight to Step 2c. A second
-buddy from `/brainbuddy-new --add` inherits the setup the first one established. The naming
+buddy from `/creature-new --add` inherits the setup the first one established. The naming
 question (2c) is per-egg and never skipped.
 
 ## Step 2a: what does it get to feed on?
@@ -72,7 +72,7 @@ Ask on **every** hatch, not just the first: the egg has no name until it's opene
 is the one chance to choose it. Fetch two fresh ideas first:
 
 ```bash
-PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli names
+PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli names
 ```
 
 Offer exactly these, letting them type their own via the free-text option:
@@ -88,7 +88,7 @@ Don't reveal what "let it name itself" resolves to; that's part of the reveal. N
 ## Step 3: open it
 
 ```bash
-PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli hatch
+PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli hatch
 ```
 
 Add `--from-zero` if that's what they picked, and `--name <their choice>` unless they chose
@@ -103,7 +103,7 @@ earlier is scored correctly.
 Once, right after the reveal lands. Nothing bureaucratic gets to stand in front of the payoff,
 so this always comes after the creature is on screen. Ask exactly this, default No:
 
-> Want it to check once a day whether a newer brainbuddy exists? One request to pypi.org for
+> Want it to check once a day whether a newer terminalcreature exists? One request to pypi.org for
 > a version number; nothing about you or your notes goes anywhere. Off unless you say yes.
 
 On yes: `config update_check true`. Either way: `config update_check_asked true`, and never
@@ -118,7 +118,7 @@ up to, not level 0. On a fresh install the first egg inherits the memory that al
 which usually means it comes out several forms in. That's the intended surprise: **don't
 spoil the level before running the command.**
 
-A buddy created later with `/brainbuddy-new --add` starts at 0 and hatches as a Hatchling.
+A buddy created later with `/creature-new --add` starts at 0 and hatches as a Hatchling.
 Both are correct; the difference is whether there was banked XP waiting.
 
 ## Hatching with nothing to count
@@ -133,7 +133,7 @@ memory system set up, `sources` carries the prompt for it and you can act on it 
 
 ## If there's nothing to open
 
-- No buddy at all → point at `/brainbuddy-new`, don't create one silently.
+- No buddy at all → point at `/creature-new`, don't create one silently.
 - Already hatched → say so and show `card` instead. Hatching twice does nothing.
 
 ## Rules

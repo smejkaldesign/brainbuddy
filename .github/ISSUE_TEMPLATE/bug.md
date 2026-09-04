@@ -8,7 +8,7 @@ labels: bug
 
 **what you expected instead**
 
-**`brainbuddy doctor` output**
+**`terminalcreature doctor` output**
 
 ```
 paste it here. doctor never prints a path it matched, so this is safe to share.

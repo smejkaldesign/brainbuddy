@@ -13,7 +13,7 @@ from . import creature as creature_mod
 from . import metric, render, sprites
 from . import state as state_mod
 
-USAGE = """brainbuddy - a terminal pet that evolves with your memory
+USAGE = """terminalcreature - a terminal pet that evolves with your memory
 
   render              one-line statusline segment (what the statusline calls)
   compose "<text>"    your statusline text with the creature as a left column
@@ -32,8 +32,8 @@ USAGE = """brainbuddy - a terminal pet that evolves with your memory
   simulate <xp>       preview any level without touching your real state
   refresh             recompute the xp cache (run in the background by render)
   sources             what it can count, and what to do if that's nothing
-  doctor [--check]    check what brainbuddy can see; --check also asks pypi
-  update              ask pypi whether there's a newer brainbuddy
+  doctor [--check]    check what terminalcreature can see; --check also asks pypi
+  update              ask pypi whether there's a newer terminalcreature
 
 update and doctor --check are the only commands that go online, and only when
 you run them. Everything else, the statusline included, is offline.
@@ -50,7 +50,7 @@ def _load():
 def _stdin_text():
     """Whatever the statusline piped us, or "" when a human is at the keyboard.
 
-    isatty, or `brainbuddy compose "text"` typed by hand would sit there waiting
+    isatty, or `terminalcreature compose "text"` typed by hand would sit there waiting
     for a statusline payload that is never coming.
     """
     try:
@@ -150,9 +150,9 @@ def cmd_card(args):
         # the one-time offer. default-off would otherwise mean nobody who
         # didn't hatch after this shipped ever learns the check exists.
         # set_setting, not save: this snapshot is as old as the scan above
-        print("\nit can check once a day whether a newer brainbuddy exists: one request to")
+        print("\nit can check once a day whether a newer terminalcreature exists: one request to")
         print("pypi.org for a version number, nothing about you or your notes goes anywhere.")
-        print("  /brainbuddy config update_check true")
+        print("  /creature config update_check true")
         state_mod.set_setting("update_check_asked", True)
     return 0
 
@@ -172,8 +172,8 @@ def cmd_new(args):
         mode = "add"
     else:
         print("%s is your current buddy. Pick one:" % cur["name"])
-        print("  brainbuddy new --replace   retire %s and start a new egg" % cur["name"])
-        print("  brainbuddy new --add       keep %s in the roster, start a new egg" % cur["name"])
+        print("  terminalcreature new --replace   retire %s and start a new egg" % cur["name"])
+        print("  terminalcreature new --add       keep %s in the roster, start a new egg" % cur["name"])
         return 1
 
     if mode == "add" and cur is not None and "--yes" not in args:
@@ -181,13 +181,13 @@ def cmd_new(args):
         # so state it and let them decide instead of gating on a number
         lvl = metric.level_for(cur["xp_banked"], st["settings"]["xp_max"])
         print("%s is level %d. A new egg starts at 0 and takes focus, so %s holds its level and stops gaining." % (cur["name"], lvl, cur["name"]))
-        print("Run: brainbuddy new --add --yes")
+        print("Run: terminalcreature new --add --yes")
         return 1
 
     if mode == "replace":
         lvl = metric.level_for(cur["xp_banked"], st["settings"]["xp_max"])
         state_mod.retire(st, cur["id"])
-        print("retired %s at Lv%d, %d xp kept. `brainbuddy focus %s` brings it back." % (
+        print("retired %s at Lv%d, %d xp kept. `terminalcreature focus %s` brings it back." % (
             cur["name"], lvl, cur.get("xp_banked", 0), cur["name"]))
 
     c = state_mod.create(st, name=name)
@@ -211,11 +211,11 @@ def cmd_hatch(args):
     st = _load()
     c = state_mod.focused(st)
     if c is None:
-        print("no egg to open. /brainbuddy-new lays one.")
+        print("no egg to open. /creature-new lays one.")
         return 1
     if state_mod.is_hatched(c):
         lvl = metric.level_for(c["xp_banked"], st["settings"]["xp_max"])
-        print("%s is already out, Lv%d. /brainbuddy shows it." % (c["name"], lvl))
+        print("%s is already out, Lv%d. /creature shows it." % (c["name"], lvl))
         return 1
 
     if "--name" in args:
@@ -268,7 +268,7 @@ def cmd_names(args):
 
 def cmd_focus(args):
     if not args:
-        print("which one? brainbuddy focus <name>")
+        print("which one? terminalcreature focus <name>")
         return 1
     st = _load()
     c = state_mod.focus(st, args[0])
@@ -283,7 +283,7 @@ def cmd_focus(args):
 def cmd_list(args):
     st = _load()
     if not st.get("creatures"):
-        print("no creatures yet. brainbuddy new")
+        print("no creatures yet. terminalcreature new")
         return 0
     uni = render.unicode_ok(st["settings"])
     for c in st["creatures"]:
@@ -307,7 +307,7 @@ def cmd_list(args):
 
 def cmd_rename(args):
     if len(args) < 2:
-        print("brainbuddy rename <old> <new>")
+        print("terminalcreature rename <old> <new>")
         return 1
     st = _load()
     for c in st.get("creatures", []):
@@ -322,7 +322,7 @@ def cmd_rename(args):
 
 def cmd_retire(args):
     if not args:
-        print("brainbuddy retire <name>")
+        print("terminalcreature retire <name>")
         return 1
     st = _load()
     c = state_mod.retire(st, args[0])
@@ -332,7 +332,7 @@ def cmd_retire(args):
     state_mod.save(st)
     # retiring keeps the record. it used to delete, which threw away banked xp
     # with no confirmation and no way back
-    print("retired %s, %d xp kept. `brainbuddy focus %s` brings it back." % (
+    print("retired %s, %d xp kept. `terminalcreature focus %s` brings it back." % (
         c["name"], c.get("xp_banked", 0), c["name"]))
     return 0
 
@@ -348,7 +348,7 @@ def cmd_config(args):
         print(json.dumps(shown, indent=2, sort_keys=True))
         return 0
     if len(args) < 2:
-        print("brainbuddy config <key> <value>")
+        print("terminalcreature config <key> <value>")
         return 1
     key, raw = args[0], args[1]
     if key not in state_mod.DEFAULT_SETTINGS:
@@ -411,7 +411,7 @@ def cmd_config(args):
 def cmd_simulate(args):
     """Preview any level without a real vault or touching real state."""
     if not args:
-        print("brainbuddy simulate <xp>")
+        print("terminalcreature simulate <xp>")
         return 1
     try:
         xp = int(args[0])
@@ -438,7 +438,7 @@ PROVIDER_LABEL = {
     "folder": "folder of notes",
 }
 
-SHIM = "~/.claude/brainbuddy/statusline-brainbuddy.sh"
+SHIM = "~/.claude/terminalcreature/statusline-terminalcreature.sh"
 USER_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 
 
@@ -487,13 +487,13 @@ def _project_override():
     statusLine wins inside that project, so the install is correct, the creature
     is nowhere, and nothing on either side says why.
     """
-    if "statusline-brainbuddy.sh" not in _statusline_command(USER_SETTINGS):
+    if "statusline-terminalcreature.sh" not in _statusline_command(USER_SETTINGS):
         return None
     path = _project_settings()
     if path is None:
         return None
     command = _statusline_command(path)
-    if not command or "statusline-brainbuddy.sh" in command:
+    if not command or "statusline-terminalcreature.sh" in command:
         return None
     home = os.path.realpath(os.path.expanduser("~"))
     shown = "~" + path[len(home):] if path.startswith(home) else path
@@ -513,7 +513,7 @@ def cmd_doctor(args):
     settings = st["settings"]
     status = state_mod.source_status(settings)
     xp, counts = status["xp"], status["counts"]
-    print("brainbuddy %s" % __version__)
+    print("terminalcreature %s" % __version__)
     print("provider: %s (%s)" % (settings["provider"], PROVIDER_LABEL.get(settings["provider"], "unknown")))
     # the root the user typed, home-relative. R12 covers the memory files we match,
     # and "why is it zero" can't be answered without this
@@ -574,7 +574,7 @@ def _version_check():
 
 
 def cmd_update(args):
-    """Ask pypi whether there's a newer brainbuddy. One request, then done."""
+    """Ask pypi whether there's a newer terminalcreature. One request, then done."""
     print(_version_check())
     return 0
 
@@ -593,7 +593,7 @@ def cmd_sources(args):
         # nonzero so the installer can branch on the exit code. it used to match
         # on the first word of the success line, which reworded copy would break
         return 1
-    print("counting %d xp of memory. /brainbuddy shows your buddy." % status["xp"])
+    print("counting %d xp of memory. /creature shows your buddy." % status["xp"])
     return 0
 
 
@@ -637,7 +637,7 @@ def main(argv=None):
         # the full usage after a typo is a wall. one guess or one pointer
         import difflib
         close = difflib.get_close_matches(argv[0], COMMANDS, n=1)
-        hint = "did you mean %s?" % close[0] if close else "brainbuddy -h lists what there is"
+        hint = "did you mean %s?" % close[0] if close else "terminalcreature -h lists what there is"
         print("unknown command %s. %s" % (argv[0], hint))
         return 1
     return fn(argv[1:])

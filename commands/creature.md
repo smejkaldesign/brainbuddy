@@ -1,32 +1,32 @@
 ---
-name: brainbuddy
-description: "Show and manage your brainbuddy, the statusline creature that evolves as your memory system grows. Hatch, focus, rename, retire, hide, show, and configure."
+name: creature
+description: "Show and manage your terminalcreature, the statusline creature that evolves as your memory system grows. Hatch, focus, rename, retire, hide, show, and configure."
 user_invocable: true
 ---
 
-# /brainbuddy
+# /creature
 
-Front end for the `brainbuddy` CLI. Buddies feed off memories and grow as the second brain
+Front end for the `terminalcreature` CLI. Buddies feed off memories and grow as the second brain
 grows. Everything runs locally; nothing here reaches the network.
 
 Run commands as:
 
 ```bash
-PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli <command>
+PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli <command>
 ```
 
 ## If nothing is wired up yet
 
 Installing the plugin delivers these commands but can't set `statusLine`, so on a fresh
-plugin install there is no library and no creature. If `~/.claude/brainbuddy/lib` is missing,
+plugin install there is no library and no creature. If `~/.claude/terminalcreature/lib` is missing,
 don't run a subcommand. Say the statusline isn't wired yet, offer to do it, and on a yes run:
 
 ```bash
-"$(cat ~/.claude/brainbuddy/plugin-root)/install.sh" --no-commands
+"$(cat ~/.claude/terminalcreature/plugin-root)/install.sh" --no-commands
 ```
 
 It wraps whatever statusline they already have rather than replacing it, and ends on the egg.
-Relay its output, then point at `/brainbuddy-hatch`. `--no-commands` matters: without it the
+Relay its output, then point at `/creature-hatch`. `--no-commands` matters: without it the
 installer copies these same five files into `~/.claude/commands`, and every one of them shows
 up twice in the picker.
 
@@ -35,7 +35,7 @@ up twice in the picker.
 Show the card:
 
 ```bash
-PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli card
+PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli card
 ```
 
 Print the output as-is inside a code block so the ASCII art keeps its alignment. Then offer, in one short line, whatever is most relevant: hatching a first creature if the roster is empty, or hatching a new one if the focused creature has hit level 100.
@@ -51,9 +51,9 @@ Map the request onto a subcommand. Run it, then show the result.
 | "list", "roster", "show all" | `list` |
 | "rename X to Y" | `rename X Y` |
 | "retire X" | `retire X` |
-| "new buddy", "start over", "reroll" | hand off to `/brainbuddy-new` |
-| "hatch it", "open the egg" | hand off to `/brainbuddy-hatch` |
-| "hide it", "hide my brainbuddy", "get it off my statusline" | `hide` |
+| "new buddy", "start over", "reroll" | hand off to `/creature-new` |
+| "hatch it", "open the egg" | hand off to `/creature-hatch` |
+| "hide it", "hide my terminalcreature", "get it off my statusline" | `hide` |
 | "show it", "bring it back", "unhide" | `show` |
 | "settings", "config" | `config` |
 | set an option | `config <key> <value>` |
@@ -63,7 +63,7 @@ Map the request onto a subcommand. Run it, then show the result.
 
 Settable keys: `provider` (`claude`, `folder` or `vault`), `vault_root`, `xp_max`, `density` (`compact`, `minimal`, `full`, `sprite`, `ruler`), `sprite_height`, `border`, `columns`, `unicode`, `hidden`.
 
-`hide`, `show`, `new` and `hatch` are also their own commands (`/brainbuddy-hide`, `/brainbuddy-show`, `/brainbuddy-new`, `/brainbuddy-hatch`), so a bare "hide my brainbuddy" or "hatch it" reaches them without going through this one.
+`hide`, `show`, `new` and `hatch` are also their own commands (`/creature-hide`, `/creature-show`, `/creature-new`, `/creature-hatch`), so a bare "hide my terminalcreature" or "hatch it" reaches them without going through this one.
 
 ## Naming a new creature
 
@@ -71,7 +71,7 @@ Settable keys: `provider` (`claude`, `folder` or `vault`), `vault_root`, `xp_max
 
 ## Eggs are a state, not a level
 
-A creature is an **egg** until it's hatched, whatever its level. `new` lays one, `/brainbuddy-hatch` opens it, and the statusline shows egg art with no level until then. Level 0 is a Hatchling, a baby with a face, not an egg.
+A creature is an **egg** until it's hatched, whatever its level. `new` lays one, `/creature-hatch` opens it, and the statusline shows egg art with no level until then. Level 0 is a Hatchling, a baby with a face, not an egg.
 
 An egg banks XP while closed, so hatching reveals the level it earned rather than 0. Don't spoil that level before the user runs hatch.
 

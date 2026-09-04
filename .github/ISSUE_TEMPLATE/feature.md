@@ -8,7 +8,7 @@ labels: enhancement
 
 **why it fits**
 
-brainbuddy counts files and never opens them, makes no network calls, and adds no
+terminalcreature counts files and never opens them, makes no network calls, and adds no
 dependencies. Say how the idea lives inside that. An idea that needs note contents,
 a server, or a library is a different tool, and that's a fine thing to be.
 

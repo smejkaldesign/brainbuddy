@@ -11,7 +11,7 @@ Stats are neither. They're read off the live memory counts, so they can't be
 rolled or faked either, and they move as the vault moves.
 """
 
-SALT = "brainbuddy/v1"
+SALT = "brainbuddy/v1"  # never change: it seeds every creature ever hatched
 
 _MASK = (1 << 64) - 1
 _PI64 = 0x243F6A8885A308D3  # nothing-up-my-sleeve seed constant
@@ -88,7 +88,7 @@ def derive(seed):
 
 
 def suggest_name(seed):
-    """Fallback name for CLI hatching. The /brainbuddy command names it with
+    """Fallback name for CLI hatching. The /creature command names it with
     Claude instead, which is better, but the CLI can't reach a model.
     """
     o = _ONSETS[int(_stream(seed, "n1") * len(_ONSETS)) % len(_ONSETS)]

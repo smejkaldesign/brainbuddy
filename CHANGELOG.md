@@ -1,7 +1,21 @@
 # Changelog
 
 Notable changes, newest first. Versions follow semver; the version lives in
-`brainbuddy/__init__.py` and each release is the matching `v*` tag.
+`terminalcreature/__init__.py` and each release is the matching `v*` tag.
+
+## 2.0.0
+
+- Renamed: brainbuddy is now **terminalcreature**. New package, module, CLI
+  (`terminalcreature`), slash commands (`/creature`, `/creature-hatch`,
+  `/creature-new`, `/creature-hide`, `/creature-show`), state dir
+  (`~/.claude/terminalcreature/`), shim, and `TERMINALCREATURE_TARBALL`.
+- The installer migrates an existing brainbuddy install in place: state, XP
+  cache, and settings move over, the old command files are removed, and a
+  stub is left at the old shim path so project-level statuslines keep
+  drawing. Re-run the bootstrap you installed with; the old URL redirects.
+- Creatures are unchanged. The seed salt keeps its original value on
+  purpose, so every buddy hatched under the old name is the same creature.
+- New wordmark on the site and README; site at terminalcreature.com.
 
 ## 1.3.0
 

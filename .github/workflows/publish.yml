@@ -24,7 +24,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: python3 tests/test_brainbuddy.py
+      - run: python3 tests/test_terminalcreature.py
       - run: bash scripts/leak-guard.sh
 
   build:
@@ -37,11 +37,11 @@ jobs:
           python-version: "3.12"
       - name: verify tag matches package and plugin versions
         run: |
-          PKG=$(python3 -c "import brainbuddy; print(brainbuddy.__version__)")
+          PKG=$(python3 -c "import terminalcreature; print(terminalcreature.__version__)")
           PLUGIN=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])")
           TAG="${GITHUB_REF_NAME#v}"
           if [ "$PKG" != "$TAG" ]; then
-            echo "tag v$TAG does not match brainbuddy.__version__ $PKG" >&2
+            echo "tag v$TAG does not match terminalcreature.__version__ $PKG" >&2
             exit 1
           fi
           if [ "$PLUGIN" != "$TAG" ]; then

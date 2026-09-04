@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>brainbuddy</title>
+<title>terminalcreature</title>
 <meta name="description" content="A terminal pet that lives in your Claude Code statusline, hatches from an egg, and levels up as your memory system grows. Counts your notes, never reads them.">
-<meta property="og:title" content="brainbuddy">
+<meta property="og:title" content="terminalcreature">
 <meta property="og:description" content="Terminal creature. A statusline pet that levels off your Claude Code memory.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#000000">
@@ -305,15 +305,15 @@
 <header class="hero">
   <div class="atmosphere"></div>
   <div class="wrap">
-    <div class="portrait" aria-label="brainbuddy creature, cycling through its forms">
+    <div class="portrait" aria-label="terminalcreature creature, cycling through its forms">
       <pre id="mascot" aria-hidden="true"></pre>
     </div>
     <div class="portrait-caption" id="mascot-caption"><b>Nim</b> · egg</div>
 
     <p class="toplinks">
-      <a href="https://github.com/smejkaldesign/brainbuddy">github</a> ·
-      <a href="https://pypi.org/project/brainbuddy/">pypi</a> ·
-      <a href="https://github.com/smejkaldesign/brainbuddy/blob/main/CHANGELOG.md">changelog</a>
+      <a href="https://github.com/smejkaldesign/terminalcreature">github</a> ·
+      <a href="https://pypi.org/project/terminalcreature/">pypi</a> ·
+      <a href="https://github.com/smejkaldesign/terminalcreature/blob/main/CHANGELOG.md">changelog</a>
     </p>
 
     <h1><img class="logo" src="assets/terminalcreature-logo.png" width="247" height="82" alt="TERMINAL CREATURE"></h1>
@@ -321,22 +321,22 @@
     <div class="pill">A pet for your <b>Claude Code</b> statusline that levels off your <b>own notes</b></div>
 
     <p class="lede">
-      brainbuddy hatches from an egg and grows on a diet of your memories. Every durable note you write is XP.
+      terminalcreature hatches from an egg and grows on a diet of your memories. Every durable note you write is XP.
       It evolves through <b>five forms</b> from Hatchling to Ascendant, across <b>eight species</b> with a 1% shiny roll.
       No streaks, no timers. Feed it or it sits there. It counts your files and <b>never reads them</b>.
     </p>
 
     <div class="install">
-      <code id="hero-cmd">curl -fsSL https://raw.githubusercontent.com/smejkaldesign/brainbuddy/main/bootstrap.sh | bash</code>
+      <code id="hero-cmd">curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash</code>
       <button class="copy" data-copy="#hero-cmd" aria-label="Copy install command">copy</button>
     </div>
-    <p class="alt"><span class="then">then, in Claude Code:</span> <code>/brainbuddy-hatch</code></p>
-    <p class="alt">or <code>pipx install brainbuddy</code> <span class="then">for the CLI alone. bash, python 3.9+, nothing else.</span></p>
+    <p class="alt"><span class="then">then, in Claude Code:</span> <code>/creature-hatch</code></p>
+    <p class="alt">or <code>pipx install terminalcreature</code> <span class="then">for the CLI alone. bash, python 3.9+, nothing else.</span></p>
 
     <div class="terminal">
       <div class="terminal-bar">
         <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span class="terminal-title">brainbuddy-demo: first hatch</span>
+        <span class="terminal-title">terminalcreature-demo: first hatch</span>
         <button class="terminal-btn" id="replay">replay</button>
       </div>
       <div class="terminal-body" id="term"></div>
@@ -430,7 +430,7 @@
       <button class="copy" data-copy="#src-cmd" aria-label="Copy install command">copy</button>
     </div>
     <div class="zero">
-      <b>No notes yet?</b> Then there's nothing to count and your buddy sits at level 0, which is a fair reading rather than a bug. <code>brainbuddy doctor</code> names the cause, and the hatch flow offers to set a memory system up. XP follows on the next render once files start landing.
+      <b>No notes yet?</b> Then there's nothing to count and your buddy sits at level 0, which is a fair reading rather than a bug. <code>terminalcreature doctor</code> names the cause, and the hatch flow offers to set a memory system up. XP follows on the next render once files start landing.
     </div>
   </div>
 </section>
@@ -451,7 +451,7 @@
         <div class="n">2</div>
         <h3>Hatch is a reveal, not a blank slate</h3>
         <p>A short guided setup the first time: where your notes live, whether the existing pile counts, and what to call it. Then the egg opens at whatever level your writing has already earned.</p>
-        <span class="say slash">/brainbuddy-hatch</span>
+        <span class="say slash">/creature-hatch</span>
         <span class="say">Zask, a Legendary Nim (shiny) · Lv41 Adept</span>
       </div>
       <div class="step">
@@ -464,7 +464,7 @@
         <div class="n">4</div>
         <h3>Fully grown? Lay another</h3>
         <p>Level 100 is the end of the curve. <code>--replace</code> retires the current buddy and keeps its record; <code>--add</code> keeps it around and focuses a new egg. Nothing is ever deleted.</p>
-        <span class="say slash">/brainbuddy-new --add</span>
+        <span class="say slash">/creature-new --add</span>
       </div>
     </div>
   </div>
@@ -482,7 +482,7 @@
       <div class="feature"><div class="icon">+8</div><div><h3>Session counter</h3><p>Right of the level bar: what your buddy ate in this session, baselined per session id. Hidden until there's something to show.</p></div></div>
       <div class="feature"><div class="icon">≡</div><div><h3>A roster</h3><p>Keep several creatures. Only the focused one gains; the rest hold their level and wait. <code>focus</code>, <code>rename</code>, <code>retire</code>.</p></div></div>
       <div class="feature"><div class="icon">◔</div><div><h3>Five densities</h3><p><code>minimal</code> is one glyph that fills as you evolve. <code>compact</code>, <code>full</code>, the 5-row <code>sprite</code>, or the boxed left column the installer sets up.</p></div></div>
-      <div class="feature"><div class="icon">⬆</div><div><h3>Update chip, opt-in</h3><p>Say yes once and a yellow <code>⬆ update</code> chip appears when a release is out, from one request a day. Say no and nothing brainbuddy runs ever touches the network.</p></div></div>
+      <div class="feature"><div class="icon">⬆</div><div><h3>Update chip, opt-in</h3><p>Say yes once and a yellow <code>⬆ update</code> chip appears when a release is out, from one request a day. Say no and nothing terminalcreature runs ever touches the network.</p></div></div>
       <div class="feature"><div class="icon">py</div><div><h3>Zero dependencies</h3><p>Stdlib Python 3.9 through 3.13, tested on each in CI. macOS, Linux, and Windows under WSL or Git Bash.</p></div></div>
     </div>
   </div>
@@ -497,11 +497,11 @@
       <div class="ledger-row"><div></div><div>Promise</div><div class="proof">What enforces it</div></div>
       <div class="ledger-row"><div class="tick">✓</div><div class="promise">Counts your files without opening them<small>The only filesystem calls are <code>glob</code> and <code>stat</code>. It never reads a byte of a note or parses frontmatter.</small></div><div class="proof">A runtime trap patches every file-reading builtin and asserts none fire during a measurement. A static pass tokenizes <code>metric.py</code> and fails if a reader appears at all.</div></div>
       <div class="ledger-row"><div class="tick">✓</div><div class="promise">Never prints a path it matched<small>Even <code>doctor</code> reports a home-relative root and counts, not filenames.</small></div><div class="proof">A leak guard runs in CI and as a pre-push hook, failing if an absolute home path or a vault-shaped filename reaches the repo.</div></div>
-      <div class="ledger-row"><div class="tick">✓</div><div class="promise">All state is local<small>The roster, your settings, and the XP cache live at <code>~/.claude/brainbuddy/</code>. Nothing else, nowhere else.</small></div><div class="proof">No accounts, no sync, no server. Tiny per-user JSON, by design.</div></div>
+      <div class="ledger-row"><div class="tick">✓</div><div class="promise">All state is local<small>The roster, your settings, and the XP cache live at <code>~/.claude/terminalcreature/</code>. Nothing else, nowhere else.</small></div><div class="proof">No accounts, no sync, no server. Tiny per-user JSON, by design.</div></div>
       <div class="ledger-row"><div class="tick">✓</div><div class="promise">The render never opens a socket<small>No telemetry, no analytics, no phone-home.</small></div><div class="proof">A socket guard covers the render and every background process it spawns. Opted out, an aged cache plus a render produces zero network from any process.</div></div>
       <div class="ledger-row"><div class="tick">✓</div><div class="promise">The only network calls are the ones you allowed<small>The installer fetching a release, <code>update</code> and <code>doctor --check</code> by hand, and the once-a-day version check if you opted in.</small></div><div class="proof">Every one is an unauthenticated GET of public package metadata that sends nothing about you or your memory. The socket test proves both settings.</div></div>
     </div>
-    <p class="prov"><b>Provenance.</b> Anthropic shipped a terminal pet in Claude Code (<code>/buddy</code>, April 2026). Nice idea, no progression. brainbuddy is a clean-room rebuild of the concept with the missing half added: growth you actually earn. No code, art, names, or hashing details were taken from it. Not affiliated with or endorsed by Anthropic.</p>
+    <p class="prov"><b>Provenance.</b> Anthropic shipped a terminal pet in Claude Code (<code>/buddy</code>, April 2026). Nice idea, no progression. terminalcreature is a clean-room rebuild of the concept with the missing half added: growth you actually earn. No code, art, names, or hashing details were taken from it. Not affiliated with or endorsed by Anthropic.</p>
   </div>
 </section>
 
@@ -510,10 +510,10 @@
     <h2>Ready to hatch?</h2>
     <p class="desc">One command. Wraps the statusline you already have, lays an egg, and tells you how to open it.</p>
     <div class="install">
-      <code id="cta-cmd">curl -fsSL https://raw.githubusercontent.com/smejkaldesign/brainbuddy/main/bootstrap.sh | bash</code>
+      <code id="cta-cmd">curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash</code>
       <button class="copy" data-copy="#cta-cmd" aria-label="Copy install command">copy</button>
     </div>
-    <p class="alt"><span class="then">then</span> <code>/brainbuddy-hatch</code> <span class="then">in Claude Code · or read the code first:</span> <a href="https://github.com/smejkaldesign/brainbuddy">github.com/smejkaldesign/brainbuddy</a></p>
+    <p class="alt"><span class="then">then</span> <code>/creature-hatch</code> <span class="then">in Claude Code · or read the code first:</span> <a href="https://github.com/smejkaldesign/terminalcreature">github.com/smejkaldesign/terminalcreature</a></p>
   </div>
 </section>
 
@@ -521,14 +521,14 @@
 
 <footer>
   <div class="wrap">
-    <p><a href="https://github.com/smejkaldesign/brainbuddy/blob/main/LICENSE">MIT License</a><span class="sep">·</span><a href="https://github.com/smejkaldesign/brainbuddy">GitHub</a><span class="sep">·</span><a href="https://pypi.org/project/brainbuddy/">PyPI</a><span class="sep">·</span><a href="https://github.com/smejkaldesign/brainbuddy/blob/main/CONTRIBUTING.md">Contribute</a></p>
+    <p><a href="https://github.com/smejkaldesign/terminalcreature/blob/main/LICENSE">MIT License</a><span class="sep">·</span><a href="https://github.com/smejkaldesign/terminalcreature">GitHub</a><span class="sep">·</span><a href="https://pypi.org/project/terminalcreature/">PyPI</a><span class="sep">·</span><a href="https://github.com/smejkaldesign/terminalcreature/blob/main/CONTRIBUTING.md">Contribute</a></p>
     <p>A <a href="https://github.com/smejkaldesign">Smejkal Design</a> product. All sprites original. Not affiliated with Anthropic.</p>
   </div>
 </footer>
 
 <script>
 (function () {
-  // Ported from brainbuddy/sprites.py: stage templates carry the silhouette,
+  // Ported from terminalcreature/sprites.py: stage templates carry the silhouette,
   // species supply a motif and an eye pair.
   var STAGES = [
     ["    ___    ", "   /   \\   ", "  ( {m}{m}{m} )  ", "   \\___/   ", "           "],
@@ -606,12 +606,12 @@
   // terminal demo
   var term = document.getElementById("term");
   var SCRIPT = [
-    ["prompt", "$ ", "cmd", "curl -fsSL https://raw.githubusercontent.com/smejkaldesign/brainbuddy/main/bootstrap.sh | bash"],
+    ["prompt", "$ ", "cmd", "curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash"],
     ["dim", "  wrapped your statusline, nothing edited"],
-    ["dim", "  laid an egg. open it in Claude Code with /brainbuddy-hatch"],
+    ["dim", "  laid an egg. open it in Claude Code with /creature-hatch"],
     ["gap"],
     ["prompt", "$ ", "cmd", "claude"],
-    ["prompt", "> ", "cmd", "/brainbuddy-hatch"],
+    ["prompt", "> ", "cmd", "/creature-hatch"],
     ["dim", "  found ~/notes (312 markdown files) · score what's already written? yes"],
     ["dim", "  two names from the egg: Zask, Fimi · going with Zask"],
     ["gap"],
@@ -704,7 +704,7 @@
   sim();
 
   // provider picker: install command updates live
-  var BASE = "curl -fsSL https://raw.githubusercontent.com/smejkaldesign/brainbuddy/main/bootstrap.sh | bash";
+  var BASE = "curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash";
   var provider = "claude", pathIn = document.getElementById("path"), pathrow = document.getElementById("pathrow");
   function cmd() {
     var p = pathIn.value.trim() || "~/notes";
