@@ -1104,7 +1104,21 @@ def test_update_chip():
         check("⬆ update" in render.segment(st, xp=80, counts={}, gain=5), "full has room for the word")
         st["settings"]["density"] = "minimal"
         check("⬆" not in render.segment(st, xp=80, counts={}), "minimal stays one glyph, chip included")
+
+        # sprite pads by visible width, and the chip's escapes must not count.
+        # colour ON here on purpose: NO_COLOR hid this exact bug from the suite
+        import re
+        os.environ.pop("NO_COLOR", None)
+        st["settings"]["density"] = "sprite"
+        st["settings"]["columns"] = 24
+        line = render.segment(st, xp=80, counts={}).split("\n")[-1]
+        clean = re.sub(r"\x1b\[[0-9;]*m", "", line)
+        check(len(clean) == 24 and clean.endswith("⬆"),
+              "sprite caption stays right-aligned with the chip on, got %d cols" % len(clean))
+        check("\x1b[1;33m" in line, "and the chip is painted independently, not inside the DIM span")
+        os.environ["NO_COLOR"] = "1"
         st["settings"]["density"] = "compact"
+        st["settings"]["columns"] = 0
 
         state_mod.write_latest("0.0.1")
         check(not release.update_available(st["settings"]), "an older cache is not an update")

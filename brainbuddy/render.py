@@ -212,12 +212,15 @@ def segment(st, xp=None, counts=None, gain=0):
     chip_word = (" " + chip_word) if chip_word else ""
 
     if settings.get("density") == "sprite":
-        return sprite_block(full, "%s %s%s%s" % (shown, label, mark, chip_icon), idx, tint, settings)
+        return sprite_block(full, "%s %s%s" % (shown, label, mark), idx, tint, settings,
+                            chip=update_chip(settings, uni, word=False, available=avail))
     if settings.get("density") == "minimal":
         # one glyph is the whole point of minimal, so no counter and no chip
         return paint(sprites.glyph(idx, uni) + shiny, tint)
     if settings.get("density") == "full":
-        return "%s %s %s%s%s" % (paint(f + shiny, tint), paint(shown, BOLD), paint("%s %s" % (label, mark), DIM), earned, chip_word)
+        # rstrip: Common's empty mark left a trailing space, invisible at line
+        # end until the chip started rendering after it
+        return "%s %s %s%s%s" % (paint(f + shiny, tint), paint(shown, BOLD), paint(("%s %s" % (label, mark)).rstrip(), DIM), earned, chip_word)
     # compact's ~10 columns are a contract, so the chip is icon-only here
     return "%s %s%s%s" % (paint(f + shiny + mark, tint), paint(label, DIM), earned, chip_icon)
 
@@ -352,12 +355,16 @@ def compose(st, left, xp=None, counts=None, gain=0):
     return "\n".join(rows)
 
 
-def sprite_block(full, label, stage_index, tint, settings):
+def sprite_block(full, label, stage_index, tint, settings, chip=""):
     """Full creature on its own rows, for multi-line statuslines.
 
     Right-aligns to settings["columns"] because a statusline script can't learn
     the real terminal width. There's no field for it on stdin and /dev/tty
     isn't attached, so the width has to be declared rather than measured.
+
+    The chip arrives separately and painted: measuring it inside the label
+    would count its escapes as columns, and folding it into the DIM span
+    would leave it dimmed instead of independently painted.
     """
     art = sprites.sprite(full["species"], stage_index, full["shiny"], short=settings.get("sprite_height", 5) <= 3)
     while art and not art[-1].strip():
@@ -368,8 +375,13 @@ def sprite_block(full, label, stage_index, tint, settings):
     for row in art:
         pad = " " * max(0, cols - len(row))
         rows.append(pad + paint(row, tint))
-    pad = " " * max(0, cols - len(label))
-    rows.append(pad + paint(label, DIM))
+    caption = paint(label, DIM)
+    width = len(label)
+    if chip:
+        caption += " " + chip
+        width += 2  # one icon and its space, whatever escapes wrap them
+    pad = " " * max(0, cols - width)
+    rows.append(pad + caption)
     return "\n" + "\n".join(rows)
 
 
