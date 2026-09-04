@@ -29,6 +29,8 @@ FIELD_MAP = {
         "model": ("model.display_name", "model.id"),
         "workspace": ("workspace.current_dir", "cwd"),
         "context_used_pct": ("context_window.used_percentage",),
+        # the columns cursor gives the line; the only host that says
+        "width": ("render_width_chars",),
     },
     # read off the copilot cli 1.0.82 bundle: claude's shape plus session_name,
     # username, remote, ai_used and allow_all_enabled
@@ -68,7 +70,8 @@ MARKERS = (
 # claude's keys with nothing else to go on. cursor and copilot both send these
 CLAUDE_SHAPE = ("session_id", "model", "workspace", "context_window")
 
-EMPTY = {"host": "unknown", "session_id": None, "model": None, "workspace": None, "context_used_pct": None}
+EMPTY = {"host": "unknown", "session_id": None, "model": None, "workspace": None, "context_used_pct": None,
+         "width": None}
 
 
 def _get(data, path):
@@ -108,7 +111,8 @@ def detect(data):
 
 def parse_session(raw_text):
     """Normalise whatever a host piped in. Empty, not JSON, or a shape we don't
-    know all come back as host "unknown" with every field None.
+    know all come back as host "unknown" with every field None. width is the
+    columns the host gives the line, when it says.
     """
     try:
         data = json.loads(raw_text)
@@ -125,6 +129,9 @@ def parse_session(raw_text):
         "workspace": _first(data, fields["workspace"], str),
         "context_used_pct": _first(data, fields["context_used_pct"], float),
     }
+    # width is columns, so a whole number or nothing; most hosts never send one
+    width = _first(data, fields.get("width", ()), float)
+    out["width"] = int(width) if width is not None and width >= 1 else None
     return out
 
 

@@ -1593,7 +1593,8 @@ def test_host_stdin():
         check(isinstance(s["model"], str) and s["model"], "%s model lands as a string" % host)
         check(s["workspace"] == "/x", "%s workspace lands" % host)
         check(isinstance(s["context_used_pct"], float), "%s context percent lands as a float" % host)
-        check(sorted(s) == ["context_used_pct", "host", "model", "session_id", "workspace"], "%s carries exactly the five fields" % host)
+        check(sorted(s) == ["context_used_pct", "host", "model", "session_id", "width", "workspace"], "%s carries exactly the six fields" % host)
+        check(s["width"] == (76 if host == "cursor" else None), "%s width is what the host said, or None" % host)
 
     for label, raw in (("empty", ""), ("not json", "not json"), ("empty object", "{}"), ("a list", "[1, 2]"),
                        ("a bare string", '"hi"'), ("unknown keys", '{"foo": 1}'), ("None", None)):
@@ -1602,6 +1603,9 @@ def test_host_stdin():
               "%s stdin is host unknown with every field None" % label)
     check(hosts.parse_session('{"session_id": "x"}')["host"] == "claude", "bare claude keys read as claude")
     check(hosts.parse_session('{"session_id": 7}')["session_id"] is None, "a non-string id is dropped, not passed on")
+    check(hosts.parse_session('{"render_width_chars": 0}')["width"] is None, "a zero width is no width")
+    check(hosts.parse_session('{"render_width_chars": "80"}')["width"] is None, "a width that isn't a number is no width")
+    check(hosts.parse_session('{"render_width_chars": 80.9}')["width"] == 80, "a width is whole columns")
     check("/x" not in hosts.describe(hosts.parse_session(json.dumps(HOST_PAYLOADS["claude"]))), "doctor's line never carries the workspace path")
     check("unknown schema" in hosts.describe(hosts.parse_session("")), "and calls an unknown shape unknown")
 
@@ -1628,6 +1632,15 @@ def test_host_stdin():
         check(r.returncode == 0 and 0 < len(r.stdout) <= 3, "render --format=plain --width 3 caps the segment")
         r = run(["render", "--format", "html"])
         check(r.returncode == 0 and "Lv" in r.stdout, "a bad format on render falls back rather than blanking the statusline")
+        narrow = dict(HOST_PAYLOADS["cursor"], render_width_chars=6)
+        r = run(["render", "--format", "plain"], json.dumps(narrow))
+        check(r.returncode == 0 and 0 < _visible(r.stdout) <= 6, "cursor's render_width_chars caps render when no --width is given")
+        r = run(["render", "--format", "plain", "--width", "3"], json.dumps(narrow))
+        check(0 < _visible(r.stdout) <= 3, "and --width wins over the payload")
+        r = run(["render", "--format", "plain"], json.dumps(HOST_PAYLOADS["claude"]))
+        check(_visible(r.stdout) > 6, "a payload with no width caps nothing")
+        r = run(["compose", "--format", "plain", "a long bar of host text"], json.dumps(dict(narrow, render_width_chars=14)))
+        check(r.returncode == 0 and r.stdout.strip() and _visible(r.stdout) <= 14, "compose caps the whole line to the host's width")
         r = run(["compose", "--format", "tmux", "BAR"], "{}")
         check("BAR" in r.stdout and "#[" in r.stdout and "\x1b" not in r.stdout, "compose takes the flags ahead of its text")
         r = run(["card", "--width", "abc"])

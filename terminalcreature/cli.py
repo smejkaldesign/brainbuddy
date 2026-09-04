@@ -87,11 +87,6 @@ def _waiting_stdin():
     return _stdin_text()
 
 
-def _session_id(raw):
-    """The session id out of whatever host piped its JSON, or None."""
-    return hosts.parse_session(raw)["session_id"]
-
-
 FORMAT_ENV = "TERMINALCREATURE_FORMAT"
 
 
@@ -147,11 +142,14 @@ def _bank(st, session_id):
 def cmd_render(args):
     try:
         fmt, width, _, _ = _render_opts(args)
-        session = _session_id(_stdin_text())
+        session = hosts.parse_session(_stdin_text())
+        # a host that says how many columns it has caps the line unless --width did
+        if width is None:
+            width = session["width"]
         st = _load()
         if st["settings"].get("hidden"):
             return 0
-        xp, counts, gain, mood = _bank(st, session)
+        xp, counts, gain, mood = _bank(st, session["session_id"])
         line = render.segment(st, xp, counts, gain=gain, mood=mood, fmt=fmt, width=width)
         if line:
             sys.stdout.write(line)
@@ -168,7 +166,9 @@ def cmd_compose(args):
         raw = _stdin_text()
         # the statusline passes its text as an argument and its json on stdin.
         # piping the text instead still works, it just has no session to count.
-        session = _session_id(raw) if args else None
+        session = hosts.parse_session(raw) if args else dict(hosts.EMPTY)
+        if width is None:
+            width = session["width"]
         if not args:
             left = raw.rstrip("\n")
         st = _load()
@@ -176,7 +176,7 @@ def cmd_compose(args):
         if st["settings"].get("hidden"):
             sys.stdout.write(left)
             return 0
-        xp, counts, gain, mood = _bank(st, session)
+        xp, counts, gain, mood = _bank(st, session["session_id"])
         sys.stdout.write(render.compose(st, left, xp, counts, gain=gain, mood=mood, fmt=fmt, width=width))
     except Exception:
         sys.stdout.write(left)
