@@ -506,6 +506,7 @@ def unwire(host):
             set_command(data, host, previous)
             write_settings(host, data, raw, backup=False)
             message = "restored your previous command" if previous else "removed the key we added"
+        _drop_backup(backup)
     for p in (shim_path(host), wrapped_path(host)):
         try:
             os.remove(p)
@@ -903,11 +904,23 @@ def unwire_hook(host):
         else:
             _write_hook_config(host, content, raw, backup=False)
             message = "removed our hook from %s" % spec["config"]
+        _drop_backup(backup)
     try:
         os.remove(hook_shim_path(host))
     except OSError:
         pass
     return True, message
+
+
+def _drop_backup(backup):
+    """Once we're out of the file the backup has done its job. Left behind, the
+    next wire would keep it as is, and an uninstall after that could restore
+    a file older than the one the user has by then.
+    """
+    try:
+        os.remove(backup)
+    except OSError:
+        pass
 
 
 def hook_wired(host):
