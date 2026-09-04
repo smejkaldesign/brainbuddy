@@ -2080,6 +2080,32 @@ def test_autowire():
     finally:
         shutil.rmtree(home)
 
+    # one host we can't write and one we can't parse: each is one line, the
+    # host after them is still wired, and the exit code says something failed
+    home = tempfile.mkdtemp(prefix="bb-auto-")
+    env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+    cursor_dir = os.path.join(home, ".cursor")
+    try:
+        os.makedirs(cursor_dir)
+        with open(os.path.join(cursor_dir, "cli-config.json"), "w") as f:
+            f.write(HOST_SEEDS["cursor"][0])
+        os.chmod(cursor_dir, 0o555)
+        os.makedirs(os.path.join(home, ".qwen"))
+        with open(os.path.join(home, ".qwen", "settings.json"), "w") as f:
+            f.write("{broken")
+        os.makedirs(os.path.join(home, ".codex"))
+        r = run(env, ["install"])
+        check(r.returncode == 1 and "Traceback" not in r.stdout + r.stderr, "a host we can't write fails without a traceback, exit 1")
+        check(names(r.stdout) == ["cursor", "qwen", "codex"], "and every host still gets its line, got %r" % names(r.stdout))
+        lines = dict(zip(names(r.stdout), host_lines(r.stdout)))
+        check("~/.cursor/cli-config.json couldn't be written (PermissionError)" in lines["cursor"], "the read-only dir is named home-relative with the error class")
+        check("~/.qwen/settings.json isn't valid JSON" in lines["qwen"], "the broken file is told apart from one we can't read")
+        check(os.path.exists(os.path.join(home, ".codex", "hooks.json")), "the host after the failures is wired")
+        check(home not in r.stdout + r.stderr, "no path leaks in the failure lines")
+    finally:
+        os.chmod(cursor_dir, 0o755)
+        shutil.rmtree(home)
+
     # an empty home: nothing to wire, and that's not an error
     empty = tempfile.mkdtemp(prefix="bb-auto-")
     try:

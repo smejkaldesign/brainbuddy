@@ -381,7 +381,10 @@ def read_settings(host):
         with open(path, "rb") as f:
             raw = f.read()
         return _parse(host, raw), raw, None
-    except (OSError, ValueError) as e:
+    except OSError as e:
+        return {}, None, "%s couldn't be read (%s), so nothing was changed. fix it and re-run." % (
+            REGISTRY[host]["settings"], e.__class__.__name__)
+    except ValueError as e:
         return {}, None, "%s isn't valid JSON (%s), so nothing was changed. fix it and re-run." % (
             REGISTRY[host]["settings"], e.__class__.__name__)
 

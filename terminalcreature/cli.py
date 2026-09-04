@@ -817,15 +817,30 @@ def _host_targets(host, uninstall=False):
     return [key for key, _, tier in hosts.detected() if tier != "prompt"]
 
 
-def _wire(h, inline, statusline, uninstall):
-    """One host, whichever kind it is. (ok, message)."""
+def _config_label(h):
+    """The host's config file, home-relative, for a message."""
     if h in hosts.HOOK_HOSTS:
-        return hosts.unwire_hook(h) if uninstall else hosts.wire_hook(h)
+        return hosts.HOOK_REGISTRY[h]["config"]
     if h in plugins.PLUGIN_HOSTS:
-        return True, plugins.unwire_plugin(h) if uninstall else plugins.wire_plugin(h)
-    if uninstall:
-        return hosts.unwire(h)
-    return hosts.wire(h, inline=inline, statusline=statusline)
+        return plugins.REGISTRY[h]["dir"] + "/" + plugins.REGISTRY[h]["file"]
+    return hosts.REGISTRY[h]["settings"]
+
+
+def _wire(h, inline, statusline, uninstall):
+    """One host, whichever kind it is. (ok, message). A file we can't write is
+    one line here, not a traceback that stops the hosts after it in a sweep.
+    """
+    try:
+        if h in hosts.HOOK_HOSTS:
+            return hosts.unwire_hook(h) if uninstall else hosts.wire_hook(h)
+        if h in plugins.PLUGIN_HOSTS:
+            return True, plugins.unwire_plugin(h) if uninstall else plugins.wire_plugin(h)
+        if uninstall:
+            return hosts.unwire(h)
+        return hosts.wire(h, inline=inline, statusline=statusline)
+    except OSError as e:
+        return False, "%s couldn't be written (%s), so nothing was changed. fix it and re-run." % (
+            _config_label(h), e.__class__.__name__)
 
 
 def cmd_install(args):
