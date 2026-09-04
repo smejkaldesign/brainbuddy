@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>terminalcreature: any terminal, any agent</title>
-<meta name="description" content="Always hungry, never reads a file. It hatches in your Claude Code statusline, follows you into Cursor, Copilot, tmux and your prompt, and grows on every memory you write.">
+<meta name="description" content="Always hungry, never reads a file. It hatches in your Claude Code statusline, follows you into Cursor, Copilot and tmux, shows a card after each Codex turn, and grows on every memory you write.">
 <meta property="og:title" content="terminalcreature">
-<meta property="og:description" content="An egg in your statusline, always hungry for what you remember. It follows you from Claude Code into Cursor, Copilot, tmux and your prompt. Feed it memories and see what hatches.">
+<meta property="og:description" content="An egg in your statusline, always hungry for what you remember. It follows you from Claude Code into Cursor, Copilot, Codex, Gemini, tmux and your prompt. Feed it memories and see what hatches.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://terminalcreature.com/">
 <meta property="og:image" content="https://terminalcreature.com/assets/og.png">
@@ -132,6 +132,11 @@
   .lede { font-size: 19px; line-height: 1.6; color: var(--muted); max-width: 640px; margin: 0 auto 80px; text-wrap: pretty; }
   .lede b { color: var(--gold); font-weight: 600; }
 
+  /* host groups above the host tabs: statusline hosts, card hosts, terminals. one row each, never fourteen buttons */
+  .groups { display: inline-flex; margin: 0 auto 12px; border: 1px solid var(--line-2); border-radius: 8px; background: rgba(0,0,0,.35); padding: 3px; gap: 3px; }
+  .group { font-family: var(--mono); font-size: 12px; letter-spacing: .04em; color: var(--muted); background: none; border: 1px solid transparent; border-radius: 5px; padding: 6px 14px; }
+  .group:hover { color: var(--text); }
+  .group[aria-pressed="true"] { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: 500; }
   /* host tabs above the install stone: one command or snippet per host */
   .tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 0 auto 14px; max-width: 780px; }
   .tab { font-family: var(--mono); font-size: 12px; letter-spacing: .04em; color: var(--muted); background: rgba(0,0,0,.35); border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 12px; }
@@ -152,11 +157,11 @@
   }
   .copy:hover { background: rgba(255,255,255,.12); color: #fff; }
   .copy.copied { color: var(--xp); border-color: var(--xp); }
-  /* the stone keeps the hero width whichever tab is up, so nothing below it moves */
+  /* the stone keeps the hero width whichever tab is up; the script raises these to the tallest host so nothing below moves */
   #host-panel { width: 100%; min-height: 70px; }
   #host-panel code { flex: 1; }
   #host-note, #host-sub { min-height: 3.2em; }
-  .alt { font-family: var(--mono); font-size: 13px; color: var(--dim); margin: 36px 0 0; }
+  .alt { font-family: var(--mono); font-size: 13px; color: var(--muted); margin: 36px 0 0; }
   .alt code { background: none; border: 0; padding: 0; color: var(--gold); white-space: nowrap; }
   .alt .then { color: var(--muted); }
 
@@ -174,11 +179,13 @@
   .t-status { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 6px; background: #070d0a; color: var(--muted); }
   .t-status .frame { color: #3a5546; } .t-status .creature { color: var(--gold-2); } .t-status .bar { color: var(--xp); }
   .t-status .dim { color: var(--dim); } .t-status .in { color: var(--text); }
+  /* our own annotations inside a chrome: readable contrast, and they wrap on a phone instead of running off the edge */
+  .t-status .note { display: block; white-space: normal; padding-left: 2ch; }
   /* tmux draws one status line with its own background, so the bar gets the pane look */
   .t-tmux { margin-top: 10px; display: flex; justify-content: space-between; gap: 16px; padding: 4px 10px; border-radius: 3px; background: #123522; color: #d6ffe1; white-space: pre; overflow: hidden; }
   .t-tmux .win { color: #86cfa0; } .t-tmux .cur { color: #061008; background: #5eea86; padding: 0 5px; border-radius: 2px; } .t-tmux .bar { color: #a6ffbd; }
-  .t-hosts { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); white-space: normal; }
-  .t-hosts button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--dim); background: none; border: 1px solid var(--line-2); border-radius: 4px; padding: 3px 9px; }
+  .t-hosts { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: normal; }
+  .t-hosts button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--muted); background: none; border: 1px solid var(--line-2); border-radius: 4px; padding: 3px 9px; }
   .t-hosts button:hover { color: var(--text); border-color: var(--gold); }
   .t-hosts button[aria-pressed="true"] { color: var(--gold); border-color: var(--gold); background: rgba(var(--gold-rgb), .06); }
   @keyframes blink { 50% { opacity: 0; } }
@@ -194,7 +201,7 @@
   .matrix-title { font-family: var(--mono); font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin: 40px 0 12px; }
   .matrix-title:first-of-type { margin-top: 0; }
   .matrix-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line-2); border-radius: 10px; background: var(--card); }
-  .matrix { width: 100%; min-width: 540px; border-collapse: collapse; font-size: 14px; }
+  .matrix { width: 100%; min-width: 600px; border-collapse: collapse; font-size: 14px; }
   .matrix th { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 500; text-align: left; padding: 12px 16px; background: var(--card-2); border-bottom: 1px solid var(--line); white-space: nowrap; }
   .matrix td { padding: 9px 16px; border-top: 1px solid var(--line); color: var(--body); vertical-align: middle; }
   .matrix tbody tr:first-child td { border-top: 0; }
@@ -202,11 +209,13 @@
   .matrix .name { color: var(--text); font-weight: 500; white-space: nowrap; }
   .matrix .tick, .legend .tick { font-family: var(--mono); color: var(--xp); font-weight: 700; }
   .matrix .dash, .legend .dash { font-family: var(--mono); color: var(--muted); }
-  /* baseline-aligned so the footnote never drops the dash it marks */
-  .matrix sup, .legend sup { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-left: 3px; vertical-align: baseline; position: relative; top: -.45em; }
   .matrix .how { font-size: 13px; color: var(--muted); line-height: 1.5; }
   .matrix .how code { font-size: 12px; }
+  /* one line per column, so the headers never need a footnote */
   .legend { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 14px 0 0; line-height: 1.8; }
+  .legend span { display: block; }
+  .legend .k { color: var(--text); font-weight: 500; }
+  .legend .dash { font-weight: 400; }
 
   /* species grid */
   .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
@@ -336,12 +345,20 @@
     .ledger-row .proof { grid-column: 2; }
     .ledger-row:first-child .proof { display: none; }
     .install { flex-wrap: wrap; justify-content: center; padding: 12px 14px; font-size: 12.5px; }
+    /* three group names fit one row at 375 only with tighter padding */
+    .group { padding: 6px 9px; font-size: 11px; white-space: nowrap; }
     .terminal-body { font-size: 12px; }
     /* the demo's tmux bar drops its window list so the creature stays in frame */
     .t-tmux .win { display: none; }
     /* the tables scroll sideways here; the host name stays put so a tick is never orphaned */
     .matrix th:first-child, .matrix td:first-child { position: sticky; left: 0; z-index: 1; background: var(--card); border-right: 1px solid var(--line); }
     .matrix th:first-child { background: var(--card-2); }
+    /* five columns on a phone: headers wrap to two lines and the agents table drops its desktop floor, so more than one tick column is in view beside the sticky name */
+    #matrix-agents { min-width: 0; }
+    .matrix th, .matrix th.c { white-space: normal; line-height: 1.35; padding: 10px 10px; }
+    .matrix th .nb { white-space: nowrap; }
+    .matrix td { padding: 9px 10px; }
+    .matrix th:first-child, .matrix td:first-child { padding-left: 14px; }
     section { padding-top: 104px; }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -376,7 +393,8 @@
     <p class="lede">
       Something small is waiting at the edge of your terminal window. An egg, quiet, patient, and
       <b>ravenously hungry for memories</b>. It hatches in your Claude Code statusline, then follows you into
-      Cursor, Copilot, Qwen, Droid, tmux and your shell prompt: <b>one creature, one roster, one XP number</b>,
+      Cursor, Copilot, Qwen, Droid, tmux and your shell prompt, and where there is no statusline (Codex, Gemini,
+      opencode, Amp) it drops a one-line card after every turn: <b>one creature, one roster, one XP number</b>,
       wherever you happen to be coding. It wants to be your new best friend, but also to eat everything your
       agents remember, Claude, Codex, Gemini, Copilot and the rest. Don't fret, your creature wants your trust,
       so it <b>never reads the content of your files</b>. It eats each one whole, in a single bite, and grows
@@ -386,6 +404,7 @@
     </p>
 
     <div id="install">
+      <div class="groups" role="group" aria-label="Kind of host" id="host-groups"></div>
       <div class="tabs" role="tablist" aria-label="Where should it live?" id="host-tabs"></div>
       <div class="install" role="tabpanel" id="host-panel" aria-labelledby="tab-claude">
         <code id="hero-cmd">curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash</code>
@@ -412,7 +431,7 @@
   <div class="wrap">
     <p class="label">Where it lives</p>
     <h2>Any terminal, any agent, same creature</h2>
-    <p class="desc">Five agents draw it natively, inside their own statusline. Every other agent gets it through tmux or your shell prompt, sitting right beside the conversation. And it eats memory from nearly all of them. Honest tiers, checked against each host's own docs.</p>
+    <p class="desc">Five agents draw it natively, inside their own statusline. Six more have no statusline, so they show a one-line card after each turn, credited to the same creature. Every other agent gets it through tmux or your shell prompt, sitting right beside the conversation. And it eats memory from nearly all of them. Honest tiers, checked against each host's own docs.</p>
     <h3 class="matrix-title">Agents</h3>
     <div class="matrix-scroll"><table class="matrix" id="matrix-agents"></table></div>
     <h3 class="matrix-title">Terminals, prompts and multiplexers</h3>
@@ -525,7 +544,7 @@
       <div class="step">
         <div class="n">1</div>
         <h3>Install lays an egg</h3>
-        <p>The installer wraps whatever statusline you already have instead of replacing it, then leaves an egg in it. Claude Code is the default; <code>install --host</code> does the same for Cursor, Copilot, Qwen and Droid, and <code>snippet</code> hands tmux and your prompt a paste-in. The egg banks XP from the moment it exists, including everything you'd written before.</p>
+        <p>The installer wraps whatever statusline you already have instead of replacing it, then leaves an egg in it. Claude Code is the default; <code>install --host</code> does the same for Cursor, Copilot, Qwen and Droid, gives Codex, Gemini, Vibe, auggie, opencode and Amp a one-line card after each turn, and <code>snippet</code> hands tmux and your prompt a paste-in. The egg banks XP from the moment it exists, including everything you'd written before.</p>
         <span class="say cmd">curl -fsSL …/bootstrap.sh | bash</span>
         <span class="say cmd">terminalcreature install --host all</span>
       </div>
@@ -559,7 +578,7 @@
     <p class="desc">It runs every time a statusline or prompt redraws, so it stays small: plain Python and one cached read, whichever host is asking.</p>
     <div class="features">
       <div class="feature"><div class="icon">┌┐</div><div><h3>Never edits your statusline</h3><p>Your existing statusline keeps running as it is, in every host. The creature is drawn beside it, and <code>--uninstall</code> puts the original settings back byte for byte.</p></div></div>
-      <div class="feature"><div class="icon">≡</div><div><h3>One roster everywhere</h3><p>Claude Code, Cursor, Copilot, Qwen, Droid, tmux and your prompt all read the same state. Level up in one, and the same creature is that level in the others.</p></div></div>
+      <div class="feature"><div class="icon">≡</div><div><h3>One roster everywhere</h3><p>Claude Code, Cursor, Copilot, Qwen, Droid, tmux and your prompt all read the same state, and the turn-end card in Codex, Gemini, Vibe, auggie, opencode and Amp credits the same creature. Level up in one, and it is that level in the others.</p></div></div>
       <div class="feature"><div class="icon">py</div><div><h3>Nothing to install but Python</h3><p>Python 3.9 or newer and bash. No packages, no accounts. macOS, Linux, and Windows through WSL or Git Bash.</p></div></div>
       <div class="feature"><div class="icon">▲</div><div><h3>XP only goes up</h3><p>Deleting or merging notes never lowers your creature's level. It remembers the most you have ever had.</p></div></div>
       <div class="feature"><div class="icon">ms</div><div><h3>Fast enough for a prompt</h3><p>The render reads one cached line and never measures on the hot path, so it fits inside Starship's 500 ms budget and Qwen's 5 s cutoff with room to spare.</p></div></div>
@@ -727,14 +746,25 @@
       spriteRows(['  <span class="dim">auto · 34% context · my-notes ⎇ main</span>', "  " + SEG, "", "", ""]) + "</div>";
   }
   function tmuxStatus() {
-    return '<div class="t-status"><span class="dim">  (pane 1 keeps running whatever you had open)</span>\n' +
+    return '<div class="t-status"><span class="note">(pane 1 keeps running whatever you had open)</span>' +
       spriteRows(['  <span class="dim">$ terminalcreature render --format tmux --width 40</span>', "  " + SEG, "", "", ""]) +
       '<div class="t-tmux"><span><span class="cur">notes</span> <span class="win">0:zsh  1:claude*  2:cursor</span></span><span>' + SEG + ' <span class="win">│ 14:02</span></span></div></div>';
+  }
+  // hosts with no statusline get the same creature as one line after each turn, in the host's own reply
+  function codexStatus() {
+    return '<div class="t-status"><span class="note">(no statusline, so the card lands after each turn)</span>' +
+      '<span class="t-prompt">›</span> <span class="in">what did I write about tmux last week?</span>\n' +
+      '<span class="dim">  three notes: the pane script, status-right, and the TPM plugin.</span>\n' +
+      '<span class="dim">  want me to fold them into one?</span>\n' +
+      '\n' +
+      '<span class="creature">' + esc("«''»* Zask Lv41 ") + '<span class="bar">█░░░░░░░</span> +12 xp</span>\n' +
+      '<span class="note">first turn, then when xp or stage moves, else every 10th turn</span></div>';
   }
   var HOST_DEMOS = [
     ["claude code", "claude code · statusline", claudeStatus],
     ["cursor", "cursor cli · footer", cursorStatus],
-    ["tmux", "tmux · status-right", tmuxStatus]
+    ["tmux", "tmux · status-right", tmuxStatus],
+    ["codex", "codex cli · turn-end card", codexStatus]
   ];
   var title = document.getElementById("term-title"), hostIdx = 0, hostTimer = null;
   function showHost(i) {
@@ -789,26 +819,29 @@
   document.getElementById("replay").addEventListener("click", play);
   play();
 
-  // compat matrix. cells: YES draws a check, NO a dash, SOON a dash with the 3.1 footnote.
-  var YES = 1, NO = 0, SOON = 2;
-  var AGENT_COLS = ["Agent", "Statusline (native)", "Prompt or tmux", "Feeds XP"];
+  // compat matrix. cells: YES draws a check, NO a dash. rows: name, statusline, turn-end card, prompt or tmux, feeds xp.
+  // Goose has hooks but no confirmed line shown to the user, so its card cell stays a dash.
+  var YES = 1, NO = 0;
+  var AGENT_COLS = ["Agent", "Statusline", '<span class="nb">Turn-end</span> card', '<span class="nb">Prompt or</span> tmux', "Feeds XP"];
   var AGENTS = [
-    ["Claude Code", YES, YES, YES],
-    ["Cursor CLI", YES, YES, YES],
-    ["Copilot CLI", YES, YES, YES],
-    ["Qwen Code", YES, YES, YES],
-    ["Droid", YES, YES, YES],
-    ["Codex CLI", SOON, YES, YES],
-    ["Gemini CLI", SOON, YES, YES],
-    ["opencode", SOON, YES, YES],
-    ["Amp", SOON, YES, YES],
-    ["Goose", SOON, YES, YES],
-    ["Continue", NO, YES, YES],
-    ["Kiro", NO, YES, YES],
-    ["Cline", NO, YES, YES],
-    ["Crush", NO, YES, YES],
-    ["aider", NO, YES, NO],
-    ["Warp", NO, YES, NO]
+    ["Claude Code", YES, NO, YES, YES],
+    ["Cursor CLI", YES, NO, YES, YES],
+    ["Copilot CLI", YES, NO, YES, YES],
+    ["Qwen Code", YES, NO, YES, YES],
+    ["Droid", YES, NO, YES, YES],
+    ["Codex CLI", NO, YES, YES, YES],
+    ["Gemini CLI", NO, YES, YES, YES],
+    ["opencode", NO, YES, YES, YES],
+    ["Amp", NO, YES, YES, YES],
+    ["Mistral Vibe", NO, YES, YES, NO],
+    ["Augment auggie", NO, YES, YES, NO],
+    ["Goose", NO, NO, YES, YES],
+    ["Continue", NO, NO, YES, YES],
+    ["Kiro", NO, NO, YES, YES],
+    ["Cline", NO, NO, YES, YES],
+    ["Crush", NO, NO, YES, YES],
+    ["aider", NO, NO, YES, NO],
+    ["Warp", NO, NO, YES, NO]
   ];
   var SURFACE_COLS = ["Surface", "Snippet", "How"];
   var SURFACES = [
@@ -825,7 +858,7 @@
     ["Alacritty", NO, "no status area of its own. Use your prompt or tmux inside it"],
     ["Windows Terminal", NO, "no status area of its own. Use your prompt or tmux inside it"]
   ];
-  function cell(v) { return v === YES ? '<span class="tick" title="works today">✓</span>' : v === SOON ? '<span class="dash" title="hooks card coming in 3.1">–</span><sup>1</sup>' : '<span class="dash" title="not available">–</span>'; }
+  function cell(v) { return v === YES ? '<span class="tick" title="works today">✓</span>' : '<span class="dash" title="not available">–</span>'; }
   function matrix(id, cols, rows, render) {
     var t = document.getElementById(id), h = "<thead><tr>";
     cols.forEach(function (c, i) { h += "<th" + (i && i < cols.length - (cols === SURFACE_COLS ? 1 : 0) ? ' class="c"' : "") + ">" + c + "</th>"; });
@@ -834,12 +867,17 @@
     t.innerHTML = h + "</tbody>";
   }
   matrix("matrix-agents", AGENT_COLS, AGENTS, function (r) {
-    return '<td class="name">' + r[0] + '</td><td class="c">' + cell(r[1]) + '</td><td class="c">' + cell(r[2]) + '</td><td class="c">' + cell(r[3]) + "</td>";
+    return '<td class="name">' + r[0] + '</td><td class="c">' + cell(r[1]) + '</td><td class="c">' + cell(r[2]) + '</td><td class="c">' + cell(r[3]) + '</td><td class="c">' + cell(r[4]) + "</td>";
   });
   matrix("matrix-surfaces", SURFACE_COLS, SURFACES, function (r) {
     return '<td class="name">' + r[0] + '</td><td class="c">' + cell(r[1]) + '</td><td class="how">' + r[2] + "</td>";
   });
-  document.getElementById("matrix-legend").innerHTML = '<span class="tick">✓</span> works today · <span class="dash">–</span> not there · <sup>1</sup> no statusline to wire yet; a hooks card at the end of each turn is coming in 3.1, and their memory already feeds XP · Prompt or tmux means the creature sits in your prompt or tmux bar next to the agent, on any of them.';
+  document.getElementById("matrix-legend").innerHTML =
+    '<span><b class="tick">✓</b> works today · <b class="dash">–</b> not there</span>' +
+    '<span><b class="k">Statusline</b> the agent draws the creature inside its own statusline, wired by <code>install --host</code>.</span>' +
+    '<span><b class="k">Turn-end card</b> no statusline, so a one-line card lands after each turn, same creature, same XP.</span>' +
+    '<span><b class="k">Prompt or tmux</b> the creature sits in your prompt or tmux bar next to the agent, on any of them.</span>' +
+    '<span><b class="k">Feeds XP</b> the agent\'s own memory files count toward the creature\'s level.</span>';
 
   // species cards: click flips to shiny
   var grid = document.getElementById("species-grid");
@@ -886,8 +924,15 @@
   // provider picker: install command updates live
   var BASE = "curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash";
 
-  // install tabs: [id, label, command or snippet, note, sub-note]
+  // install tabs: [id, label, command or snippet, note, sub-note], grouped so the row stays short
   var CLI = '<span class="then">needs the CLI, which the Claude Code install already ships; otherwise</span> <code>pipx install terminalcreature</code><span class="then">.</span> <code>terminalcreature doctor</code> <span class="then">lists every host it found and whether it is wired.</span>';
+  var CARD = '<span class="then">a one-line card after each turn, same creature.</span> ';
+  var CARD_SUB = '<span class="then">first turn, then when XP or stage moves, else every 10th turn;</span> <code>config hookcard always|changes|off</code> <span class="then">sets that.</span> <code>uninstall --host</code> <span class="then">removes only ours. Needs the CLI:</span> <code>pipx install terminalcreature</code><span class="then">.</span>';
+  var GROUPS = [
+    ["statusline", "Statusline", ["claude", "cursor", "copilot", "qwen", "droid"]],
+    ["card", "Turn-end card", ["codex", "gemini", "vibe", "auggie", "opencode", "amp"]],
+    ["terminals", "Terminals", ["tmux", "starship", "shell"]]
+  ];
   var INSTALL = [
     ["claude", "Claude Code", BASE,
       '<span class="then">then, in Claude Code:</span> <code>/creature-hatch</code>',
@@ -900,6 +945,18 @@
       '<span class="then">wraps Qwen Code\'s</span> <code>ui.statusLine</code> <span class="then">command. The render reads a cache, so it is well inside Qwen\'s five second cutoff. Or</span> <code>--host all</code><span class="then">.</span>', CLI],
     ["droid", "Droid", "terminalcreature install --host droid",
       '<span class="then">wraps the Factory Droid</span> <code>statusLine</code> <span class="then">command. Or</span> <code>--host all</code><span class="then">.</span>', CLI],
+    ["codex", "Codex", "terminalcreature install --host codex",
+      CARD + '<span class="then">Adds a</span> <code>Stop</code> <span class="then">hook to</span> <code>~/.codex/hooks.json</code><span class="then">. Codex asks you once to approve it, with</span> <code>/hooks</code> <span class="then">inside Codex.</span>', CARD_SUB],
+    ["gemini", "Gemini", "terminalcreature install --host gemini",
+      CARD + '<span class="then">Adds an</span> <code>AfterAgent</code> <span class="then">hook to Gemini CLI\'s</span> <code>settings.json</code><span class="then">, comments kept. Or</span> <code>--host all</code><span class="then">.</span>', CARD_SUB],
+    ["vibe", "Vibe", "terminalcreature install --host vibe",
+      CARD + '<span class="then">Appends a marked</span> <code>post_agent</code> <span class="then">block to</span> <code>~/.vibe/hooks.toml</code> <span class="then">and never touches the rest of the file.</span>', CARD_SUB],
+    ["auggie", "auggie", "terminalcreature install --host auggie",
+      CARD + '<span class="then">Adds a</span> <code>Stop</code> <span class="then">hook to Augment auggie\'s</span> <code>settings.json</code><span class="then">. Or</span> <code>--host all</code><span class="then">.</span>', CARD_SUB],
+    ["opencode", "opencode", "terminalcreature install --host opencode",
+      CARD + '<span class="then">Drops one plugin file under</span> <code>~/.config/opencode/plugins</code><span class="then">. Needs bun or node on your PATH to run it.</span>', CARD_SUB],
+    ["amp", "Amp", "terminalcreature install --host amp",
+      CARD + '<span class="then">Drops a plugin under</span> <code>~/.config/amp/plugins</code><span class="then">. Amp runs plugins under bun, so bun has to be installed.</span>', CARD_SUB],
     ["tmux", "tmux", "set -g @plugin 'smejkaldesign/terminalcreature'",
       '<span class="then">TPM line for your tmux config, then put</span> <code>#{creature}</code> <span class="then">anywhere in</span> <code>status-right</code><span class="then">. No TPM?</span> <code>terminalcreature snippet tmux</code> <span class="then">prints the plain version.</span>', CLI],
     ["starship", "Starship", "terminalcreature snippet starship",
@@ -907,29 +964,78 @@
     ["shell", "Shell prompt", "terminalcreature snippet zsh",
       '<span class="then">prints a paste-in for your prompt. Swap</span> <code>zsh</code> <span class="then">for</span> <code>fish</code><span class="then">,</span> <code>omp</code> <span class="then">(oh-my-posh) or</span> <code>wezterm</code><span class="then">.</span>', CLI]
   ];
-  var tabs = document.getElementById("host-tabs"), panel = document.getElementById("host-panel");
+  var groups = document.getElementById("host-groups"), tabs = document.getElementById("host-tabs"), panel = document.getElementById("host-panel");
   var heroCmd = document.getElementById("hero-cmd"), hostNote = document.getElementById("host-note"), hostSub = document.getElementById("host-sub");
+  var byId = {};
+  INSTALL.forEach(function (h) { byId[h[0]] = h; });
+  var tabEls = [], current = [], curGroup = 0, curTab = 0;
   function selectHost(i) {
-    var h = INSTALL[i];
+    var h = current[i];
+    curTab = i;
     tabEls.forEach(function (b, k) { b.setAttribute("aria-selected", String(k === i)); b.tabIndex = k === i ? 0 : -1; });
     panel.setAttribute("aria-labelledby", "tab-" + h[0]);
     heroCmd.textContent = h[2]; hostNote.innerHTML = h[3]; hostSub.innerHTML = h[4];
   }
-  var tabEls = INSTALL.map(function (h, i) {
-    var b = document.createElement("button");
-    b.type = "button"; b.className = "tab"; b.id = "tab-" + h[0];
-    b.setAttribute("role", "tab"); b.setAttribute("aria-controls", "host-panel");
-    b.textContent = h[1];
-    b.addEventListener("click", function () { selectHost(i); });
-    b.addEventListener("keydown", function (e) {
-      var n = e.key === "ArrowRight" ? (i + 1) % INSTALL.length : e.key === "ArrowLeft" ? (i + INSTALL.length - 1) % INSTALL.length : e.key === "Home" ? 0 : e.key === "End" ? INSTALL.length - 1 : -1;
-      if (n < 0) return;
-      e.preventDefault(); selectHost(n); tabEls[n].focus();
+  // arrows move within a row. a group change rebuilds the tab row and lands on its first host
+  function arrow(e, i, n) { return e.key === "ArrowRight" ? (i + 1) % n : e.key === "ArrowLeft" ? (i + n - 1) % n : e.key === "Home" ? 0 : e.key === "End" ? n - 1 : -1; }
+  function selectGroup(g) {
+    curGroup = g;
+    groupEls.forEach(function (b, k) { b.setAttribute("aria-pressed", String(k === g)); b.tabIndex = k === g ? 0 : -1; });
+    current = GROUPS[g][2].map(function (id) { return byId[id]; });
+    tabs.innerHTML = "";
+    tabEls = current.map(function (h, i) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "tab"; b.id = "tab-" + h[0];
+      b.setAttribute("role", "tab"); b.setAttribute("aria-controls", "host-panel");
+      b.textContent = h[1];
+      b.addEventListener("click", function () { selectHost(i); });
+      b.addEventListener("keydown", function (e) {
+        var n = arrow(e, i, current.length);
+        if (n < 0) return;
+        e.preventDefault(); selectHost(n); tabEls[n].focus();
+      });
+      tabs.appendChild(b);
+      return b;
     });
-    tabs.appendChild(b);
+    selectHost(0);
+  }
+  var groupEls = GROUPS.map(function (g, i) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "group"; b.id = "group-" + g[0];
+    b.setAttribute("aria-pressed", "false"); b.setAttribute("aria-controls", "host-tabs");
+    b.textContent = g[1];
+    b.addEventListener("click", function () { selectGroup(i); });
+    b.addEventListener("keydown", function (e) {
+      var n = arrow(e, i, GROUPS.length);
+      if (n < 0) return;
+      e.preventDefault(); selectGroup(n); groupEls[n].focus();
+    });
+    groups.appendChild(b);
     return b;
   });
-  selectHost(0);
+  selectGroup(0);
+  // the tab row, the stone and its note lines reserve the tallest group or host at this width, so switching never moves the terminal
+  function reserve() {
+    var g0 = curGroup, t0 = curTab, cmd = heroCmd.textContent, note = hostNote.innerHTML, sub = hostSub.innerHTML, r = 0, p = 0, n = 0, s = 0;
+    var focused = document.activeElement && document.activeElement.id;
+    // whole pixels: offsetHeight rounds down, and a rounded-down floor lets the terminal drift a pixel on some hosts
+    var h = function (el) { return Math.ceil(el.getBoundingClientRect().height); };
+    [tabs, panel, hostNote, hostSub].forEach(function (el) { el.style.minHeight = "0"; });
+    GROUPS.forEach(function (_, k) { selectGroup(k); r = Math.max(r, h(tabs)); });
+    selectGroup(g0); selectHost(t0);
+    INSTALL.forEach(function (x) {
+      heroCmd.textContent = x[2]; hostNote.innerHTML = x[3]; hostSub.innerHTML = x[4];
+      p = Math.max(p, h(panel)); n = Math.max(n, h(hostNote)); s = Math.max(s, h(hostSub));
+    });
+    heroCmd.textContent = cmd; hostNote.innerHTML = note; hostSub.innerHTML = sub;
+    tabs.style.minHeight = r + "px"; panel.style.minHeight = p + "px"; hostNote.style.minHeight = n + "px"; hostSub.style.minHeight = s + "px";
+    // rebuilding the tab row drops focus, so a keyboard user mid-row gets it back on a resize
+    if (focused && focused.indexOf("tab-") === 0) { var f = document.getElementById(focused); if (f) f.focus({ preventScroll: true }); }
+  }
+  reserve();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(reserve);
+  var reserveTimer = null;
+  window.addEventListener("resize", function () { clearTimeout(reserveTimer); reserveTimer = setTimeout(reserve, 120); });
   var provider = "claude", pathIn = document.getElementById("path"), pathrow = document.getElementById("pathrow");
   function cmd() {
     var p = pathIn.value.trim() || "~/notes";

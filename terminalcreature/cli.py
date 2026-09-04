@@ -10,7 +10,7 @@ import sys
 
 from . import __version__
 from . import creature as creature_mod
-from . import hosts, metric, render, sprites
+from . import hosts, metric, plugins, render, sprites
 from . import state as state_mod
 
 USAGE = """terminalcreature - a terminal pet that evolves with your memory
@@ -29,7 +29,9 @@ USAGE = """terminalcreature - a terminal pet that evolves with your memory
   rename <old> <new>
   retire <name>
   config              show settings
-  config <key> <val>  set one (provider, vault_root, xp_max, density, columns, sprite_height, unicode, border, hidden, update_check)
+  config <key> <val>  set one (provider, vault_root, xp_max, density, columns, sprite_height, unicode, border, hidden, update_check, hookcard)
+     hookcard is always, changes (the default: a card when the session's xp or stage
+     moved, else every 10th turn) or off
   hide / show         drop the creature from the statusline, or bring it back
   simulate <xp>       preview any level without touching your real state
   refresh             recompute the xp cache (run in the background by render)
@@ -37,12 +39,21 @@ USAGE = """terminalcreature - a terminal pet that evolves with your memory
   sources             what it can count, and what to do if that's nothing
   doctor [--check]    check what terminalcreature can see; --check also asks pypi
   update [--apply]    ask pypi whether there's a newer terminalcreature; --apply installs it
-  install [--host claude|cursor|copilot|qwen|droid|all] [--inline] [--statusline <cmd>]
+  install [--host claude|cursor|copilot|qwen|droid|all] [--inline|--box] [--statusline <cmd>]
                       point a host's statusline at the creature, wrapping what it ran
-                      before. all wires every host that's installed. install.sh does
-                      the full claude setup; this only wires the statusline
+                      before. all wires every host that's installed. --inline puts the
+                      creature after the host's text, --box on the left as a column;
+                      each host has its own default. install.sh does the full claude
+                      setup; this only wires the statusline
+  install --host codex|gemini|vibe|auggie|opencode|amp
+                      hosts with no statusline get a one-line card after each turn:
+                      a hook entry (codex, gemini, vibe, auggie) or a plugin file
+                      (opencode, amp). all covers these too, by their config dir
   uninstall [--host ...]
-                      put the host's statusline back and drop the shim
+                      put the host's statusline back and drop the shim, or take the
+                      hook entry or plugin out
+  hookcard --host <h> what the hook runs: reads the host's JSON on stdin, credits
+                      session xp, prints the card in the host's reply shape
 
 update and doctor --check are the only commands that go online, and only when
 you run them. Everything else, the statusline included, is offline.
@@ -85,11 +96,6 @@ def _waiting_stdin():
     except Exception:
         pass
     return _stdin_text()
-
-
-def _session_id(raw):
-    """The session id out of whatever host piped its JSON, or None."""
-    return hosts.parse_session(raw)["session_id"]
 
 
 FORMAT_ENV = "TERMINALCREATURE_FORMAT"
@@ -147,11 +153,14 @@ def _bank(st, session_id):
 def cmd_render(args):
     try:
         fmt, width, _, _ = _render_opts(args)
-        session = _session_id(_stdin_text())
+        session = hosts.parse_session(_stdin_text())
+        # a host that says how many columns it has caps the line unless --width did
+        if width is None:
+            width = session["width"]
         st = _load()
         if st["settings"].get("hidden"):
             return 0
-        xp, counts, gain, mood = _bank(st, session)
+        xp, counts, gain, mood = _bank(st, session["session_id"])
         line = render.segment(st, xp, counts, gain=gain, mood=mood, fmt=fmt, width=width)
         if line:
             sys.stdout.write(line)
@@ -168,7 +177,9 @@ def cmd_compose(args):
         raw = _stdin_text()
         # the statusline passes its text as an argument and its json on stdin.
         # piping the text instead still works, it just has no session to count.
-        session = _session_id(raw) if args else None
+        session = hosts.parse_session(raw) if args else dict(hosts.EMPTY)
+        if width is None:
+            width = session["width"]
         if not args:
             left = raw.rstrip("\n")
         st = _load()
@@ -176,7 +187,7 @@ def cmd_compose(args):
         if st["settings"].get("hidden"):
             sys.stdout.write(left)
             return 0
-        xp, counts, gain, mood = _bank(st, session)
+        xp, counts, gain, mood = _bank(st, session["session_id"])
         sys.stdout.write(render.compose(st, left, xp, counts, gain=gain, mood=mood, fmt=fmt, width=width))
     except Exception:
         sys.stdout.write(left)
@@ -446,6 +457,11 @@ def cmd_config(args):
     elif key == "provider":
         if raw not in metric.PROVIDERS:
             print("provider must be one of: %s" % ", ".join(metric.PROVIDERS))
+            return 1
+        value = raw
+    elif key == "hookcard":
+        if raw not in state_mod.HOOKCARD_MODES:
+            print("hookcard must be %s" % ", ".join(state_mod.HOOKCARD_MODES))
             return 1
         value = raw
     elif key == "vault_root":
@@ -751,13 +767,21 @@ def cmd_show(args):
     return _set_hidden(False)
 
 
+def _all_hosts():
+    return tuple(hosts.HOSTS) + tuple(hosts.HOOK_HOSTS) + tuple(plugins.PLUGIN_HOSTS)
+
+
 def _host_args(args):
-    """(host, inline, statusline) out of install/uninstall args, or (None, problem)."""
-    host, inline, statusline, i = "claude", False, None, 0
+    """(host, inline, statusline) out of install/uninstall args, or (None, problem).
+    inline is None until --inline or --box says, so each host keeps its own default.
+    """
+    host, inline, statusline, i = "claude", None, None, 0
     while i < len(args):
         key, eq, val = args[i].partition("=")
-        if key == "--inline":
-            inline = True
+        if key in ("--inline", "--box"):
+            if inline is not None and inline != (key == "--inline"):
+                return None, "--inline and --box are opposites, pick one"
+            inline = key == "--inline"
         elif key in ("--host", "--statusline"):
             if not eq:
                 i += 1
@@ -769,20 +793,37 @@ def _host_args(args):
             else:
                 statusline = val
         else:
-            return None, "unknown option %s. hosts are %s, or all" % (args[i], ", ".join(hosts.HOSTS))
+            return None, "unknown option %s. hosts are %s, or all" % (args[i], ", ".join(_all_hosts()))
         i += 1
-    if host != "all" and host not in hosts.HOSTS:
-        return None, "unknown host %s. hosts are %s, or all" % (host, ", ".join(hosts.HOSTS))
+    if host != "all" and host not in _all_hosts():
+        return None, "unknown host %s. hosts are %s, or all" % (host, ", ".join(_all_hosts()))
     return (host, inline, statusline), None
 
 
 def _host_targets(host, uninstall=False):
-    """all means every host that's here; on uninstall, every host still wired too."""
+    """all means every host that's here, a config dir being "here"; on
+    uninstall, every host still carrying our shim or plugin file too.
+    """
     if host != "all":
         return [host]
     if uninstall:
-        return [h for h in hosts.HOSTS if hosts.installed(h) or os.path.exists(hosts.shim_path(h))]
-    return [h for h in hosts.HOSTS if hosts.installed(h)]
+        return ([h for h in hosts.HOSTS if hosts.installed(h) or os.path.exists(hosts.shim_path(h))]
+                + [h for h in hosts.HOOK_HOSTS if hosts.hook_installed(h) or os.path.exists(hosts.hook_shim_path(h))]
+                + [h for h in plugins.PLUGIN_HOSTS if plugins.installed(h) or os.path.exists(plugins.plugin_path(h))])
+    return ([h for h in hosts.HOSTS if hosts.installed(h)]
+            + [h for h in hosts.HOOK_HOSTS if hosts.hook_installed(h)]
+            + [h for h in plugins.PLUGIN_HOSTS if plugins.installed(h)])
+
+
+def _wire(h, inline, statusline, uninstall):
+    """One host, whichever kind it is. (ok, message)."""
+    if h in hosts.HOOK_HOSTS:
+        return hosts.unwire_hook(h) if uninstall else hosts.wire_hook(h)
+    if h in plugins.PLUGIN_HOSTS:
+        return True, plugins.unwire_plugin(h) if uninstall else plugins.wire_plugin(h)
+    if uninstall:
+        return hosts.unwire(h)
+    return hosts.wire(h, inline=inline, statusline=statusline)
 
 
 def cmd_install(args):
@@ -799,7 +840,7 @@ def cmd_install(args):
         print("only claude is installed here, nothing else to wire")
     failed = False
     for h in targets:
-        ok, message = hosts.wire(h, inline=inline, statusline=statusline)
+        ok, message = _wire(h, inline, statusline, uninstall=False)
         print("  %-8s %s" % (h, message))
         failed = failed or not ok
     return 1 if failed else 0
@@ -817,10 +858,55 @@ def cmd_uninstall(args):
         return 0
     failed = False
     for h in targets:
-        ok, message = hosts.unwire(h)
+        ok, message = _wire(h, None, None, uninstall=True)
         print("  %-8s %s" % (h, message))
         failed = failed or not ok
     return 1 if failed else 0
+
+
+def _hookcard(host):
+    """The envelope for one turn, or None for nothing at all. Same banking as
+    render, so the roster and level are one number on every host.
+    """
+    raw = _stdin_text()
+    session = hosts.hook_session_id(raw, host)
+    st = _load()
+    settings = st["settings"]
+    if settings.get("hidden"):
+        return hosts.hook_envelope(host, None)
+    xp, counts = render.current_xp(st, allow_blocking=False)
+    before = st.get("high_water_xp", 0)
+    event = state_mod.sync(st, xp) if xp else None
+    dirty = bool(event) or st.get("high_water_xp", 0) != before
+    c = state_mod.focused(st)
+    banked = c.get("xp_banked", 0) if c else 0
+    gain, changed = state_mod.session_gain(st, session, banked)
+    stage = metric.stage_for(metric.level_for(banked, settings["xp_max"]))[0] if c else 0
+    show, moved = state_mod.hookcard_turn(st, session, gain, stage, settings.get("hookcard", "changes"))
+    if dirty or changed or session:
+        state_mod.save(st)
+    if not show:
+        return hosts.hook_envelope(host, None)
+    return hosts.hook_envelope(host, render.card_line(st, gain=gain, evolved=bool(event) or moved))
+
+
+def cmd_hookcard(args):
+    """What a host's turn-end hook runs. Never raises and always exits 0: a
+    broken pet must not fail a turn, and a host that parses stdout gets
+    either its envelope or nothing.
+    """
+    host = ""
+    for i, a in enumerate(args):
+        key, eq, val = a.partition("=")
+        if key == "--host":
+            host = val if eq else (args[i + 1] if i + 1 < len(args) else "")
+    try:
+        out = _hookcard(host)
+        if out:
+            sys.stdout.write(out + "\n")
+    except Exception:
+        pass
+    return 0
 
 
 COMMANDS = {
@@ -829,7 +915,7 @@ COMMANDS = {
     "rename": cmd_rename, "retire": cmd_retire, "config": cmd_config,
     "simulate": cmd_simulate, "doctor": cmd_doctor, "sources": cmd_sources,
     "hide": cmd_hide, "show": cmd_show, "update": cmd_update, "snippet": cmd_snippet,
-    "install": cmd_install, "uninstall": cmd_uninstall,
+    "install": cmd_install, "uninstall": cmd_uninstall, "hookcard": cmd_hookcard,
 }
 
 

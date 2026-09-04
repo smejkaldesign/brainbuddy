@@ -1593,7 +1593,8 @@ def test_host_stdin():
         check(isinstance(s["model"], str) and s["model"], "%s model lands as a string" % host)
         check(s["workspace"] == "/x", "%s workspace lands" % host)
         check(isinstance(s["context_used_pct"], float), "%s context percent lands as a float" % host)
-        check(sorted(s) == ["context_used_pct", "host", "model", "session_id", "workspace"], "%s carries exactly the five fields" % host)
+        check(sorted(s) == ["context_used_pct", "host", "model", "session_id", "width", "workspace"], "%s carries exactly the six fields" % host)
+        check(s["width"] == (76 if host == "cursor" else None), "%s width is what the host said, or None" % host)
 
     for label, raw in (("empty", ""), ("not json", "not json"), ("empty object", "{}"), ("a list", "[1, 2]"),
                        ("a bare string", '"hi"'), ("unknown keys", '{"foo": 1}'), ("None", None)):
@@ -1602,6 +1603,9 @@ def test_host_stdin():
               "%s stdin is host unknown with every field None" % label)
     check(hosts.parse_session('{"session_id": "x"}')["host"] == "claude", "bare claude keys read as claude")
     check(hosts.parse_session('{"session_id": 7}')["session_id"] is None, "a non-string id is dropped, not passed on")
+    check(hosts.parse_session('{"render_width_chars": 0}')["width"] is None, "a zero width is no width")
+    check(hosts.parse_session('{"render_width_chars": "80"}')["width"] is None, "a width that isn't a number is no width")
+    check(hosts.parse_session('{"render_width_chars": 80.9}')["width"] == 80, "a width is whole columns")
     check("/x" not in hosts.describe(hosts.parse_session(json.dumps(HOST_PAYLOADS["claude"]))), "doctor's line never carries the workspace path")
     check("unknown schema" in hosts.describe(hosts.parse_session("")), "and calls an unknown shape unknown")
 
@@ -1628,6 +1632,15 @@ def test_host_stdin():
         check(r.returncode == 0 and 0 < len(r.stdout) <= 3, "render --format=plain --width 3 caps the segment")
         r = run(["render", "--format", "html"])
         check(r.returncode == 0 and "Lv" in r.stdout, "a bad format on render falls back rather than blanking the statusline")
+        narrow = dict(HOST_PAYLOADS["cursor"], render_width_chars=6)
+        r = run(["render", "--format", "plain"], json.dumps(narrow))
+        check(r.returncode == 0 and 0 < _visible(r.stdout) <= 6, "cursor's render_width_chars caps render when no --width is given")
+        r = run(["render", "--format", "plain", "--width", "3"], json.dumps(narrow))
+        check(0 < _visible(r.stdout) <= 3, "and --width wins over the payload")
+        r = run(["render", "--format", "plain"], json.dumps(HOST_PAYLOADS["claude"]))
+        check(_visible(r.stdout) > 6, "a payload with no width caps nothing")
+        r = run(["compose", "--format", "plain", "a long bar of host text"], json.dumps(dict(narrow, render_width_chars=14)))
+        check(r.returncode == 0 and r.stdout.strip() and _visible(r.stdout) <= 14, "compose caps the whole line to the host's width")
         r = run(["compose", "--format", "tmux", "BAR"], "{}")
         check("BAR" in r.stdout and "#[" in r.stdout and "\x1b" not in r.stdout, "compose takes the flags ahead of its text")
         r = run(["card", "--width", "abc"])
@@ -1892,7 +1905,7 @@ def test_host_adapters():
             with open(shim) as f:
                 text = f.read()
             check("TERMINALCREATURE_WRAPPING" in text and spec["wrapped"] in text, "%s: the shim guards re-entry and reads its own wrapped file" % host)
-            check(("cli render" if spec["inline"] else "cli compose") in text, "%s: the shim picks the host's default mode" % host)
+            check(("creature render" if spec["inline"] else "creature compose") in text, "%s: the shim picks the host's default mode" % host)
             out = subprocess.run(["bash", shim], env=env, input="{}", capture_output=True, text=True).stdout
             check(previous.split()[-1] in out, "%s: the shim still runs what it wrapped" % host)
 
@@ -2011,12 +2024,15 @@ def test_snippets():
     on_path = snippets.resolve_binary(which=lambda name: found)
     missing = snippets.resolve_binary(state_dir=os.path.join(home, ".claude", "terminalcreature"),
                                       which=lambda name: None)
-    check(on_path["shell"] == "~/.local/bin/terminalcreature", "an entry point under home is written ~-relative")
-    check(missing["shell"] == "env PYTHONPATH=$HOME/.claude/terminalcreature/lib python3 -m terminalcreature.cli",
+    check(on_path["shell"] == '"$HOME/.local/bin/terminalcreature"', "an entry point under home is written home-relative, quoted")
+    check(on_path["argv"] == ["~/.local/bin/terminalcreature"], "and the argv form keeps ~, unquoted")
+    check(missing["shell"] == 'env PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli',
           "no entry point falls back to the installed lib the way the shim runs it")
     check(missing["argv"][1] == "PYTHONPATH=~/.claude/terminalcreature/lib", "and the argv form keeps ~ for hosts that expand it themselves")
     check(snippets.resolve_binary(which=lambda name: "/opt/homebrew/bin/terminalcreature")["shell"] == "/opt/homebrew/bin/terminalcreature",
           "a path outside home is left alone")
+    check(snippets.resolve_binary(which=lambda name: "/opt/my tools/terminalcreature")["shell"] == "'/opt/my tools/terminalcreature'",
+          "and quoted when it needs to be")
 
     formats = {"tmux": "--format tmux", "starship": "--format ansi", "zsh": "--format ansi",
                "fish": "--format ansi", "omp": "plain", "wezterm": "'--format', 'plain'"}
@@ -2173,6 +2189,185 @@ def test_refresh_pokes_tmux():
         shutil.rmtree(home)
 
 
+def test_box_flag():
+    """--box is the opposite of --inline: it puts the creature on the left for a
+    host whose default is the one-line segment. Neither flag means the host's
+    default, both at once is a mistake to say so about.
+    """
+    print("\nbox flag")
+    import subprocess
+
+    from terminalcreature import hosts
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+    for host in ("cursor", "qwen"):
+        home = tempfile.mkdtemp(prefix="bb-box-")
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+        shim = os.path.join(home, ".claude", "terminalcreature", hosts.REGISTRY[host]["shim"])
+
+        def run(argv):
+            return subprocess.run(cmd + argv, env=env, input="", capture_output=True, text=True)
+
+        def mode():
+            with open(shim) as f:
+                last = f.read().rstrip("\n").split("\n")[-1]
+            return "render" if " render " in last else "compose" if " compose " in last else "?"
+
+        try:
+            r = run(["install", "--host", host, "--box", "--statusline", "echo X"])
+            check(r.returncode == 0 and "creature on the left" in r.stdout and mode() == "compose", "%s: --box writes the compose shim and says so" % host)
+            run(["uninstall", "--host", host])
+            r = run(["install", "--host", host])
+            check(r.returncode == 0 and "segment after it" in r.stdout and mode() == "render", "%s: no flag keeps the host's inline default" % host)
+            r = run(["install", "--host", host, "--box"])
+            check(r.returncode == 0 and "already wired" in r.stdout and mode() == "compose", "%s: --box over a wired host swaps the shim's mode" % host)
+            r = run(["install", "--host", host, "--inline"])
+            check(r.returncode == 0 and mode() == "render", "%s: and --inline swaps it back" % host)
+            for argv in (["--inline", "--box"], ["--box", "--inline"]):
+                r = run(["install", "--host", host] + argv)
+                check(r.returncode == 1 and "opposites" in r.stdout and mode() == "render", "%s: %s is refused and changes nothing" % (host, " ".join(argv)))
+            u = run(["uninstall", "--host", host])
+            check(u.returncode == 0 and not os.path.exists(shim), "%s: uninstall still drops the shim" % host)
+        finally:
+            shutil.rmtree(home)
+
+
+def test_shim_path_fallback():
+    """A pipx-only user has no library under the state dir. The shim then runs
+    the terminalcreature on PATH; with the library present it runs that,
+    whatever is on PATH. Neither present renders nothing rather than an error.
+    """
+    print("\nshim path fallback")
+    import json
+    import subprocess
+
+    from terminalcreature import hosts
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+    home = tempfile.mkdtemp(prefix="bb-fallback-")
+    bindir = tempfile.mkdtemp(prefix="bb-fakebin-")
+    marker = os.path.join(home, "ran-from-path")
+    try:
+        exe = os.path.join(bindir, "terminalcreature")
+        with open(exe, "w") as f:
+            f.write('#!/bin/sh\ntouch "%s"\nPYTHONPATH="%s" exec "%s" -m terminalcreature.cli "$@"\n' % (marker, repo, sys.executable))
+        os.chmod(exe, 0o755)
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+        env.pop("TERMINALCREATURE_FORMAT", None)
+        on_path = dict(env, PATH=bindir + os.pathsep + env["PATH"])
+        subprocess.run(cmd + ["new"], env=env, capture_output=True)
+        subprocess.run(cmd + ["hatch", "--from-zero", "--name", "Zask"], env=env, capture_output=True)
+        state = os.path.join(home, ".claude", "terminalcreature")
+        lib = os.path.join(state, "lib")
+        for host in ("cursor", "claude"):
+            r = subprocess.run(cmd + ["install", "--host", host, "--statusline", "echo HOSTBAR"], env=env, capture_output=True, text=True)
+            check(r.returncode == 0, "%s: wires without a library under the state dir" % host)
+        check(not os.path.isdir(lib), "no library was installed along the way")
+        payload = json.dumps(HOST_PAYLOADS["cursor"])
+        # the inline segment says the level, the compose column says the name
+        drawn = {"cursor": "Lv0", "claude": "Zask"}
+        for host in ("cursor", "claude"):
+            shim = os.path.join(state, hosts.REGISTRY[host]["shim"])
+            out = subprocess.run(["bash", shim], env=on_path, input=payload, capture_output=True, text=True).stdout
+            check(drawn[host] in out and "HOSTBAR" in out and os.path.exists(marker), "%s shim: no library, so the terminalcreature on PATH draws the creature" % host)
+            if os.path.exists(marker):
+                os.remove(marker)
+            out = subprocess.run(["bash", shim], env=env, input=payload, capture_output=True, text=True)
+            check(out.returncode == 0 and "HOSTBAR" in out.stdout and drawn[host] not in out.stdout and not out.stderr,
+                  "%s shim: no library and nothing on PATH keeps the wrapped bar, quietly" % host)
+        shutil.copytree(os.path.join(repo, "terminalcreature"), os.path.join(lib, "terminalcreature"),
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        for host in ("cursor", "claude"):
+            shim = os.path.join(state, hosts.REGISTRY[host]["shim"])
+            out = subprocess.run(["bash", shim], env=on_path, input=payload, capture_output=True, text=True).stdout
+            check(drawn[host] in out and not os.path.exists(marker), "%s shim: with the library here it runs that, not PATH" % host)
+    finally:
+        shutil.rmtree(home)
+        shutil.rmtree(bindir)
+
+
+def test_home_with_spaces():
+    """A home like /tmp/my home: every snippet's command line still runs through
+    sh, the argv surfaces still exec, and the command an adapter writes into a
+    settings file still finds the shim. Nothing written carries the expanded home.
+    """
+    print("\nhome with spaces")
+    import json
+    import re
+    import subprocess
+
+    from terminalcreature import hosts, snippets
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+    home = tempfile.mkdtemp(prefix="tc31 spaced ")
+    real_home = os.environ.get("HOME")
+    try:
+        check(" " in home, "the scratch home has a space in it")
+        state = os.path.join(home, ".claude", "terminalcreature")
+        shutil.copytree(os.path.join(repo, "terminalcreature"), os.path.join(state, "lib", "terminalcreature"),
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        bindir = os.path.join(home, ".local", "bin")
+        os.makedirs(bindir)
+        exe = os.path.join(bindir, "terminalcreature")
+        with open(exe, "w") as f:
+            f.write('#!/bin/sh\nPYTHONPATH="%s" exec "%s" -m terminalcreature.cli "$@"\n' % (repo, sys.executable))
+        os.chmod(exe, 0o755)
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1", PATH=bindir + os.pathsep + os.environ["PATH"])
+        env.pop("TERMINALCREATURE_FORMAT", None)
+        env.pop("TMUX", None)
+        subprocess.run(cmd + ["new"], env=env, capture_output=True)
+        subprocess.run(cmd + ["hatch", "--from-zero", "--name", "Zask"], env=env, capture_output=True)
+
+        # resolve_binary reads ~ from the process, so the scratch home is home for a moment
+        os.environ["HOME"] = home
+        on_path = snippets.resolve_binary(which=lambda name: exe)
+        missing = snippets.resolve_binary(state_dir=state, which=lambda name: None)
+        for binary, label in ((on_path, "on PATH"), (missing, "lib fallback")):
+            for key in ("shell", "argv"):
+                check(home not in str(binary[key]), "%s %s form carries no expanded home" % (label, key))
+            lines = {
+                "tmux": re.search(r"status-right '#\((.*)\) %H:%M'", snippets.render_snippet("tmux", binary=binary)),
+                "starship": re.search(r"^command = '(.*)'$", snippets.render_snippet("starship", binary=binary), re.M),
+                "zsh": re.search(r"^RPROMPT='\$\((.*)\)'$", snippets.render_snippet("zsh", binary=binary), re.M),
+                "fish": re.search(r"^    (.*)$", snippets.render_snippet("fish", binary=binary), re.M),
+            }
+            for surface, m in lines.items():
+                check(m is not None, "%s (%s) has a command line to run" % (surface, label))
+                if m is None:
+                    continue
+                r = subprocess.run(["sh", "-c", m.group(1)], env=env, input="{}", capture_output=True, text=True)
+                check(r.returncode == 0 and "Lv0" in r.stdout, "%s (%s) command line renders the creature through sh" % (surface, label))
+            argv = [p.replace("~", home, 1) if "~/" in p else p for p in binary["argv"]]
+            r = subprocess.run(argv + ["render", "--format", "plain"], env=env, input="{}", capture_output=True, text=True)
+            check(r.returncode == 0 and "Lv0" in r.stdout, "the argv form (%s) execs with each piece whole" % label)
+
+        payload = json.dumps(HOST_PAYLOADS["cursor"])
+        drawn = {"cursor": "Lv0", "copilot": "Zask"}
+        for host in ("cursor", "copilot"):
+            r = subprocess.run(cmd + ["install", "--host", host, "--statusline", "echo HOSTBAR"], env=env, capture_output=True, text=True)
+            check(r.returncode == 0, "%s: wires under a home with spaces" % host)
+            with open(os.path.join(home, hosts.REGISTRY[host]["settings"][2:])) as f:
+                command = hosts.get_command(json.load(f), host)
+            check(command.startswith("'") and command.endswith("'"), "%s: the command in settings is quoted" % host)
+            check(hosts.is_ours(command, host), "%s: and still reads as ours" % host)
+            r = subprocess.run(["sh", "-c", command], env=env, input=payload, capture_output=True, text=True)
+            check(r.returncode == 0 and drawn[host] in r.stdout and "HOSTBAR" in r.stdout, "%s: the settings command runs the shim through sh" % host)
+            r = subprocess.run(cmd + ["install", "--host", host], env=env, capture_output=True, text=True)
+            check("already wired" in r.stdout, "%s: a re-install sees the quoted command as its own" % host)
+            u = subprocess.run(cmd + ["uninstall", "--host", host], env=env, capture_output=True, text=True)
+            with open(os.path.join(home, hosts.REGISTRY[host]["settings"][2:])) as f:
+                check(u.returncode == 0 and hosts.get_command(json.load(f), host) == "echo HOSTBAR", "%s: uninstall puts the command back" % host)
+    finally:
+        if real_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = real_home
+        shutil.rmtree(home)
+
+
 def test_host_settings_edge_cases():
     """The bytes hosts and editors actually produce: a byte order mark, a comma
     inside a string value, a private file mode. None of them may refuse the
@@ -2224,8 +2419,515 @@ def test_host_settings_edge_cases():
         shutil.rmtree(empty)
 
 
+def test_plugin_hosts():
+    """opencode and amp get a generated JS plugin instead of a hook entry. Wire
+    writes it under the host's plugin dir, rewiring is a no-op, unwire takes
+    only our file and leaves a neighbour's plugin alone. Runs in-process on a
+    temp HOME so the real plugin dirs are never touched.
+    """
+    print("\nplugin hosts")
+    import json
+    import subprocess
+    from terminalcreature import plugins, snippets
+
+    home = tempfile.mkdtemp(prefix="bb-plugin-")
+    real_home, real_path = os.environ.get("HOME"), os.environ.get("PATH", "")
+    # the pipx case: an entry point under this HOME, first on PATH
+    fake_bin = os.path.join(home, ".local", "bin")
+    os.makedirs(fake_bin)
+    with open(os.path.join(fake_bin, "terminalcreature"), "w") as f:
+        f.write("#!/bin/sh\nexit 0\n")
+    os.chmod(os.path.join(fake_bin, "terminalcreature"), 0o755)
+    os.environ["HOME"] = home
+    os.environ["PATH"] = fake_bin + os.pathsep + real_path
+    # the lib fallback spells the state dir, which was expanded from the real HOME at import
+    real_state = state_mod.STATE_DIR
+    state_mod.STATE_DIR = os.path.join(home, ".claude", "terminalcreature")
+    try:
+        check(plugins.PLUGIN_HOSTS == ("opencode", "amp"), "two plugin hosts")
+        for host in plugins.PLUGIN_HOSTS:
+            check(plugins.plugin_status(host) == "not installed", "%s: no config dir means not installed" % host)
+        for line in plugins.doctor_lines():
+            check("not installed" in line and "/" not in line, "doctor line carries no path: %r" % line)
+
+        for host in plugins.PLUGIN_HOSTS:
+            spec = plugins.REGISTRY[host]
+            os.makedirs(plugins.host_dir(host))
+            check(plugins.plugin_status(host) == "not wired", "%s: dir present, not wired" % host)
+            path = plugins.plugin_path(host)
+            check(path.startswith(os.path.join(home, ".config")), "%s: plugin path sits under the temp HOME" % host)
+            # a neighbour the user wrote, in the same plugin dir
+            neighbour = os.path.join(plugins.host_dir(host), "plugins", "mine.js")
+            os.makedirs(os.path.dirname(neighbour), exist_ok=True)
+            with open(neighbour, "w") as f:
+                f.write("export const Mine = async () => ({})\n")
+
+            m = plugins.wire_plugin(host)
+            check(m.startswith("wrote ") and spec["file"] in m, "%s: wire writes and names the file (%s)" % (host, m))
+            check(os.path.isfile(path), "%s: file exists" % host)
+            check(plugins.plugin_status(host) == "wired", "%s: status wired" % host)
+            with open(path) as f:
+                text = f.read()
+            check(text.startswith("// generated by terminalcreature. safe to delete"), "%s: header says generated and safe to delete" % host)
+            check("hookcard --host %s" % host in text, "%s: runs hookcard for the host" % host)
+            check("/Users/" not in text and "/home/" not in text and home not in text, "%s: no absolute home path in the file" % host)
+            check("$HOME" in text, "%s: binary spelled with $HOME" % host)
+            check("try {" in text and "catch" in text, "%s: handler never throws" % host)
+            check("5000" in text, "%s: 5 s bound" % host)
+
+            before = os.stat(path).st_mtime_ns
+            m2 = plugins.wire_plugin(host)
+            check(m2.startswith("already wired"), "%s: re-wire is a no-op (%s)" % (host, m2))
+            check(os.stat(path).st_mtime_ns == before, "%s: re-wire didn't rewrite the file" % host)
+
+            # an explicit binary goes in as given, spelled with $HOME
+            m3 = plugins.wire_plugin(host, binary="~/bin/tc")
+            with open(path) as f:
+                custom = f.read()
+            check(m3.startswith("updated ") and '"$HOME/bin/tc hookcard --host %s"' % host in custom,
+                  "%s: explicit ~ binary becomes $HOME (%s)" % (host, m3))
+            check('"~/' not in custom, "%s: no tilde left in the command" % host)
+
+            for line in plugins.doctor_lines():
+                if line.strip().startswith(host):
+                    check("card, wired" in line and "/" not in line, "%s: doctor says card, wired with no path: %r" % (host, line))
+
+            u = plugins.unwire_plugin(host)
+            check(u.startswith("removed "), "%s: unwire removes (%s)" % (host, u))
+            check(not os.path.exists(path), "%s: our file is gone" % host)
+            check(os.path.isfile(neighbour), "%s: the neighbour's plugin is untouched" % host)
+            if spec["owned"]:
+                check(not os.path.exists(os.path.join(plugins.host_dir(host), spec["owned"])), "%s: our empty directory is gone too" % host)
+            check(plugins.plugin_status(host) == "not wired", "%s: status back to not wired" % host)
+            check(plugins.unwire_plugin(host) == "wasn't wired", "%s: unwire twice is harmless" % host)
+
+            # a file at our path that isn't ours is neither overwritten nor removed
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write("export const Theirs = async () => ({})\n")
+            m4 = plugins.wire_plugin(host)
+            with open(path) as f:
+                kept = f.read()
+            check("isn't ours" in m4 and kept.startswith("export const Theirs"), "%s: a stranger's file at our path is left alone" % host)
+            check(plugins.plugin_status(host) == "not wired", "%s: and doesn't count as wired" % host)
+            check(plugins.unwire_plugin(host) == "wasn't wired" and os.path.exists(path), "%s: unwire won't remove it either" % host)
+            os.remove(path)
+
+        # syntax: node parses the generated modules as esm, bun as itself
+        node, bun = shutil.which("node"), shutil.which("bun")
+        checks = tempfile.mkdtemp(prefix="bb-plugin-syntax-")
+        for host in plugins.PLUGIN_HOSTS:
+            text = plugins.render(host)
+            expect = json.dumps("%s hookcard --host %s" % (plugins._home_form(snippets.resolve_binary()["shell"]), host))
+            check("$HOME/.local/bin/terminalcreature" in expect and expect in text,
+                  "%s: entry point on PATH becomes $HOME/.local/bin" % host)
+            os.environ["PATH"] = "/usr/bin:/bin"
+            fallback = plugins.render(host)
+            os.environ["PATH"] = fake_bin + os.pathsep + real_path
+            os.environ["PATH"] = "/usr/bin:/bin"
+            expect = json.dumps("%s hookcard --host %s" % (plugins._home_form(snippets.resolve_binary()["shell"]), host))
+            os.environ["PATH"] = fake_bin + os.pathsep + real_path
+            check("PYTHONPATH=" in expect and "$HOME/.claude/terminalcreature/lib" in expect and expect in fallback,
+                  "%s: no entry point means the lib fallback, spelled with $HOME" % host)
+            check(all("/Users/" not in x and "/home/" not in x for x in (text, fallback)), "%s: template carries no absolute home path" % host)
+            check("\u2014" not in text, "%s: no em dash in the template" % host)
+            esm = os.path.join(checks, host + ".mjs")
+            with open(esm, "w") as f:
+                f.write(text)
+            if node:
+                r = subprocess.run([node, "--check", esm], capture_output=True, text=True)
+                check(r.returncode == 0, "%s: node --check passes (%s)" % (host, r.stderr.strip()[-120:]))
+            else:
+                print("  skip node --check for %s: node not on PATH" % host)
+            if bun:
+                r = subprocess.run([bun, "build", "--no-bundle", esm], capture_output=True, text=True)
+                check(r.returncode == 0, "%s: bun build --no-bundle passes (%s)" % (host, r.stderr.strip()[-120:]))
+            else:
+                print("  skip bun check for %s: bun not on PATH" % host)
+        shutil.rmtree(checks)
+    finally:
+        state_mod.STATE_DIR = real_state
+        os.environ["PATH"] = real_path
+        if real_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = real_home
+        shutil.rmtree(home)
+
+
+HOOK_SEEDS = {
+    # one user hook on our event and one on another, in a layout json.dumps would not produce
+    "codex": ('{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo MINE"}]}],'
+              '"SessionEnd":[{"hooks":[{"type":"command","command":"echo BYE"}]}]}}\n'),
+    "gemini": ('{"theme":"x","hooks":{"AfterAgent":[{"hooks":[{"name":"mine","type":"command","command":"echo MINE"}]}],'
+               '"BeforeTool":[{"matcher":"write_.*","hooks":[{"type":"command","command":"echo PRE"}]}]}}\n'),
+    "vibe": '[[hooks]]\nname = "mine"\ntype = "post_agent"\ncommand = "echo MINE"\n\n[[hooks]]\nname = "pre"\ntype = "pre_tool"\nmatch = "bash"\ncommand = "echo PRE"\n',
+    "auggie": ('{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"/x/mine.sh"}]}],'
+               '"PreToolUse":[{"matcher":"launch-process","hooks":[{"type":"command","command":"/x/pre.sh"}]}]}}\n'),
+}
+HOOK_OTHER_EVENT = {"codex": "SessionEnd", "gemini": "BeforeTool", "auggie": "PreToolUse"}
+
+
+def test_hook_hosts():
+    """install --host on a hook host adds one turn-end entry beside whatever
+    hooks the file already holds, hookcard answers in the host's envelope,
+    the cadence keeps it from being spam, and uninstall leaves the file as
+    it was found.
+    """
+    print("\nhook hosts")
+    import json
+    import stat
+    import subprocess
+
+    from terminalcreature import hosts, render
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+
+    def run(env, argv, raw=""):
+        return subprocess.run(cmd + argv, env=env, input=raw, capture_output=True, text=True)
+
+    def make_home():
+        home = tempfile.mkdtemp(prefix="bb-hook-")
+        # the shim looks for the installed lib; point it at the checkout
+        lib = os.path.join(home, ".claude", "terminalcreature", "lib")
+        os.makedirs(lib)
+        os.symlink(os.path.join(repo, "terminalcreature"), os.path.join(lib, "terminalcreature"))
+        return home, dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+
+    def payload(host, sid="s1"):
+        key = "conversation_id" if host == "auggie" else "session_id"
+        return json.dumps({key: sid, "hook_event_name": hosts.HOOK_REGISTRY[host]["event"], "cwd": "/w"})
+
+    for host, seed in HOOK_SEEDS.items():
+        home, env = make_home()
+        try:
+            spec = hosts.HOOK_REGISTRY[host]
+            path = os.path.join(home, spec["config"][2:])
+            os.makedirs(os.path.dirname(path))
+            with open(path, "w") as f:
+                f.write(seed)
+            shim = os.path.join(home, ".claude", "terminalcreature", spec["shim"])
+
+            r = run(env, ["install", "--host", host])
+            check(r.returncode == 0 and host in r.stdout and spec["event"] in r.stdout, "%s: install exits clean, names the host and the event" % host)
+            check(home not in r.stdout, "%s: the install message carries no path" % host)
+            with open(path) as f:
+                text = f.read()
+            if spec["format"] == "toml":
+                check(text.startswith(seed) and hosts.TOML_OPEN in text and hosts.TOML_CLOSE in text and shim in text,
+                      "vibe: the block is appended after the user's tables, which are untouched")
+                check(text.count("[[hooks]]") == 3 and 'type = "post_agent"' in text.split(hosts.TOML_OPEN)[1], "vibe: one post_agent table of ours")
+            else:
+                data = json.loads(text)
+                groups = data["hooks"][spec["event"]]
+                theirs = [h["command"] for g in groups for h in g["hooks"] if "terminalcreature" not in h["command"]]
+                ours = [h for g in groups for h in g["hooks"] if "terminalcreature" in h["command"]]
+                check(len(ours) == 1 and ours[0]["command"] == shim and ours[0]["type"] == "command", "%s: one entry of ours, pointing at the shim" % host)
+                check(theirs == [json.loads(seed)["hooks"][spec["event"]][0]["hooks"][0]["command"]], "%s: the user's hook on the same event is still there, first" % host)
+                check(data["hooks"][HOOK_OTHER_EVENT[host]] == json.loads(seed)["hooks"][HOOK_OTHER_EVENT[host]], "%s: the user's hook on another event is untouched" % host)
+                check(("name" in ours[0]) == spec["name"], "%s: the entry carries a name only when the host has one" % host)
+                if host == "gemini":
+                    check(data["theme"] == "x", "gemini: sibling settings survive")
+            with open(path + ".pre-terminalcreature.bak") as f:
+                check(f.read() == seed, "%s: the backup is the raw file" % host)
+            check(os.stat(shim).st_mode & stat.S_IXUSR, "%s: the shim is executable" % host)
+            with open(shim) as f:
+                shim_text = f.read()
+            check("TERMINALCREATURE_WRAPPING" in shim_text and "hookcard --host %s" % host in shim_text, "%s: the shim guards re-entry and names its host" % host)
+
+            r2 = run(env, ["install", "--host", host])
+            with open(path) as f:
+                check(r2.returncode == 0 and "already wired" in r2.stdout and f.read() == text, "%s: re-running is a no-op that says so" % host)
+
+            out = subprocess.run(["bash", shim], env=env, input=payload(host), capture_output=True, text=True)
+            reply = json.loads(out.stdout)
+            check(out.returncode == 0 and isinstance(reply.get(spec["field"]), str) and "buddy" in reply[spec["field"]],
+                  "%s: the shim answers with the envelope field %s" % (host, spec["field"]))
+            check(home not in out.stdout and "/" not in reply[spec["field"]].replace("/creature", ""), "%s: the card carries no path" % host)
+
+            d = run(env, ["doctor"])
+            check("%-8s %-19s card, wired" % (host, spec["label"]) in d.stdout, "%s: doctor says card, wired" % host)
+
+            u = run(env, ["uninstall", "--host", host])
+            with open(path) as f:
+                check(u.returncode == 0 and f.read() == seed, "%s: uninstall leaves the file byte for byte as found" % host)
+            check(not os.path.exists(shim), "%s: and drops the shim" % host)
+            d = run(env, ["doctor"])
+            check("%-8s %-19s card, not wired" % (host, spec["label"]) in d.stdout, "%s: doctor now says card, not wired" % host)
+
+            # edited since install: only our entry comes out, their edit stays
+            run(env, ["install", "--host", host])
+            with open(path, "a" if spec["format"] == "toml" else "r+") as f:
+                if spec["format"] == "toml":
+                    f.write('\n[[hooks]]\nname = "later"\ntype = "post_tool"\nmatch = "*"\ncommand = "echo L"\n')
+                else:
+                    data = json.load(f)
+                    data["later"] = True
+                    f.seek(0)
+                    f.truncate()
+                    json.dump(data, f)
+            u = run(env, ["uninstall", "--host", host])
+            with open(path) as f:
+                after = f.read()
+            if spec["format"] == "toml":
+                check(u.returncode == 0 and "terminalcreature" not in after and after.startswith(seed) and 'name = "later"' in after,
+                      "vibe: a file edited after install loses only our block")
+            else:
+                got = json.loads(after)
+                check(u.returncode == 0 and got["later"] is True and not hosts._has_our_hook(got, host)
+                      and len(got["hooks"][spec["event"]]) == 1 and HOOK_OTHER_EVENT[host] in got["hooks"],
+                      "%s: a file edited after install loses only our entry" % host)
+        finally:
+            shutil.rmtree(home)
+
+    # a config file that isn't there yet is created, and removed again when it held only ours
+    home, env = make_home()
+    try:
+        os.makedirs(os.path.join(home, ".codex"))
+        r = run(env, ["install", "--host", "codex"])
+        path = os.path.join(home, ".codex", "hooks.json")
+        with open(path) as f:
+            check(r.returncode == 0 and hosts._has_our_hook(json.load(f), "codex"), "codex: a missing hooks.json is created around our entry")
+        u = run(env, ["uninstall", "--host", "codex"])
+        check(u.returncode == 0 and not os.path.exists(path), "codex: and removed again when nothing else went in it")
+    finally:
+        shutil.rmtree(home)
+
+    # the cadence, against a hatched buddy
+    home, env = make_home()
+    try:
+        os.makedirs(os.path.join(home, ".codex"))
+        run(env, ["new", "--yes"])
+        run(env, ["hatch", "--from-zero", "--name", "Kein"])
+        state_path = os.path.join(home, ".claude", "terminalcreature", "state.json")
+
+        def turn(host="codex", sid="s1"):
+            return run(env, ["hookcard", "--host", host], payload(host, sid)).stdout
+
+        def bump(xp):
+            with open(state_path) as f:
+                st = json.load(f)
+            st["creatures"][0]["xp_banked"] = xp
+            with open(state_path, "w") as f:
+                json.dump(st, f)
+
+        first = json.loads(turn())
+        check("Kein" in first["systemMessage"] and "xp" not in first["systemMessage"], "changes: the first turn shows the card, with no counter yet")
+        check(turn() == "", "changes: a turn where nothing moved prints nothing on codex")
+        check(turn("gemini") == "{}\n", "changes: and an empty object on gemini, whose stdout is parsed")
+        quiet = [turn() for _ in range(6)]
+        check(all(q == "" for q in quiet), "changes: it stays quiet through the ninth turn")
+        tenth = turn()
+        check("Kein" in tenth, "changes: the tenth turn shows even with nothing moved")
+        check(turn() == "", "changes: then quiet again")
+        bump(40)
+        moved = json.loads(turn())
+        check("+40 xp" in moved["systemMessage"], "changes: xp landing this session shows the card with the counter")
+        check(turn() == "", "changes: the same counter again is quiet")
+        bump(400)
+        evolved = json.loads(turn())["systemMessage"]
+        check("evolved into" in evolved and "+400 xp" in evolved, "changes: a stage change shows the evolution")
+        check(len(evolved) < 80 and "\033" not in evolved, "the card is one plain line under 80 columns")
+        with open(state_path) as f:
+            row = json.load(f)["sessions"]["s1"]
+        check(row["turns"] == 14 and row["shown_gain"] == 400, "the turn counter and last-shown mark live in the session row")
+        other = json.loads(turn(sid="s2"))["systemMessage"]
+        check("Kein" in other and "xp" not in other, "another session starts its own count at +0")
+
+        r = run(env, ["config", "hookcard", "always"])
+        check(r.returncode == 0 and all("Kein" in turn() for _ in range(3)), "always: every turn shows")
+        r = run(env, ["config", "hookcard", "off"])
+        check(r.returncode == 0 and turn() == "" and turn("gemini") == "{}\n", "off: nothing on codex, an empty object on gemini")
+        r = run(env, ["config", "hookcard", "sometimes"])
+        check(r.returncode == 1 and "always, changes, off" in r.stdout, "a bad cadence is refused with the choices")
+        run(env, ["config", "hookcard", "changes"])
+        bump(500)
+        plain = run(env, ["hookcard", "--host", "opencode"], payload("codex", "o1")).stdout
+        check("Kein Lv" in plain and "{" not in plain and plain.count("\n") == 1, "opencode gets the bare line, no JSON")
+        # the plugins send exactly this and read one line back, or nothing
+        amp = run(env, ["hookcard", "--host", "amp"], '{"session_id": "a1"}').stdout
+        check("Kein Lv" in amp and "{" not in amp and amp.count("\n") == 1, "amp's plugin payload gets the bare line")
+        check(run(env, ["hookcard", "--host", "amp"], '{"session_id": "a1"}').stdout == "", "and a quiet turn prints nothing at all")
+        g = run(env, ["hookcard", "--host", "codex"], "not json at all")
+        check(g.returncode == 0, "garbage on stdin exits 0")
+        g = run(env, ["hookcard"], "")
+        check(g.returncode == 0, "no host and no stdin exits 0")
+        run(env, ["hide"])
+        check(turn(sid="s3") == "" and turn("gemini", "s3") == "{}\n", "hidden means a quiet envelope on every host")
+        run(env, ["show"])
+    finally:
+        shutil.rmtree(home)
+
+    # --host all on a machine with only ~/.codex
+    home, env = make_home()
+    try:
+        os.makedirs(os.path.join(home, ".codex"))
+        r = run(env, ["install", "--host", "all"])
+        with open(os.path.join(home, ".codex", "hooks.json")) as f:
+            check(r.returncode == 0 and "codex" in r.stdout and "hookcard-codex.sh" in f.read(), "all: wires codex when ~/.codex is here")
+        check("gemini" not in r.stdout and "vibe" not in r.stdout, "all: and says nothing about hook hosts that aren't")
+        u = run(env, ["uninstall", "--host", "all"])
+        check(u.returncode == 0 and "codex" in u.stdout and not os.path.exists(os.path.join(home, ".codex", "hooks.json")), "all: uninstall undoes codex")
+        r = run(env, ["install", "--host", "nope"])
+        check(r.returncode == 1 and "codex" in r.stdout and "opencode" in r.stdout, "an unknown host is refused with the hook and plugin hosts listed")
+    finally:
+        shutil.rmtree(home)
+
+    # the pieces on their own
+    check(hosts.hook_envelope("vibe", "x") == '{"system_message": "x"}' and hosts.hook_envelope("vibe", None) == "", "vibe's envelope and silence")
+    check(hosts.hook_envelope("amp", "x") == "x" and hosts.hook_envelope("amp", None) == "", "amp gets bare text")
+    check(hosts.hook_session_id('{"conversation_id": "c1"}', "auggie") == "c1", "auggie's conversation id is the session")
+    saved = {k: os.environ.pop(k) for k in ("GEMINI_SESSION_ID", "AUGMENT_CONVERSATION_ID") if k in os.environ}
+    try:
+        check(hosts.hook_session_id("", "codex") is None and hosts.hook_session_id("[1]", "codex") is None, "no id anywhere is None")
+        os.environ["GEMINI_SESSION_ID"] = "g1"
+        check(hosts.hook_session_id("{}", "gemini") == "g1", "the environment is the fallback for a payload without an id")
+    finally:
+        os.environ.pop("GEMINI_SESSION_ID", None)
+        os.environ.update(saved)
+    st = state_mod.default_state()
+    check(state_mod.hookcard_turn(st, None, 0, 1, "changes") == (True, False), "no session id shows rather than counting")
+    check(state_mod.hookcard_turn(st, "q", 5, 1, "off") == (False, False), "off never shows")
+    st = state_mod.default_state()
+    c = state_mod.create(st, name="Longnameislongnameislong")
+    state_mod.reveal(st)
+    c["xp_banked"] = 5000
+    line = render.card_line(st, gain=9999, evolved=True)
+    check(len(line) < 80 and "\033" not in line and "evolved into" in line, "a long name, a big counter and an evolution still fit in one line")
+
+
+def test_hook_host_edges():
+    """The shapes a hook config can be in that wire must refuse rather than
+    overwrite, the bytes uninstall must give back, the quoting each host's
+    runner needs, and --host all reaching the plugin hosts. The home has a
+    space in it, since that is what every quoting rule is for.
+    """
+    print("\nhook host edges")
+    import json
+    import shlex
+    import subprocess
+
+    from terminalcreature import hosts
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+
+    def make_home(prefix):
+        home = tempfile.mkdtemp(prefix=prefix)
+        lib = os.path.join(home, ".claude", "terminalcreature", "lib")
+        os.makedirs(lib)
+        os.symlink(os.path.join(repo, "terminalcreature"), os.path.join(lib, "terminalcreature"))
+        return home, dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+
+    def run(env, argv, raw=""):
+        return subprocess.run(cmd + argv, env=env, input=raw, capture_output=True, text=True)
+
+    def sh(env, command, raw, direct=False):
+        argv = [command] if direct else ["sh", "-c", command]
+        r = subprocess.run(argv, env=env, input=raw, capture_output=True, text=True)
+        try:
+            return r.returncode == 0 and bool(json.loads(r.stdout).get("systemMessage") or json.loads(r.stdout).get("system_message"))
+        except ValueError:
+            return False
+
+    def read(path):
+        with open(path, "rb") as f:
+            return f.read()
+
+    def write(path, data):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
+
+    home, env = make_home("bb hook edge ")
+    try:
+        state = os.path.join(home, ".claude", "terminalcreature")
+        codex = os.path.join(home, ".codex", "hooks.json")
+        for seed, what in ((b'{"hooks": "keep me"}', '"hooks"'), (b'{"hooks": {"Stop": {"keep": 1}}}', '"hooks.Stop"')):
+            write(codex, seed)
+            r = run(env, ["install", "--host", "codex"])
+            check(r.returncode == 1 and what in r.stdout and read(codex) == seed, "codex: %s in the wrong shape is refused and the file untouched" % what)
+            check(not os.path.exists(os.path.join(state, "hookcard-codex.sh")), "codex: and no shim is left behind")
+        theirs = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "~/bin/terminalcreature-notify.sh"}]}]}}
+        write(codex, json.dumps(theirs).encode())
+        r = run(env, ["install", "--host", "codex"])
+        data = json.loads(read(codex))
+        check(r.returncode == 0 and len(data["hooks"]["Stop"]) == 2, "codex: a hook of the user's that mentions terminalcreature is not taken for ours")
+        command = data["hooks"]["Stop"][1]["hooks"][0]["command"]
+        shim = os.path.join(state, "hookcard-codex.sh")
+        check(command == shlex.quote(shim) and command != shim, "codex: the command is quoted for the shell codex hands it to")
+        check(sh(env, command, '{"session_id": "q1"}'), "codex: and runs through sh -c from a home with a space")
+        u = run(env, ["uninstall", "--host", "codex"])
+        check(u.returncode == 0 and json.loads(read(codex)) == theirs, "codex: uninstall keeps the look-alike hook")
+        check(not os.path.exists(codex + ".pre-terminalcreature.bak"), "codex: uninstall takes the backup with it")
+
+        run(env, ["install", "--host", "auggie"])
+        aug = json.loads(read(os.path.join(home, ".augment", "settings.json")))
+        command = aug["hooks"]["Stop"][0]["hooks"][0]["command"]
+        check(command == os.path.join(state, "hookcard-auggie.sh") and " " in command, "auggie: the command is the bare path, since auggie execs the file")
+        check(sh(env, command, '{"conversation_id": "a1"}', direct=True), "auggie: which runs from a home with a space")
+
+        gemini = os.path.join(home, ".gemini", "settings.json")
+        seed = b'{\n  // mine\n  "theme": "x"\n}\n'
+        write(gemini, seed)
+        run(env, ["install", "--host", "gemini"])
+        check(json.loads(read(gemini))["hooks"]["AfterAgent"][0]["matcher"] == "*", "gemini: our group carries the documented match-all")
+        run(env, ["uninstall", "--host", "gemini"])
+        check(read(gemini) == seed, "gemini: the first uninstall restores the comment")
+        seed = b'{\n  // mine, edited since\n  "theme": "x"\n}\n'
+        write(gemini, seed)
+        run(env, ["install", "--host", "gemini"])
+        run(env, ["uninstall", "--host", "gemini"])
+        check(read(gemini) == seed, "gemini: a comment edited between two wires survives the second uninstall")
+
+        vibe = os.path.join(home, ".vibe", "hooks.toml")
+        for label, seed in (("no trailing newline", b'[[hooks]]\nname = "mine"\ntype = "post_agent"\ncommand = "echo hi"'),
+                            ("a byte order mark", b'\xef\xbb\xbf[[hooks]]\nname = "mine"\ntype = "post_agent"\ncommand = "echo hi"\n')):
+            write(vibe, seed)
+            r = run(env, ["install", "--host", "vibe"])
+            wired = read(vibe)
+            check(r.returncode == 0 and wired.startswith(seed) and hosts.TOML_CLOSE.encode() in wired, "vibe: %s: the file is kept whole in front of our block" % label)
+            u = run(env, ["uninstall", "--host", "vibe"])
+            check(u.returncode == 0 and read(vibe) == seed, "vibe: %s: uninstall gives the bytes back" % label)
+        write(vibe, b"")
+        run(env, ["install", "--host", "vibe"])
+        line = [l for l in read(vibe).decode().splitlines() if l.startswith("command = ")][0]
+        check(sh(env, json.loads(line[len("command = "):]), '{"session_id": "v1"}'), "vibe: the command runs through sh -c from a home with a space")
+        write(vibe, b'[[hooks]]\nname = "x"\n' + hosts.TOML_OPEN.encode() + b'\n[[hooks]]\nname = "terminalcreature"\n')
+        r = run(env, ["install", "--host", "vibe"])
+        check(r.returncode == 1 and "end marker" in r.stdout, "vibe: a begin marker with no end is refused, not trusted")
+        check("card, not wired" in [l for l in run(env, ["doctor"]).stdout.splitlines() if l.strip().startswith("vibe")][0], "vibe: and doctor doesn't call it wired")
+    finally:
+        shutil.rmtree(home)
+
+    home, env = make_home("bb-hook-all-")
+    try:
+        for d in (".codex", ".config/opencode", ".config/amp"):
+            os.makedirs(os.path.join(home, d))
+        r = run(env, ["install", "--host", "all"])
+        oc = os.path.join(home, ".config", "opencode", "plugins", "terminalcreature.js")
+        am = os.path.join(home, ".config", "amp", "plugins", "terminalcreature", "index.js")
+        check(r.returncode == 0 and os.path.exists(oc) and os.path.exists(am) and "opencode" in r.stdout and "amp" in r.stdout,
+              "all: wires the plugin hosts whose config dir is here")
+        check("gemini" not in r.stdout and "vibe" not in r.stdout, "all: and skips the card hosts that aren't")
+        u = run(env, ["uninstall", "--host", "all"])
+        check(u.returncode == 0 and not os.path.exists(oc) and not os.path.exists(am) and "codex" in u.stdout, "all: uninstall takes both plugin files and the hook")
+    finally:
+        shutil.rmtree(home)
+
+    cursor = ('{"session_id": "w", "model": {"display_name": "m"}, "workspace": {"current_dir": "/x"}, '
+              '"context_window": {"used_percentage": 1}, "render_width_chars": %s}')
+    check(hosts.parse_session(cursor % "Infinity")["width"] is None and hosts.parse_session(cursor % "NaN")["width"] is None,
+          "an infinite or nan width is no width, not a crash")
+    check(hosts.parse_session(cursor % "1e9")["width"] == 10 ** 9 and hosts.parse_session(cursor % "0.5")["width"] is None,
+          "a finite width is a whole number, and under one is none")
+
+
 if __name__ == "__main__":
     test_metric()
+    test_hook_hosts()
+    test_hook_host_edges()
     test_snippets()
     test_tmux_plugin()
     test_refresh_pokes_tmux()
@@ -2235,6 +2937,10 @@ if __name__ == "__main__":
     test_host_stdin()
     test_host_adapters()
     test_host_settings_edge_cases()
+    test_plugin_hosts()
+    test_box_flag()
+    test_shim_path_fallback()
+    test_home_with_spaces()
     test_update_chip()
     test_hatch_naming()
     test_refresh_never_reverts_concurrent_writes()

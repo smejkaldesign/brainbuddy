@@ -82,30 +82,38 @@ $ terminalcreature hatch
 
 ## Works with
 
-One creature, any terminal, any agent. It lives in an agent's own statusline where the agent has one, and in tmux or your prompt everywhere else. XP comes from whichever coding agents have written memory on this machine, not just the one you're looking at.
+One creature, any terminal, any agent. It lives in an agent's own statusline where the agent has one, shows up as a one-line card after each turn where the agent has a hook or plugin channel instead, and draws in tmux or your prompt everywhere else. XP comes from whichever coding agents have written memory on this machine, not just the one you're looking at.
 
-| Agent | Native statusline | Prompt or tmux | Feeds XP |
-| :--- | :---: | :---: | :---: |
-| Claude Code | ✓ | ✓ | ✓ |
-| Cursor CLI | ✓ | ✓ | ✓ |
-| GitHub Copilot CLI | ✓ | ✓ | ✓ |
-| Qwen Code | ✓ | ✓ | ✓ |
-| Factory Droid | ✓ | ✓ | ✓ |
-| Codex CLI | – ¹ | ✓ | ✓ |
-| Gemini CLI | – ¹ | ✓ | ✓ |
-| opencode | – ¹ | ✓ | ✓ |
-| Amp | – ¹ | ✓ | ✓ |
-| Goose | – ¹ | ✓ | ✓ |
-| Continue | – | ✓ | ✓ |
-| Kiro | – | ✓ | ✓ |
-| Cline | – | ✓ | ✓ |
-| Crush | – | ✓ | ✓ |
-| aider | – | ✓ | – |
-| Warp | – | ✓ | – |
-
-<sub>¹ No statusline to wire yet, so the creature lives in tmux or the prompt. A hooks card is coming in 3.1.</sub>
+| Agent | Native statusline | Turn-end card | Prompt or tmux | Feeds XP |
+| :--- | :---: | :---: | :---: | :---: |
+| Claude Code | ✓ | – | ✓ | ✓ |
+| Cursor CLI | ✓ | – | ✓ | ✓ |
+| GitHub Copilot CLI | ✓ | – | ✓ | ✓ |
+| Qwen Code | ✓ | – | ✓ | ✓ |
+| Factory Droid | ✓ | – | ✓ | ✓ |
+| Codex CLI | – | ✓ | ✓ | ✓ |
+| Gemini CLI | – | ✓ | ✓ | ✓ |
+| Mistral Vibe | – | ✓ | ✓ | – |
+| Augment auggie | – | ✓ | ✓ | – |
+| opencode | – | ✓ | ✓ | ✓ |
+| Amp | – | ✓ | ✓ | ✓ |
+| Goose | – | – | ✓ | ✓ |
+| Continue | – | – | ✓ | ✓ |
+| Kiro | – | – | ✓ | ✓ |
+| Cline | – | – | ✓ | ✓ |
+| Crush | – | – | ✓ | ✓ |
+| aider | – | – | ✓ | – |
+| Warp | – | – | ✓ | – |
 
 **Native statusline** means `install --host <name>` wires it and the session counter works. The Cursor and Copilot contracts were read off the shipped CLI bundles and exercised live; Qwen's comes from its docs. Droid's is docs-only and has not been run against a real install, so treat it as a first draft and file a bug if it misbehaves.
+
+**Turn-end card** means the agent has no statusline but does have a documented turn-end hook or plugin channel, so `install --host <name>` gives it a one-line creature card after each turn instead. All six contracts were read from the hosts' docs as of September 2026; see [the turn-end card](#codex-gemini-vibe-auggie-opencode-amp-the-turn-end-card) for what each one writes.
+
+**Prompt or tmux** means the creature sits in your prompt or tmux bar next to the agent, which works with every one of them.
+
+**Feeds XP** means the agent's own memory files count toward the creature's level.
+
+✓ works today · – not there.
 
 | Surface | How |
 | :--- | :--- |
@@ -179,7 +187,9 @@ Later eggs inherit the first two answers. The name is asked for every egg.
 | `--no-wire` | install the library and commands only, wire it yourself |
 | `--no-commands` | skip the slash commands, when something else already ships them |
 | `--uninstall` | unwire, restore your old statusline, remove the commands |
-| `--host <name>` | wire `cursor`, `copilot`, `qwen`, `droid` or `all` instead of Claude Code |
+| `--host <name>` | wire `cursor`, `copilot`, `qwen`, `droid` or `all` instead of Claude Code; a card host (`codex`, `gemini`, `vibe`, `auggie`, `opencode`, `amp`) passes through to the CLI |
+
+The CLI's own `install` takes the same `--host`, `--inline` and `--statusline`, plus `--box` for the reverse of `--inline` on the hosts that default to inline. The two are opposites, so passing both is an error.
 
 Re-running is safe and is how you pick up new commands. It won't wrap itself twice and it leaves an existing buddy alone.
 
@@ -195,22 +205,64 @@ The bootstrap above installs the library and wires Claude Code. The same install
 Once the library is in place the CLI does the same without the installer, and undoes it:
 
 ```bash
-terminalcreature install --host copilot [--inline] [--statusline <cmd>]
+terminalcreature install --host copilot [--inline|--box] [--statusline <cmd>]
 terminalcreature uninstall --host copilot
 ```
 
-Each host gets its own shim and its own backup of its settings file, so wiring Cursor never touches Claude Code's `settings.json`. Two things worth knowing:
+Each host gets its own shim and its own backup of its settings file, so wiring Cursor never touches Claude Code's `settings.json`. Three things worth knowing:
 
-- **Cursor and Qwen default to inline.** Their custom statusline replaces the native footer rather than adding rows to it, so the one-line segment keeps whatever the wrapped command printed on the same line. On the other hosts `--inline` opts in.
+- **Cursor and Qwen default to inline.** Their custom statusline replaces the native footer rather than adding rows to it, so the one-line segment keeps whatever the wrapped command printed on the same line. On the other hosts `--inline` opts in; on these two `--box` opts out and puts the creature on the left as a column.
+- **Cursor says how wide it is.** It hands the shim a `render_width_chars`, and the segment is capped to it when no `--width` is given, so the creature never wraps the footer.
 - **Copilot's settings file is JSONC.** Comments are tolerated on read, the file is written back as plain JSON, and the backup keeps the commented original. `uninstall` restores that backup byte for byte when nothing else has changed since.
 
 `terminalcreature doctor` lists every host it knows, whether it's installed, and whether it's wired.
+
+### Codex, Gemini, Vibe, auggie, opencode, Amp: the turn-end card
+
+These six have no statusline to wire, but each has a documented channel that shows a line to you when a turn ends. `install --host <name>` uses it: one hook entry for Codex CLI, Gemini CLI, Mistral Vibe and Augment auggie, one small plugin file for opencode and Amp. `--host all` covers every card host whose config dir exists, plugin hosts included.
+
+```bash
+terminalcreature install --host codex        # or gemini, vibe, auggie
+terminalcreature install --host opencode     # or amp
+terminalcreature uninstall --host codex
+```
+
+From then on the host shows a one-line card after a turn:
+
+```
+<oo> Kein Lv24 ███░░░░░ +40 xp  evolved into Fledgling
+```
+
+Short sprite, name, level, bar, the XP eaten this session when there is some, and the evolution when a stage moved. Plain text, since the host draws it, and never a path, since the host may log it. The card credits session XP the same way the statusline does, so the roster and level are one number everywhere.
+
+**Cadence.** A card after every turn would be noise, so `config hookcard <value>` decides when it shows:
+
+| Value | When the card shows |
+| :--- | :--- |
+| `changes` | the first turn of a session, then whenever the session's XP or stage changed, otherwise every tenth turn. The default. |
+| `always` | every turn |
+| `off` | never. The hook stays installed and XP keeps banking. |
+
+A quiet turn prints nothing (Gemini gets `{}`, since it parses the reply as JSON), and the hook always exits 0, so a broken pet never fails a turn.
+
+| Host | Where the hook lives | Worth knowing |
+| :--- | :--- | :--- |
+| Codex CLI | a `Stop` entry in `~/.codex/hooks.json` | Codex runs hooks only once you approve them with `/hooks` inside its TUI. The install message says so. |
+| Gemini CLI | `hooks.AfterAgent` in `~/.gemini/settings.json` | JSONC on read, written back as plain JSON, the backup keeps your comments. |
+| Mistral Vibe | a marked `post_agent` block appended to `~/.vibe/hooks.toml` | The rest of the file is never parsed or rewritten. |
+| Augment auggie | `hooks.Stop` in `~/.augment/settings.json` | |
+| opencode | `~/.config/opencode/plugins/terminalcreature.js` | The plugin runs under bun or node. |
+| Amp | `~/.config/amp/plugins/terminalcreature/index.js` | The plugin runs under bun. |
+
+Any hooks you already had on the same event stay where they are; ours is appended, and `uninstall` removes only ours, restoring the backup byte for byte when nothing else changed since. The plugin hosts need their runtime on your PATH to load the plugin: `install` writes the file either way, and `doctor` notes when bun or node is missing.
 
 ### How the wiring works
 
 The installer **wraps** your existing statusline rather than editing it. It points `statusLine.command` at a small generated shim; the shim runs whatever command was there before, on the same stdin the host hands it, then draws the creature to the left of that output. Your own script is never modified. It keeps a `settings.json.pre-terminalcreature.bak`, and `--uninstall` puts the original command back.
 
 Every host follows the same pattern under `~/.claude/terminalcreature/`. Claude Code keeps `statusline-terminalcreature.sh` and `wrapped-command`; the others get `statusline-terminalcreature-<host>.sh` and `wrapped-command-<host>`, and each host's settings file gets its own `.pre-terminalcreature.bak` next to it. The shim works out which host is calling from the JSON on stdin, so the session counter reads the right fields in every one of them.
+
+The card hosts follow the same layout. Each hook host gets `hookcard-<host>.sh` in that directory, which is what its hook entry points at, and its hook config gets the same `.pre-terminalcreature.bak` next to it. opencode and Amp have no hook config to edit; they get a plugin file instead, `~/.config/opencode/plugins/terminalcreature.js` or `~/.config/amp/plugins/terminalcreature/index.js`, which runs `terminalcreature hookcard` and shows what comes back. Every shim, Claude Code's included, runs the library under `~/.claude/terminalcreature/lib` when it's there and falls back to a `terminalcreature` on your PATH when it isn't, so a `pipx` install wires the same way.
 
 **Project-level statuslines need one manual step.** The installer only touches `~/.claude/settings.json`. If a repo sets its own `statusLine` in `<repo>/.claude/settings.json`, wrap it explicitly, then point the project at the shim:
 
@@ -337,8 +389,16 @@ hosts:
   copilot  GitHub Copilot CLI  not installed
   qwen     Qwen Code           not installed
   droid    Factory Droid       not installed
+  codex    Codex CLI           card, wired
+  gemini   Gemini CLI          card, not wired
+  vibe     Mistral Vibe        not installed
+  auggie   Augment auggie      not installed
+  opencode opencode            card, wired (runtime bun or node not found)
+  amp      Amp                 not installed
 prompt surfaces (tmux, starship, shells): see `terminalcreature snippet`
 ```
+
+The hosts block runs statusline hosts first, then the card hosts, then the plugin hosts, with a note when a plugin host's runtime is missing.
 
 A zero reading has three causes, and `doctor` names the one you've got:
 
@@ -489,7 +549,10 @@ terminalcreature compose "<text>"  your statusline text, creature as a left colu
     render, compose and card take --format ansi|tmux|plain and --width <n>
 terminalcreature snippet <surface> paste-in config for tmux, starship, zsh, fish, omp or wezterm
 terminalcreature install --host <h>   wire a host's statusline: claude, cursor, copilot, qwen, droid or all
-terminalcreature uninstall --host <h> put that host's statusline back and drop its shim
+    --inline puts the creature after the host's text, --box on the left as a column
+terminalcreature install --host <h>   a turn-end card instead: codex, gemini, vibe, auggie, opencode or amp
+terminalcreature uninstall --host <h> put that host back and drop its shim or plugin file
+terminalcreature hookcard --host <h>  what a card host's hook runs: reads its JSON on stdin, prints the card
 terminalcreature refresh           recompute the xp cache
 ```
 
@@ -513,6 +576,7 @@ alias terminalcreature='PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 
 | `unicode` | `true` or `false` | `true` |
 | `hidden` | `true` or `false` | `false` |
 | `update_check` | `true` or `false`, the once-a-day check behind the `⬆ update` chip | `false` |
+| `hookcard` | `changes`, `always` or `off`: when the turn-end card shows on a card host | `changes` |
 
 ---
 
@@ -521,8 +585,9 @@ alias terminalcreature='PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 
 Short enough to check yourself.
 
 - **It counts your files without ever opening them.** The only filesystem calls in `metric.py` are `glob` and `stat`, and that holds across every agent the `agents` provider counts. It never calls `open()` on a note, a rules file or a session log, never reads a byte of content, never parses frontmatter. That isn't a promise about what it does with your data; it's a statement that it never has your data.
-- **It never prints a path it matched**, in any mode including `doctor` and `sources`, which report a home-relative root, product names and counts rather than filenames. An agent it can't find is named as not found, never as a path it looked in.
+- **It never prints a path it matched**, in any mode including `doctor` and `sources`, which report a home-relative root, product names and counts rather than filenames. An agent it can't find is named as not found, never as a path it looked in. The turn-end card is plain text with no path in it either, because a host may log what its hooks print.
 - **All state is local**, at `~/.claude/terminalcreature/`: the roster, your settings, the XP cache, and the per-host shims. Nothing else, nowhere else.
+- **A host's config is backed up before it's touched, and only our entry is touched.** Wiring a statusline host changes one key; wiring a card host appends one hook entry, or writes one plugin file that is ours alone. Every other hook you have stays, and `uninstall` removes only ours, restoring the backup byte for byte when nothing else changed since.
 - **The render never opens a socket, and by default neither does anything it starts.** No telemetry, no analytics, no phone-home. Inside tmux the refresh runs `tmux refresh-client -S`, a call to your own tmux server on this machine, and that's the whole list.
 - **The only network calls are the ones you allowed.** The installer (and `terminalcreature update --apply`) downloading a release tarball from `api.github.com`; `terminalcreature update` and `doctor --check` reading pypi's public package metadata; and, if you opt in with `config update_check true`, that same version request once a day from the background refresh so the yellow `⬆ update` chip can appear. It's off by default and asked as a question. Every one is an unauthenticated GET that sends nothing about you or your memory.
 
@@ -550,7 +615,8 @@ terminalcreature/
 │   ├── render.py          #   statusline segment, compose, card
 │   ├── state.py           #   roster, settings, xp cache
 │   ├── metric.py          #   providers: glob + stat, nothing else
-│   ├── hosts.py           #   per-host statusline adapters and stdin shapes
+│   ├── hosts.py           #   per-host statusline adapters, hook hosts and stdin shapes
+│   ├── plugins.py         #   the opencode and amp card plugins, generated from templates
 │   ├── snippets.py        #   paste-in configs for tmux, starship, shells, wezterm
 │   ├── creature.py        #   seed → species, rarity, shiny
 │   └── sprites.py         #   stage templates × species motifs

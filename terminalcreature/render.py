@@ -714,6 +714,39 @@ def egg_notice(st, c):
     return "\n".join(out)
 
 
+CARD_LINE_WIDTH = 79
+
+
+def card_line(st, gain=0, evolved=False):
+    """One plain line for a host that shows a string after each turn: short
+    sprite, name, level, bar, the session's xp when there is some, and the
+    evolution when the stage moved. No escapes, since the host draws it, and
+    no path, since the host may log it.
+    """
+    settings = st["settings"]
+    uni = unicode_ok(settings)
+    c = state_mod.focused(st)
+    if c is None:
+        return "no buddy yet. /creature-new lays an egg"
+    if not state_mod.is_hatched(c):
+        return "%s Unhatched  %d xp eaten. /creature-hatch to open it" % (
+            sprites.glyph(metric.EGG_SPRITE, uni), c.get("xp_banked", 0))
+    full = creature_mod.hydrate(c)
+    banked = c.get("xp_banked", 0)
+    p = metric.progress(banked, settings["xp_max"])
+    span_lo = metric.xp_for_level(p["level"], settings["xp_max"])
+    span_hi = p["next_level_xp"]
+    frac = (banked - span_lo) / float(span_hi - span_lo) if span_hi > span_lo else 0.0
+    face = sprites.face(full["species"], p["stage_index"], uni) + ("*" if full["shiny"] else "")
+    line = "%s %s Lv%d %s" % (face, full["name"], p["level"], sprites.bar(frac, 8, uni))
+    if gain > 0:
+        line += " +%d xp" % gain
+    if evolved:
+        line += "  evolved into %s" % p["stage"]
+    with styled("plain"):
+        return fit(line, CARD_LINE_WIDTH, "plain")
+
+
 def evolution_notice(event, st):
     uni = unicode_ok(st["settings"])
     return "  %s  %s evolved into %s at level %d" % (

@@ -1,7 +1,7 @@
 # terminalcreature as a Claude Code plugin
 
 This repo is installable as a plugin. `.claude-plugin/plugin.json` is the manifest;
-`commands/` and `hooks/hooks.json` are picked up by auto-discovery, so the five slash
+`commands/` and `hooks/hooks.json` are picked up by auto-discovery, so the six slash
 commands are listed once and live in one place.
 
 Schemas verified against:
@@ -33,7 +33,7 @@ user's file. Both paths end where the clone path ends: an egg in the statusline 
 `/creature-hatch`.
 
 `install.sh --no-commands` is the plugin-side flag. Without it the installer copies the same
-five command files into `~/.claude/commands`, and each one appears twice in the picker.
+six command files into `~/.claude/commands`, and each one appears twice in the picker.
 Uninstall respects it too and leaves the plugin's copies alone.
 
 ## Beyond Claude Code
@@ -41,10 +41,13 @@ Uninstall respects it too and leaves the plugin's copies alone.
 The plugin route wires Claude Code only, because that is the host the plugin system belongs
 to. The library it installs is the same one that drives every other surface, so once it is
 on disk the rest is a CLI call away: `terminalcreature install --host cursor|copilot|qwen|droid|all`
-wires another agent's native statusline, and `terminalcreature snippet tmux|starship|zsh|fish|omp|wezterm`
-prints the paste-in config for a prompt or multiplexer. XP counts the memory of every coding
-agent on the machine under the default `auto` provider, not just Claude Code's. The README's
-"Works with" section has the full compatibility tables.
+wires another agent's native statusline, `terminalcreature install --host codex|gemini|vibe|auggie|opencode|amp`
+gives an agent with no statusline a one-line creature card after each turn (a hook entry or a
+plugin file in that host's own config, cadence set by `config hookcard always|changes|off`), and
+`terminalcreature snippet tmux|starship|zsh|fish|omp|wezterm` prints the paste-in config for a
+prompt or multiplexer. XP counts the memory of every coding agent on the machine under the
+default `auto` provider, not just Claude Code's. The README's "Works with" section has the full
+compatibility tables.
 
 ## Marketplace repo, for RICK
 
