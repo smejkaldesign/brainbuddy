@@ -548,22 +548,28 @@ HOOK_HOSTS = ("codex", "gemini", "vibe", "auggie")
 # appended, never parsed. event: the turn-end event. field: the reply key the
 # host shows. silent: what a turn with no card prints, per the host's contract.
 # jsonc: comments allowed in the file. name: whether the handler carries a name.
+# shell: the host hands the command to a shell, so a path with a space needs
+# quoting; off, it execs the file itself and quotes would be part of the name.
+# matcher: what the group carries when the host documents one, else None.
 HOOK_REGISTRY = {
     # docs, 2026-09: ~/.codex/hooks.json, Stop replies JSON, systemMessage is
     # shown as a warning line, exit 0 with no output is success. hooks run only
-    # once approved with /hooks inside codex
+    # once approved with /hooks inside codex. matcher isn't used for Stop
     "codex": {
         "label": "Codex CLI", "dir": "~/.codex", "config": "~/.codex/hooks.json", "format": "json",
         "jsonc": False, "name": False, "event": "Stop", "field": "systemMessage", "silent": "",
         "shim": "hookcard-codex.sh", "note": "approve it once with /hooks inside codex",
+        "shell": True, "matcher": None,
     },
     # docs, 2026-09: hooks live under "hooks" in settings.json, AfterAgent fires once
     # per turn, systemMessage prints to the terminal. stdout is parsed as JSON and
-    # an empty reply isn't documented, so a quiet turn prints {}
+    # an empty reply isn't documented, so a quiet turn prints {}. every documented
+    # group carries a matcher and "*" is the documented match-all
     "gemini": {
         "label": "Gemini CLI", "dir": "~/.gemini", "config": "~/.gemini/settings.json", "format": "json",
         "jsonc": True, "name": True, "event": "AfterAgent", "field": "systemMessage", "silent": "{}",
         "shim": "hookcard-gemini.sh", "note": "",
+        "shell": True, "matcher": "*",
     },
     # docs, 2026-09: [[hooks]] tables in ~/.vibe/hooks.toml, type post_agent fires
     # after every turn, system_message is UI-only, exit 0 with empty stdout passes
@@ -571,14 +577,17 @@ HOOK_REGISTRY = {
         "label": "Mistral Vibe", "dir": "~/.vibe", "config": "~/.vibe/hooks.toml", "format": "toml",
         "jsonc": False, "name": True, "event": "post_agent", "field": "system_message", "silent": "",
         "shim": "hookcard-vibe.sh", "note": "",
+        "shell": True, "matcher": None,
     },
     # docs, 2026-09: same tree as codex under "hooks" in ~/.augment/settings.json,
     # Stop takes no matcher, systemMessage goes to the user, the script must be an
-    # executable .sh with a shebang. stdin carries conversation_id, not session_id
+    # executable .sh with a shebang and is executed directly, not through a shell.
+    # stdin carries conversation_id, not session_id
     "auggie": {
         "label": "Augment auggie", "dir": "~/.augment", "config": "~/.augment/settings.json", "format": "json",
         "jsonc": False, "name": False, "event": "Stop", "field": "systemMessage", "silent": "",
         "shim": "hookcard-auggie.sh", "note": "",
+        "shell": False, "matcher": None,
     },
 }
 
@@ -642,8 +651,16 @@ def hook_envelope(host, line):
     return json.dumps({spec["field"]: line})
 
 
+def hook_command(host):
+    """The shim path as the host's config carries it: quoted for a host that
+    runs it through a shell, bare for one that execs the file.
+    """
+    path = hook_shim_path(host)
+    return shlex.quote(path) if HOOK_REGISTRY[host]["shell"] else path
+
+
 def _hook_handler(host):
-    handler = {"type": "command", "command": hook_shim_path(host)}
+    handler = {"type": "command", "command": hook_command(host)}
     if HOOK_REGISTRY[host]["name"]:
         handler["name"] = HOOK_MARK
     return handler
@@ -690,7 +707,10 @@ def _has_our_hook(data, host):
 def _add_our_hook(data, host):
     if _has_our_hook(data, host):
         return False
-    _event_groups(data, host, create=True).append({"hooks": [_hook_handler(host)]})
+    group = {"hooks": [_hook_handler(host)]}
+    if HOOK_REGISTRY[host]["matcher"] is not None:
+        group = {"matcher": HOOK_REGISTRY[host]["matcher"], "hooks": group["hooks"]}
+    _event_groups(data, host, create=True).append(group)
     return True
 
 
@@ -756,7 +776,7 @@ def _toml_block(host):
         "[[hooks]]",
         'name = "%s"' % HOOK_MARK,
         'type = "%s"' % HOOK_REGISTRY[host]["event"],
-        "command = %s" % json.dumps(hook_shim_path(host)),
+        "command = %s" % json.dumps(hook_command(host)),
         "timeout = 10.0",
         'description = "creature card after each turn"',
         TOML_CLOSE,
