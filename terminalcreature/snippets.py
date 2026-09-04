@@ -7,6 +7,7 @@ never expanded, so a snippet pasted into a dotfiles repo carries no username.
 """
 
 import os
+import shlex
 import shutil
 
 from . import state as state_mod
@@ -24,20 +25,29 @@ def _tilde(path):
     return path
 
 
+def _shell_word(path):
+    """path as one shell word, spaces and all. A path under home is written
+    "$HOME/..." rather than ~, since ~ inside quotes stays a tilde.
+    """
+    if path.startswith("~/"):
+        return '"$HOME%s"' % path[1:]
+    return shlex.quote(path)
+
+
 def resolve_binary(state_dir=None, which=shutil.which):
-    """How a surface should call us. {"shell": str, "argv": [str]}, both ~-relative.
+    """How a surface should call us. {"shell": str, "argv": [str]}, both home-relative.
 
     The pipx or pip entry point when it is on PATH, else the library the
     installer keeps under the state dir, run the way the statusline shim does.
+    The shell form is quoted for a home with spaces; the argv form keeps ~ for
+    hosts that expand it themselves, one argument each so spaces never split.
     """
     found = which("terminalcreature")
     if found:
-        return {"shell": _tilde(found), "argv": [_tilde(found)]}
+        return {"shell": _shell_word(_tilde(found)), "argv": [_tilde(found)]}
     lib = _tilde(os.path.join(state_dir or state_mod.STATE_DIR, "lib"))
-    # $HOME rather than ~ in the shell form: ~ only expands at the start of a
-    # word, and this one sits after PYTHONPATH=
     return {
-        "shell": "env PYTHONPATH=%s python3 -m terminalcreature.cli" % lib.replace("~", "$HOME", 1),
+        "shell": "env PYTHONPATH=%s python3 -m terminalcreature.cli" % _shell_word(lib),
         "argv": ["env", "PYTHONPATH=" + lib, "python3", "-m", "terminalcreature.cli"],
     }
 

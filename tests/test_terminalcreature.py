@@ -1593,7 +1593,8 @@ def test_host_stdin():
         check(isinstance(s["model"], str) and s["model"], "%s model lands as a string" % host)
         check(s["workspace"] == "/x", "%s workspace lands" % host)
         check(isinstance(s["context_used_pct"], float), "%s context percent lands as a float" % host)
-        check(sorted(s) == ["context_used_pct", "host", "model", "session_id", "workspace"], "%s carries exactly the five fields" % host)
+        check(sorted(s) == ["context_used_pct", "host", "model", "session_id", "width", "workspace"], "%s carries exactly the six fields" % host)
+        check(s["width"] == (76 if host == "cursor" else None), "%s width is what the host said, or None" % host)
 
     for label, raw in (("empty", ""), ("not json", "not json"), ("empty object", "{}"), ("a list", "[1, 2]"),
                        ("a bare string", '"hi"'), ("unknown keys", '{"foo": 1}'), ("None", None)):
@@ -1602,6 +1603,9 @@ def test_host_stdin():
               "%s stdin is host unknown with every field None" % label)
     check(hosts.parse_session('{"session_id": "x"}')["host"] == "claude", "bare claude keys read as claude")
     check(hosts.parse_session('{"session_id": 7}')["session_id"] is None, "a non-string id is dropped, not passed on")
+    check(hosts.parse_session('{"render_width_chars": 0}')["width"] is None, "a zero width is no width")
+    check(hosts.parse_session('{"render_width_chars": "80"}')["width"] is None, "a width that isn't a number is no width")
+    check(hosts.parse_session('{"render_width_chars": 80.9}')["width"] == 80, "a width is whole columns")
     check("/x" not in hosts.describe(hosts.parse_session(json.dumps(HOST_PAYLOADS["claude"]))), "doctor's line never carries the workspace path")
     check("unknown schema" in hosts.describe(hosts.parse_session("")), "and calls an unknown shape unknown")
 
@@ -1628,6 +1632,15 @@ def test_host_stdin():
         check(r.returncode == 0 and 0 < len(r.stdout) <= 3, "render --format=plain --width 3 caps the segment")
         r = run(["render", "--format", "html"])
         check(r.returncode == 0 and "Lv" in r.stdout, "a bad format on render falls back rather than blanking the statusline")
+        narrow = dict(HOST_PAYLOADS["cursor"], render_width_chars=6)
+        r = run(["render", "--format", "plain"], json.dumps(narrow))
+        check(r.returncode == 0 and 0 < _visible(r.stdout) <= 6, "cursor's render_width_chars caps render when no --width is given")
+        r = run(["render", "--format", "plain", "--width", "3"], json.dumps(narrow))
+        check(0 < _visible(r.stdout) <= 3, "and --width wins over the payload")
+        r = run(["render", "--format", "plain"], json.dumps(HOST_PAYLOADS["claude"]))
+        check(_visible(r.stdout) > 6, "a payload with no width caps nothing")
+        r = run(["compose", "--format", "plain", "a long bar of host text"], json.dumps(dict(narrow, render_width_chars=14)))
+        check(r.returncode == 0 and r.stdout.strip() and _visible(r.stdout) <= 14, "compose caps the whole line to the host's width")
         r = run(["compose", "--format", "tmux", "BAR"], "{}")
         check("BAR" in r.stdout and "#[" in r.stdout and "\x1b" not in r.stdout, "compose takes the flags ahead of its text")
         r = run(["card", "--width", "abc"])
@@ -1892,7 +1905,7 @@ def test_host_adapters():
             with open(shim) as f:
                 text = f.read()
             check("TERMINALCREATURE_WRAPPING" in text and spec["wrapped"] in text, "%s: the shim guards re-entry and reads its own wrapped file" % host)
-            check(("cli render" if spec["inline"] else "cli compose") in text, "%s: the shim picks the host's default mode" % host)
+            check(("creature render" if spec["inline"] else "creature compose") in text, "%s: the shim picks the host's default mode" % host)
             out = subprocess.run(["bash", shim], env=env, input="{}", capture_output=True, text=True).stdout
             check(previous.split()[-1] in out, "%s: the shim still runs what it wrapped" % host)
 
@@ -2011,12 +2024,15 @@ def test_snippets():
     on_path = snippets.resolve_binary(which=lambda name: found)
     missing = snippets.resolve_binary(state_dir=os.path.join(home, ".claude", "terminalcreature"),
                                       which=lambda name: None)
-    check(on_path["shell"] == "~/.local/bin/terminalcreature", "an entry point under home is written ~-relative")
-    check(missing["shell"] == "env PYTHONPATH=$HOME/.claude/terminalcreature/lib python3 -m terminalcreature.cli",
+    check(on_path["shell"] == '"$HOME/.local/bin/terminalcreature"', "an entry point under home is written home-relative, quoted")
+    check(on_path["argv"] == ["~/.local/bin/terminalcreature"], "and the argv form keeps ~, unquoted")
+    check(missing["shell"] == 'env PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli',
           "no entry point falls back to the installed lib the way the shim runs it")
     check(missing["argv"][1] == "PYTHONPATH=~/.claude/terminalcreature/lib", "and the argv form keeps ~ for hosts that expand it themselves")
     check(snippets.resolve_binary(which=lambda name: "/opt/homebrew/bin/terminalcreature")["shell"] == "/opt/homebrew/bin/terminalcreature",
           "a path outside home is left alone")
+    check(snippets.resolve_binary(which=lambda name: "/opt/my tools/terminalcreature")["shell"] == "'/opt/my tools/terminalcreature'",
+          "and quoted when it needs to be")
 
     formats = {"tmux": "--format tmux", "starship": "--format ansi", "zsh": "--format ansi",
                "fish": "--format ansi", "omp": "plain", "wezterm": "'--format', 'plain'"}
@@ -2170,6 +2186,185 @@ def test_refresh_pokes_tmux():
         rc, lines = refresh(True, 999)
         check(rc == 0 and lines == [], "a tmux that can't run is silent, refresh still exits 0")
     finally:
+        shutil.rmtree(home)
+
+
+def test_box_flag():
+    """--box is the opposite of --inline: it puts the creature on the left for a
+    host whose default is the one-line segment. Neither flag means the host's
+    default, both at once is a mistake to say so about.
+    """
+    print("\nbox flag")
+    import subprocess
+
+    from terminalcreature import hosts
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+    for host in ("cursor", "qwen"):
+        home = tempfile.mkdtemp(prefix="bb-box-")
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+        shim = os.path.join(home, ".claude", "terminalcreature", hosts.REGISTRY[host]["shim"])
+
+        def run(argv):
+            return subprocess.run(cmd + argv, env=env, input="", capture_output=True, text=True)
+
+        def mode():
+            with open(shim) as f:
+                last = f.read().rstrip("\n").split("\n")[-1]
+            return "render" if " render " in last else "compose" if " compose " in last else "?"
+
+        try:
+            r = run(["install", "--host", host, "--box", "--statusline", "echo X"])
+            check(r.returncode == 0 and "creature on the left" in r.stdout and mode() == "compose", "%s: --box writes the compose shim and says so" % host)
+            run(["uninstall", "--host", host])
+            r = run(["install", "--host", host])
+            check(r.returncode == 0 and "segment after it" in r.stdout and mode() == "render", "%s: no flag keeps the host's inline default" % host)
+            r = run(["install", "--host", host, "--box"])
+            check(r.returncode == 0 and "already wired" in r.stdout and mode() == "compose", "%s: --box over a wired host swaps the shim's mode" % host)
+            r = run(["install", "--host", host, "--inline"])
+            check(r.returncode == 0 and mode() == "render", "%s: and --inline swaps it back" % host)
+            for argv in (["--inline", "--box"], ["--box", "--inline"]):
+                r = run(["install", "--host", host] + argv)
+                check(r.returncode == 1 and "opposites" in r.stdout and mode() == "render", "%s: %s is refused and changes nothing" % (host, " ".join(argv)))
+            u = run(["uninstall", "--host", host])
+            check(u.returncode == 0 and not os.path.exists(shim), "%s: uninstall still drops the shim" % host)
+        finally:
+            shutil.rmtree(home)
+
+
+def test_shim_path_fallback():
+    """A pipx-only user has no library under the state dir. The shim then runs
+    the terminalcreature on PATH; with the library present it runs that,
+    whatever is on PATH. Neither present renders nothing rather than an error.
+    """
+    print("\nshim path fallback")
+    import json
+    import subprocess
+
+    from terminalcreature import hosts
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+    home = tempfile.mkdtemp(prefix="bb-fallback-")
+    bindir = tempfile.mkdtemp(prefix="bb-fakebin-")
+    marker = os.path.join(home, "ran-from-path")
+    try:
+        exe = os.path.join(bindir, "terminalcreature")
+        with open(exe, "w") as f:
+            f.write('#!/bin/sh\ntouch "%s"\nPYTHONPATH="%s" exec "%s" -m terminalcreature.cli "$@"\n' % (marker, repo, sys.executable))
+        os.chmod(exe, 0o755)
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+        env.pop("TERMINALCREATURE_FORMAT", None)
+        on_path = dict(env, PATH=bindir + os.pathsep + env["PATH"])
+        subprocess.run(cmd + ["new"], env=env, capture_output=True)
+        subprocess.run(cmd + ["hatch", "--from-zero", "--name", "Zask"], env=env, capture_output=True)
+        state = os.path.join(home, ".claude", "terminalcreature")
+        lib = os.path.join(state, "lib")
+        for host in ("cursor", "claude"):
+            r = subprocess.run(cmd + ["install", "--host", host, "--statusline", "echo HOSTBAR"], env=env, capture_output=True, text=True)
+            check(r.returncode == 0, "%s: wires without a library under the state dir" % host)
+        check(not os.path.isdir(lib), "no library was installed along the way")
+        payload = json.dumps(HOST_PAYLOADS["cursor"])
+        # the inline segment says the level, the compose column says the name
+        drawn = {"cursor": "Lv0", "claude": "Zask"}
+        for host in ("cursor", "claude"):
+            shim = os.path.join(state, hosts.REGISTRY[host]["shim"])
+            out = subprocess.run(["bash", shim], env=on_path, input=payload, capture_output=True, text=True).stdout
+            check(drawn[host] in out and "HOSTBAR" in out and os.path.exists(marker), "%s shim: no library, so the terminalcreature on PATH draws the creature" % host)
+            if os.path.exists(marker):
+                os.remove(marker)
+            out = subprocess.run(["bash", shim], env=env, input=payload, capture_output=True, text=True)
+            check(out.returncode == 0 and "HOSTBAR" in out.stdout and drawn[host] not in out.stdout and not out.stderr,
+                  "%s shim: no library and nothing on PATH keeps the wrapped bar, quietly" % host)
+        shutil.copytree(os.path.join(repo, "terminalcreature"), os.path.join(lib, "terminalcreature"),
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        for host in ("cursor", "claude"):
+            shim = os.path.join(state, hosts.REGISTRY[host]["shim"])
+            out = subprocess.run(["bash", shim], env=on_path, input=payload, capture_output=True, text=True).stdout
+            check(drawn[host] in out and not os.path.exists(marker), "%s shim: with the library here it runs that, not PATH" % host)
+    finally:
+        shutil.rmtree(home)
+        shutil.rmtree(bindir)
+
+
+def test_home_with_spaces():
+    """A home like /tmp/my home: every snippet's command line still runs through
+    sh, the argv surfaces still exec, and the command an adapter writes into a
+    settings file still finds the shim. Nothing written carries the expanded home.
+    """
+    print("\nhome with spaces")
+    import json
+    import re
+    import subprocess
+
+    from terminalcreature import hosts, snippets
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+    home = tempfile.mkdtemp(prefix="tc31 spaced ")
+    real_home = os.environ.get("HOME")
+    try:
+        check(" " in home, "the scratch home has a space in it")
+        state = os.path.join(home, ".claude", "terminalcreature")
+        shutil.copytree(os.path.join(repo, "terminalcreature"), os.path.join(state, "lib", "terminalcreature"),
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        bindir = os.path.join(home, ".local", "bin")
+        os.makedirs(bindir)
+        exe = os.path.join(bindir, "terminalcreature")
+        with open(exe, "w") as f:
+            f.write('#!/bin/sh\nPYTHONPATH="%s" exec "%s" -m terminalcreature.cli "$@"\n' % (repo, sys.executable))
+        os.chmod(exe, 0o755)
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1", PATH=bindir + os.pathsep + os.environ["PATH"])
+        env.pop("TERMINALCREATURE_FORMAT", None)
+        env.pop("TMUX", None)
+        subprocess.run(cmd + ["new"], env=env, capture_output=True)
+        subprocess.run(cmd + ["hatch", "--from-zero", "--name", "Zask"], env=env, capture_output=True)
+
+        # resolve_binary reads ~ from the process, so the scratch home is home for a moment
+        os.environ["HOME"] = home
+        on_path = snippets.resolve_binary(which=lambda name: exe)
+        missing = snippets.resolve_binary(state_dir=state, which=lambda name: None)
+        for binary, label in ((on_path, "on PATH"), (missing, "lib fallback")):
+            for key in ("shell", "argv"):
+                check(home not in str(binary[key]), "%s %s form carries no expanded home" % (label, key))
+            lines = {
+                "tmux": re.search(r"status-right '#\((.*)\) %H:%M'", snippets.render_snippet("tmux", binary=binary)),
+                "starship": re.search(r"^command = '(.*)'$", snippets.render_snippet("starship", binary=binary), re.M),
+                "zsh": re.search(r"^RPROMPT='\$\((.*)\)'$", snippets.render_snippet("zsh", binary=binary), re.M),
+                "fish": re.search(r"^    (.*)$", snippets.render_snippet("fish", binary=binary), re.M),
+            }
+            for surface, m in lines.items():
+                check(m is not None, "%s (%s) has a command line to run" % (surface, label))
+                if m is None:
+                    continue
+                r = subprocess.run(["sh", "-c", m.group(1)], env=env, input="{}", capture_output=True, text=True)
+                check(r.returncode == 0 and "Lv0" in r.stdout, "%s (%s) command line renders the creature through sh" % (surface, label))
+            argv = [p.replace("~", home, 1) if "~/" in p else p for p in binary["argv"]]
+            r = subprocess.run(argv + ["render", "--format", "plain"], env=env, input="{}", capture_output=True, text=True)
+            check(r.returncode == 0 and "Lv0" in r.stdout, "the argv form (%s) execs with each piece whole" % label)
+
+        payload = json.dumps(HOST_PAYLOADS["cursor"])
+        drawn = {"cursor": "Lv0", "copilot": "Zask"}
+        for host in ("cursor", "copilot"):
+            r = subprocess.run(cmd + ["install", "--host", host, "--statusline", "echo HOSTBAR"], env=env, capture_output=True, text=True)
+            check(r.returncode == 0, "%s: wires under a home with spaces" % host)
+            with open(os.path.join(home, hosts.REGISTRY[host]["settings"][2:])) as f:
+                command = hosts.get_command(json.load(f), host)
+            check(command.startswith("'") and command.endswith("'"), "%s: the command in settings is quoted" % host)
+            check(hosts.is_ours(command, host), "%s: and still reads as ours" % host)
+            r = subprocess.run(["sh", "-c", command], env=env, input=payload, capture_output=True, text=True)
+            check(r.returncode == 0 and drawn[host] in r.stdout and "HOSTBAR" in r.stdout, "%s: the settings command runs the shim through sh" % host)
+            r = subprocess.run(cmd + ["install", "--host", host], env=env, capture_output=True, text=True)
+            check("already wired" in r.stdout, "%s: a re-install sees the quoted command as its own" % host)
+            u = subprocess.run(cmd + ["uninstall", "--host", host], env=env, capture_output=True, text=True)
+            with open(os.path.join(home, hosts.REGISTRY[host]["settings"][2:])) as f:
+                check(u.returncode == 0 and hosts.get_command(json.load(f), host) == "echo HOSTBAR", "%s: uninstall puts the command back" % host)
+    finally:
+        if real_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = real_home
         shutil.rmtree(home)
 
 
@@ -2366,6 +2561,9 @@ if __name__ == "__main__":
     test_host_adapters()
     test_host_settings_edge_cases()
     test_plugin_hosts()
+    test_box_flag()
+    test_shim_path_fallback()
+    test_home_with_spaces()
     test_update_chip()
     test_hatch_naming()
     test_refresh_never_reverts_concurrent_writes()

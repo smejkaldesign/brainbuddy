@@ -9,6 +9,7 @@ renders without a session, it never breaks the prompt.
 
 import json
 import os
+import shlex
 import shutil
 
 HOSTS = ("claude", "cursor", "copilot", "qwen", "droid")
@@ -29,6 +30,8 @@ FIELD_MAP = {
         "model": ("model.display_name", "model.id"),
         "workspace": ("workspace.current_dir", "cwd"),
         "context_used_pct": ("context_window.used_percentage",),
+        # the columns cursor gives the line; the only host that says
+        "width": ("render_width_chars",),
     },
     # read off the copilot cli 1.0.82 bundle: claude's shape plus session_name,
     # username, remote, ai_used and allow_all_enabled
@@ -68,7 +71,8 @@ MARKERS = (
 # claude's keys with nothing else to go on. cursor and copilot both send these
 CLAUDE_SHAPE = ("session_id", "model", "workspace", "context_window")
 
-EMPTY = {"host": "unknown", "session_id": None, "model": None, "workspace": None, "context_used_pct": None}
+EMPTY = {"host": "unknown", "session_id": None, "model": None, "workspace": None, "context_used_pct": None,
+         "width": None}
 
 
 def _get(data, path):
@@ -108,7 +112,8 @@ def detect(data):
 
 def parse_session(raw_text):
     """Normalise whatever a host piped in. Empty, not JSON, or a shape we don't
-    know all come back as host "unknown" with every field None.
+    know all come back as host "unknown" with every field None. width is the
+    columns the host gives the line, when it says.
     """
     try:
         data = json.loads(raw_text)
@@ -125,6 +130,9 @@ def parse_session(raw_text):
         "workspace": _first(data, fields["workspace"], str),
         "context_used_pct": _first(data, fields["context_used_pct"], float),
     }
+    # width is columns, so a whole number or nothing; most hosts never send one
+    width = _first(data, fields.get("width", ()), float)
+    out["width"] = int(width) if width is not None and width >= 1 else None
     return out
 
 
@@ -201,6 +209,12 @@ SHIM_PROLOGUE = """#!/bin/bash
 # already inside our own wrap, so the thing we'd run next is us. that forks forever.
 if [ -n "${TERMINALCREATURE_WRAPPING:-}" ]; then exit 0; fi
 export TERMINALCREATURE_WRAPPING=1
+# the installer's library when it is here, else a pip or pipx entry point on PATH
+if [ -d "$HOME/.claude/terminalcreature/lib" ]; then
+  creature() { PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli "$@"; }
+else
+  creature() { terminalcreature "$@"; }
+fi
 INPUT="$(cat)"
 LEFT=""
 if [ -s "$HOME/.claude/terminalcreature/%(wrapped)s" ]; then
@@ -209,9 +223,9 @@ fi
 """
 SHIM_INLINE = """printf '%s' "$LEFT"
 if [ -n "$LEFT" ]; then printf ' '; fi
-printf '%s' "$INPUT" | PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli render 2>/dev/null || true
+printf '%s' "$INPUT" | creature render 2>/dev/null || true
 """
-SHIM_COMPOSE = """printf '%s' "$INPUT" | PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli compose "$LEFT" 2>/dev/null || printf '%s' "$LEFT"
+SHIM_COMPOSE = """printf '%s' "$INPUT" | creature compose "$LEFT" 2>/dev/null || printf '%s' "$LEFT"
 """
 
 
@@ -250,10 +264,17 @@ def shim_text(host, inline):
     return SHIM_PROLOGUE % {"wrapped": spec["wrapped"]} + (SHIM_INLINE if inline else SHIM_COMPOSE)
 
 
+def shim_command(host):
+    """The shim path as the hosts run it, through a shell: quoted only when a
+    space or the like in home would otherwise split it.
+    """
+    return shlex.quote(shim_path(host))
+
+
 def is_ours(command, host):
     """Whether a settings command names our shim, however ~ was spelled."""
     rel = STATE_DIR + "/" + REGISTRY[host]["shim"]
-    return command in (shim_path(host), rel, "$HOME" + rel[1:])
+    return command in (shim_path(host), shim_command(host), rel, "$HOME" + rel[1:])
 
 
 def _strip_jsonc(text):
@@ -417,8 +438,10 @@ def write_shim(host, inline):
     os.chmod(path, 0o755)
 
 
-def wire(host, inline=False, statusline=None):
-    """Point the host at our shim, wrapping whatever it ran before. (ok, message)."""
+def wire(host, inline=None, statusline=None):
+    """Point the host at our shim, wrapping whatever it ran before. (ok, message).
+    inline None takes the host's default; True or False overrides it.
+    """
     spec = REGISTRY[host]
     data, raw, problem = read_settings(host)
     if problem:
@@ -428,14 +451,16 @@ def wire(host, inline=False, statusline=None):
     if already:
         # re-installing over ourselves, so keep what we wrapped last time
         existing = _read_wrapped(host)
-    write_shim(host, inline or spec["inline"])
+    if inline is None:
+        inline = spec["inline"]
+    write_shim(host, inline)
     if already and statusline is None:
         return True, "already wired, shim refreshed"
     with open(wrapped_path(host), "w") as f:
         f.write(existing)
-    set_command(data, host, shim_path(host))
+    set_command(data, host, shim_command(host))
     write_settings(host, data, raw)
-    how = "segment after it" if (inline or spec["inline"]) else "creature on the left"
+    how = "segment after it" if inline else "creature on the left"
     if existing:
         what = "wrapping your existing command, %s" % how
     else:

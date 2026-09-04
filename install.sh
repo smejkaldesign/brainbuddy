@@ -191,6 +191,12 @@ write_shim() {
 # already inside our own wrap, so the thing we'd run next is us. that forks forever.
 if [ -n "${TERMINALCREATURE_WRAPPING:-}" ]; then exit 0; fi
 export TERMINALCREATURE_WRAPPING=1
+# the installer's library when it is here, else a pip or pipx entry point on PATH
+if [ -d "$HOME/.claude/terminalcreature/lib" ]; then
+  creature() { PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli "$@"; }
+else
+  creature() { terminalcreature "$@"; }
+fi
 INPUT="$(cat)"
 LEFT=""
 if [ -s "$HOME/.claude/terminalcreature/wrapped-command" ]; then
@@ -201,11 +207,11 @@ EOF
     cat >> "$SHIM" <<'EOF'
 printf '%s' "$LEFT"
 if [ -n "$LEFT" ]; then printf ' '; fi
-printf '%s' "$INPUT" | PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli render 2>/dev/null || true
+printf '%s' "$INPUT" | creature render 2>/dev/null || true
 EOF
   else
     cat >> "$SHIM" <<'EOF'
-printf '%s' "$INPUT" | PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli compose "$LEFT" 2>/dev/null || printf '%s' "$LEFT"
+printf '%s' "$INPUT" | creature compose "$LEFT" 2>/dev/null || printf '%s' "$LEFT"
 EOF
   fi
   chmod +x "$SHIM"
