@@ -33,7 +33,7 @@ USAGE = """terminalcreature - a terminal pet that evolves with your memory
   refresh             recompute the xp cache (run in the background by render)
   sources             what it can count, and what to do if that's nothing
   doctor [--check]    check what terminalcreature can see; --check also asks pypi
-  update              ask pypi whether there's a newer terminalcreature
+  update [--apply]    ask pypi whether there's a newer terminalcreature; --apply installs it
 
 update and doctor --check are the only commands that go online, and only when
 you run them. Everything else, the statusline included, is offline.
@@ -574,9 +574,27 @@ def _version_check():
 
 
 def cmd_update(args):
-    """Ask pypi whether there's a newer terminalcreature. One request, then done."""
-    print(_version_check())
-    return 0
+    """Ask pypi whether there's a newer terminalcreature. One request, then done.
+
+    --apply also downloads and installs it, running the release's own installer
+    over this one. Nothing about the creature changes; the roster and settings
+    are the installer's to keep, and it keeps them.
+    """
+    from . import release
+
+    status, latest = release.fetch_latest()
+    release.remember(status, latest)
+    print(release.status_line(status, latest))
+    if "--apply" not in args:
+        return 0
+    if status != "ok":
+        return 1
+    if release._parts(latest) <= release._parts(__version__):
+        return 0
+    print("fetching terminalcreature %s" % latest)
+    ok, message = release.apply(latest)
+    print(message)
+    return 0 if ok else 1
 
 
 def cmd_sources(args):

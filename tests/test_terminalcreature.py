@@ -573,6 +573,92 @@ def test_version_check_is_explicit_only():
         shutil.rmtree(home)
 
 
+def test_update_apply():
+    """`update --apply` runs the release's own installer, and only when there
+    is a release to run. Both network calls are faked; the installer is a stub
+    that records how it was invoked."""
+    print("\nupdate --apply")
+    import io
+    import subprocess
+    import tarfile
+    from contextlib import redirect_stdout
+
+    from terminalcreature import cli, release
+
+    home = tempfile.mkdtemp(prefix="bb-update-")
+    state_dir = os.path.join(home, ".claude", "terminalcreature")
+    os.makedirs(state_dir)
+    marker = os.path.join(home, "installer-ran")
+
+    def fake_tarball(version, dest):
+        src = tempfile.mkdtemp(prefix="bb-release-")
+        top = os.path.join(src, "smejkaldesign-terminalcreature-abc123")
+        os.makedirs(top)
+        with open(os.path.join(top, "install.sh"), "w") as f:
+            f.write("#!/usr/bin/env bash\necho installing %s\necho \"$@\" > %s\n" % (version, marker))
+        with tarfile.open(dest, "w:gz") as tar:
+            tar.add(top, arcname=os.path.basename(top))
+        shutil.rmtree(src)
+        return True
+
+    fetches = []
+    real_fetch, real_apply, real_state_dir = release.fetch_latest, release.apply, state_mod.STATE_DIR
+    state_mod.STATE_DIR = state_dir
+
+    def run(argv):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = cli.main(argv)
+        return code, out.getvalue()
+
+    try:
+        release.apply = lambda v, **kw: real_apply(v, state_dir=state_dir, fetch=lambda ver, dest: fetches.append(ver) or fake_tarball(ver, dest),
+                                                    run=lambda cmd, **kw: subprocess.run(cmd, stdout=subprocess.DEVNULL, **kw))
+        release.fetch_latest = lambda *a, **k: ("ok", "99.0.0")
+        code, out = run(["update", "--apply"])
+        check(code == 0, "a newer release installs and exits clean")
+        check(fetches == ["99.0.0"], "the tarball fetched is the version pypi named")
+        check(os.path.exists(marker), "the release's own install.sh ran")
+        check(open(marker).read().strip() == "", "with no flags on a plain install")
+        check("99.0.0 is installed" in out, "and the outcome is said")
+
+        os.remove(marker)
+        with open(os.path.join(state_dir, "plugin-root"), "w") as f:
+            f.write("/plugin")
+        run(["update", "--apply"])
+        check(open(marker).read().strip() == "--no-commands", "a plugin install keeps the plugin's command files")
+        os.remove(os.path.join(state_dir, "plugin-root"))
+
+        os.remove(marker)
+        fetches[:] = []
+        code, out = run(["update"])
+        check(code == 0 and not fetches and not os.path.exists(marker), "without --apply nothing is downloaded or run")
+
+        release.fetch_latest = lambda *a, **k: ("ok", release.__version__)
+        code, out = run(["update", "--apply"])
+        check(code == 0 and not fetches and not os.path.exists(marker), "current already: --apply downloads nothing")
+
+        release.fetch_latest = lambda *a, **k: ("unreachable", None)
+        code, out = run(["update", "--apply"])
+        check(code == 1 and not fetches and "couldn't reach pypi" in out, "offline: --apply says so, exits 1, touches nothing")
+
+        release.fetch_latest = lambda *a, **k: ("ok", "99.0.0")
+        release.apply = lambda v, **kw: real_apply(v, state_dir=state_dir, fetch=lambda ver, dest: False)
+        code, out = run(["update", "--apply"])
+        check(code == 1 and "wouldn't hand over the tarball" in out, "a failed download is a calm message and exit 1")
+
+        def bad_tarball(version, dest):
+            with open(dest, "w") as f:
+                f.write("not a tarball")
+            return True
+        release.apply = lambda v, **kw: real_apply(v, state_dir=state_dir, fetch=bad_tarball)
+        code, out = run(["update", "--apply"])
+        check(code == 1 and "didn't unpack" in out, "a corrupt download is caught before anything runs")
+    finally:
+        release.fetch_latest, release.apply, state_mod.STATE_DIR = real_fetch, real_apply, real_state_dir
+        shutil.rmtree(home)
+
+
 def test_project_statusline_override():
     """A project's own statusLine wins, and doctor is the only place that can say so.
 
@@ -1367,6 +1453,7 @@ if __name__ == "__main__":
     test_migrates_a_brainbuddy_install()
     test_seed_salt_is_pinned()
     test_moods()
+    test_update_apply()
     print("\n%s" % ("-" * 46))
     if FAILURES:
         print("%d FAILED" % len(FAILURES))
