@@ -756,7 +756,8 @@ def _read_hook_config(host):
         with open(path, "rb") as f:
             raw = f.read()
         if spec["format"] == "toml":
-            return raw.decode("utf-8-sig"), raw, None
+            # plain utf-8, so a byte order mark stays in the text and goes back out
+            return raw.decode("utf-8"), raw, None
         text = raw.decode("utf-8-sig")
         if spec["jsonc"]:
             text = _strip_jsonc(text)
@@ -853,7 +854,13 @@ def wire_hook(host):
 def _hook_same_but_for_us(host, content, backup_raw):
     """Whether the config has only changed by our entry since the backup."""
     if isinstance(content, str):
-        return _strip_toml_block(content)[0] == _strip_toml_block(backup_raw.decode("utf-8-sig"))[0]
+        try:
+            before = _strip_toml_block(backup_raw.decode("utf-8"))[0]
+        except ValueError:
+            return False
+        now = _strip_toml_block(content)[0]
+        # the newline wire put between a file with no trailing one and our block
+        return now == before or now == before + "\n"
     try:
         before = json.loads(_strip_jsonc(backup_raw.decode("utf-8-sig")))
     except ValueError:
