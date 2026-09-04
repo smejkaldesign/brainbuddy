@@ -1533,15 +1533,30 @@ HOST_PAYLOADS = {
         "exceeds_200k_tokens": False,
     },
     "cursor": {
-        "conversation_id": "u-1", "session_id": "u-1", "model": {"display_name": "composer"},
-        "cursor_version": "2026.08.01", "workspace_roots": ["/x"], "_agent_type": "cursor",
-        "workspace": {"current_dir": "/x"}, "context_usage": {"used_percentage": 40},
+        # the key set the cursor cli 2026.09 bundle builds, values made up
+        "session_id": "u-1", "transcript_path": "/x/t.jsonl", "render_width_chars": 76, "cwd": "/x",
+        "autorun": False, "model": {"id": "composer-2", "display_name": "composer"},
+        "workspace": {"current_dir": "/x", "project_dir": "/x", "added_dirs": []},
+        "version": "2026.09.02", "output_style": {"name": "default"},
+        "context_window": {"total_input_tokens": 100, "total_output_tokens": 10, "context_window_size": 200000,
+                           "used_percentage": 40, "remaining_percentage": 60, "current_usage": 80000},
+        "session_name": "fix tests", "worktree": {"name": "main", "path": "/x"},
     },
+    # the key set the copilot cli 1.0.82 bundle builds for its statusLine command,
+    # values made up. it never ran live here, but the field names are the binary's own
     "copilot": {
-        "session_id": "p-1", "session_name": "fix tests", "transcript_path": "/x/t.jsonl", "cwd": "/x",
-        "username": "someone", "version": "1.0", "model": {"display_name": "gpt"},
-        "workspace": {"current_dir": "/x"}, "remote": {"host": ""},
-        "context_window": {"used_percentage": 33}, "cost": {"total_duration_ms": 10},
+        "cwd": "/x", "session_id": "p-1", "session_name": "fix tests", "transcript_path": "/x/t.jsonl",
+        "model": {"id": "gpt-5", "display_name": "gpt"}, "workspace": {"current_dir": "/x"},
+        "username": "someone", "remote": {"connected": False}, "version": "1.0.82",
+        "cost": {"total_api_duration_ms": 10, "total_lines_added": 0, "total_lines_removed": 0,
+                 "total_duration_ms": 10, "total_premium_requests": 0},
+        "context_window": {"total_input_tokens": 1000, "total_output_tokens": 100, "total_cache_read_tokens": 0,
+                           "total_cache_write_tokens": 0, "total_reasoning_tokens": 0, "total_tokens": 1100,
+                           "context_window_size": 200000, "used_percentage": 33, "remaining_percentage": 67,
+                           "remaining_tokens": 134000, "last_call_input_tokens": 10, "last_call_output_tokens": 5,
+                           "current_context_tokens": 66000, "displayed_context_limit": 200000,
+                           "current_context_used_percentage": 33},
+        "ai_used": {"total_nano_aiu": 0, "formatted": "0"}, "allow_all_enabled": False,
     },
     "qwen": {
         "session_id": "q-1", "version": "0.14.1", "model": {"display_name": "qwen-3-235b"},
@@ -1810,6 +1825,160 @@ def test_agents_provider():
         r = subprocess.run(cmd + ["sources"], env=dict(env, HOME=home), capture_output=True, text=True)
         check(r.returncode == 1 and "Looked for" in r.stdout and home not in r.stdout,
               "sources on an empty machine exits 1, lists what it looked for, prints no path")
+HOST_SEEDS = {
+    "claude": ('{"theme": "dark", "statusLine": {"type": "command", "command": "echo CL"}}\n', "echo CL"),
+    "cursor": ('{"display": {"mode": "zen"}, "statusLine": {"type": "command", "command": "echo CUR"}}\n', "echo CUR"),
+    # jsonc with a trailing comma, the way copilot's file is allowed to look
+    "copilot": ('{\n  // footer prefs\n  "footer": {"showBranch": true},\n  /* mine */\n'
+                '  "statusLine": {"type": "command", "command": "echo COP", "padding": 1,},\n}\n', "echo COP"),
+    "qwen": ('{"ui": {"theme": "x", "statusLine": {"type": "command", "command": "echo QW", "refreshInterval": 3}}}\n', "echo QW"),
+    "droid": ('{"model": "m", "statusLine": {"command": "echo DR", "maxRows": 2}}\n', "echo DR"),
+}
+
+
+def test_host_adapters():
+    """install --host wraps each host's statusline the way install.sh wraps
+    claude's: key repointed at a per-host shim, old command kept, the settings
+    file backed up as raw bytes, and uninstall puts every byte back.
+    """
+    print("\nhost adapters")
+    import json
+    import subprocess
+
+    from terminalcreature import hosts
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+
+    def run(env, argv, raw=""):
+        return subprocess.run(cmd + argv, env=env, input=raw, capture_output=True, text=True)
+
+    for host, (seed, previous) in HOST_SEEDS.items():
+        home = tempfile.mkdtemp(prefix="bb-host-")
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+        try:
+            spec = hosts.REGISTRY[host]
+            path = os.path.join(home, spec["settings"][2:])
+            os.makedirs(os.path.dirname(path))
+            with open(path, "w") as f:
+                f.write(seed)
+            state = os.path.join(home, ".claude", "terminalcreature")
+            shim, wrapped = os.path.join(state, spec["shim"]), os.path.join(state, spec["wrapped"])
+
+            r = run(env, ["install", "--host", host])
+            check(r.returncode == 0 and host in r.stdout, "%s: install exits clean and names the host" % host)
+            with open(path) as f:
+                data = json.load(f)
+            check(hosts.get_command(data, host) == shim, "%s: the key points at our shim" % host)
+            node = data["ui"]["statusLine"] if host == "qwen" else data["statusLine"]
+            check(("type" in node) == spec["typed"], "%s: the value carries type only when the host wants it" % host)
+            with open(wrapped) as f:
+                check(f.read() == previous, "%s: the old command is recorded" % host)
+            with open(path + ".pre-terminalcreature.bak") as f:
+                check(f.read() == seed, "%s: the backup is the raw file, comments and all" % host)
+            with open(shim) as f:
+                text = f.read()
+            check("TERMINALCREATURE_WRAPPING" in text and spec["wrapped"] in text, "%s: the shim guards re-entry and reads its own wrapped file" % host)
+            check(("cli render" if spec["inline"] else "cli compose") in text, "%s: the shim picks the host's default mode" % host)
+            out = subprocess.run(["bash", shim], env=env, input="{}", capture_output=True, text=True).stdout
+            check(previous.split()[-1] in out, "%s: the shim still runs what it wrapped" % host)
+
+            if host == "cursor":
+                check(data["display"]["mode"] == "zen", "cursor: sibling keys survive")
+            if host == "copilot":
+                check(data["footer"]["showBranch"] is True and node["padding"] == 1, "copilot: comments stripped, siblings kept")
+                check("plain JSON" in r.stdout, "copilot: install says the comments live in the backup now")
+            if host == "qwen":
+                check(node["refreshInterval"] == 3 and node["respectUserColors"] is True and data["ui"]["theme"] == "x",
+                      "qwen: refreshInterval kept, respectUserColors added, ui siblings kept")
+            if host == "droid":
+                check(node["maxRows"] == 2, "droid: maxRows kept")
+
+            r2 = run(env, ["install", "--host", host])
+            with open(path) as f:
+                check(r2.returncode == 0 and "already wired" in r2.stdout and json.load(f) == data, "%s: re-running is a no-op that says so" % host)
+
+            u = run(env, ["uninstall", "--host", host])
+            with open(path) as f:
+                check(u.returncode == 0 and f.read() == seed, "%s: uninstall restores the file byte for byte" % host)
+            check(not os.path.exists(shim) and not os.path.exists(wrapped), "%s: and drops the shim and wrapped file" % host)
+
+            if host == "copilot":
+                # edited since install: only our key comes out, their edit stays
+                run(env, ["install", "--host", host])
+                with open(path) as f:
+                    data = json.load(f)
+                data["footer"]["showQuota"] = False
+                with open(path, "w") as f:
+                    json.dump(data, f)
+                u = run(env, ["uninstall", "--host", host])
+                with open(path) as f:
+                    after = json.load(f)
+                check(after["statusLine"]["command"] == previous and after["footer"]["showQuota"] is False,
+                      "copilot: a file edited after install gets only our key undone")
+        finally:
+            shutil.rmtree(home)
+
+    # claude through the adapter writes the very shim install.sh writes
+    home = tempfile.mkdtemp(prefix="bb-host-")
+    try:
+        env = dict(os.environ, HOME=home)
+        subprocess.run(["bash", os.path.join(repo, "install.sh"), "--no-commands"], env=env, input="", capture_output=True, text=True)
+        with open(os.path.join(home, ".claude", "terminalcreature", "statusline-terminalcreature.sh")) as f:
+            check(f.read() == hosts.shim_text("claude", False), "the python claude shim is byte for byte install.sh's")
+    finally:
+        shutil.rmtree(home)
+
+    # --host all on a machine with qwen and droid, and nothing else
+    home = tempfile.mkdtemp(prefix="bb-host-")
+    env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+    try:
+        for host in ("qwen", "droid"):
+            path = os.path.join(home, hosts.REGISTRY[host]["settings"][2:])
+            os.makedirs(os.path.dirname(path))
+            with open(path, "w") as f:
+                f.write(HOST_SEEDS[host][0])
+        r = run(env, ["install", "--host", "all"])
+        check(r.returncode == 0 and "qwen" in r.stdout and "droid" in r.stdout, "all: wires both hosts that are here")
+        check("cursor" not in r.stdout and "copilot" not in r.stdout, "all: and says nothing about hosts that aren't")
+        for host in ("qwen", "droid"):
+            with open(os.path.join(home, hosts.REGISTRY[host]["settings"][2:])) as f:
+                check(hosts.REGISTRY[host]["shim"] in f.read(), "all: %s points at its shim" % host)
+        d = run(env, ["doctor"])
+        check("qwen     Qwen Code           native, wired" in d.stdout and "native, wired" in d.stdout.split("droid")[1].split("\n")[0],
+              "doctor lists the wired hosts")
+        check("cursor   Cursor CLI          not installed" in d.stdout, "doctor calls an absent host not installed")
+        check("terminalcreature snippet" in d.stdout, "doctor points prompt surfaces at the snippet command")
+        check("/" + "Users" not in d.stdout and home not in d.stdout, "doctor's hosts block carries no paths")
+        u = run(env, ["uninstall", "--host", "all"])
+        for host in ("qwen", "droid"):
+            with open(os.path.join(home, hosts.REGISTRY[host]["settings"][2:])) as f:
+                check(u.returncode == 0 and f.read() == HOST_SEEDS[host][0], "all: uninstall restores %s" % host)
+        r = run(env, ["install", "--host", "nope"])
+        check(r.returncode == 1 and "unknown host" in r.stdout, "an unknown host is refused with the list")
+    finally:
+        shutil.rmtree(home)
+
+    # install.sh --host hands the wiring to the adapter and leaves claude alone
+    home = tempfile.mkdtemp(prefix="bb-host-")
+    env = dict(os.environ, HOME=home, NO_COLOR="1")
+    try:
+        os.makedirs(os.path.join(home, ".qwen"))
+        r = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--host", "qwen", "--statusline", "echo QW", "--no-commands"],
+                           env=env, input="", capture_output=True, text=True)
+        qwen = os.path.join(home, ".qwen", "settings.json")
+        with open(qwen) as f:
+            data = json.load(f)
+        check(r.returncode == 0 and "statusline-terminalcreature-qwen.sh" in data["ui"]["statusLine"]["command"], "install.sh --host qwen wires qwen")
+        check(os.path.isdir(os.path.join(home, ".claude", "terminalcreature", "lib", "terminalcreature")), "and still installs the library")
+        check(not os.path.exists(os.path.join(home, ".claude", "settings.json")), "and leaves claude's settings alone")
+        check("/creature-hatch" in r.stdout, "and still offers the egg")
+        u = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--uninstall", "--host", "qwen", "--no-commands"],
+                           env=env, input="", capture_output=True, text=True)
+        with open(qwen) as f:
+            data = json.load(f)
+        check(u.returncode == 0 and data["ui"]["statusLine"]["command"] == "echo QW", "install.sh --uninstall --host qwen puts the command back")
+        check(os.path.isdir(os.path.join(home, ".claude", "terminalcreature", "lib")), "and keeps the library for the other hosts")
     finally:
         shutil.rmtree(home)
 
@@ -1820,6 +1989,7 @@ if __name__ == "__main__":
     test_render_formats()
     test_width_cap()
     test_host_stdin()
+    test_host_adapters()
     test_update_chip()
     test_hatch_naming()
     test_refresh_never_reverts_concurrent_writes()
