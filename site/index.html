@@ -132,6 +132,11 @@
   .lede { font-size: 19px; line-height: 1.6; color: var(--muted); max-width: 640px; margin: 0 auto 80px; text-wrap: pretty; }
   .lede b { color: var(--gold); font-weight: 600; }
 
+  /* host tabs above the install stone: one command or snippet per host */
+  .tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 0 auto 14px; max-width: 640px; }
+  .tab { font-family: var(--mono); font-size: 12px; letter-spacing: .04em; color: var(--muted); background: rgba(0,0,0,.35); border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 12px; }
+  .tab:hover { color: var(--text); border-color: var(--gold); }
+  .tab[aria-selected="true"] { color: var(--gold); border-color: var(--gold); background: rgba(var(--gold-rgb), .08); box-shadow: 0 0 14px rgba(var(--gold-rgb), .18); }
   .install {
     display: inline-flex; align-items: center; gap: 12px; max-width: 100%;
     padding: 12px 16px 12px 22px; border-radius: 8px;
@@ -352,12 +357,15 @@
       So... <b>ready to meet your terminal creature?</b>
     </p>
 
-    <div class="install">
-      <code id="hero-cmd">curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash</code>
-      <button class="copy" data-copy="#hero-cmd" aria-label="Copy install command">copy</button>
+    <div id="install">
+      <div class="tabs" role="tablist" aria-label="Where should it live?" id="host-tabs"></div>
+      <div class="install" role="tabpanel" id="host-panel" aria-labelledby="tab-claude">
+        <code id="hero-cmd">curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash</code>
+        <button class="copy" data-copy="#hero-cmd" aria-label="Copy install command">copy</button>
+      </div>
+      <p class="alt" id="host-note"><span class="then">then, in Claude Code:</span> <code>/creature-hatch</code></p>
+      <p class="alt" id="host-sub">or <code>pipx install terminalcreature</code> <span class="then">for the CLI alone. bash, python 3.9+, nothing else.</span></p>
     </div>
-    <p class="alt"><span class="then">then, in Claude Code:</span> <code>/creature-hatch</code></p>
-    <p class="alt">or <code>pipx install terminalcreature</code> <span class="then">for the CLI alone. bash, python 3.9+, nothing else.</span></p>
 
     <div class="terminal">
       <div class="terminal-bar">
@@ -778,6 +786,51 @@
 
   // provider picker: install command updates live
   var BASE = "curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash";
+
+  // install tabs: [id, label, command or snippet, note, sub-note]
+  var CLI = '<span class="then">needs the CLI, which the Claude Code install already ships; otherwise</span> <code>pipx install terminalcreature</code><span class="then">.</span> <code>terminalcreature doctor</code> <span class="then">lists every host it found and whether it is wired.</span>';
+  var INSTALL = [
+    ["claude", "Claude Code", BASE,
+      '<span class="then">then, in Claude Code:</span> <code>/creature-hatch</code>',
+      'or <code>pipx install terminalcreature</code> <span class="then">for the CLI alone. bash, python 3.9+, nothing else.</span>'],
+    ["cursor", "Cursor", "terminalcreature install --host cursor",
+      '<span class="then">wraps the Cursor CLI statusline command, keeps a backup, and</span> <code>--uninstall</code> <span class="then">restores it. Or</span> <code>--host all</code> <span class="then">for every host on the machine.</span>', CLI],
+    ["copilot", "Copilot", "terminalcreature install --host copilot",
+      '<span class="then">wraps the Copilot CLI</span> <code>statusLine</code> <span class="then">command in its settings, JSONC comments included. Or</span> <code>--host all</code><span class="then">.</span>', CLI],
+    ["qwen", "Qwen", "terminalcreature install --host qwen",
+      '<span class="then">wraps Qwen Code\'s</span> <code>ui.statusLine</code> <span class="then">command. The render reads a cache, so it is well inside Qwen\'s five second cutoff. Or</span> <code>--host all</code><span class="then">.</span>', CLI],
+    ["droid", "Droid", "terminalcreature install --host droid",
+      '<span class="then">wraps the Factory Droid</span> <code>statusLine</code> <span class="then">command. Or</span> <code>--host all</code><span class="then">.</span>', CLI],
+    ["tmux", "tmux", "set -g @plugin 'smejkaldesign/terminalcreature'",
+      '<span class="then">TPM line for your tmux config, then put</span> <code>#{creature}</code> <span class="then">anywhere in</span> <code>status-right</code><span class="then">. No TPM?</span> <code>terminalcreature snippet tmux</code> <span class="then">prints the plain version.</span>', CLI],
+    ["starship", "Starship", "terminalcreature snippet starship",
+      '<span class="then">prints a</span> <code>[custom.creature]</code> <span class="then">block to paste into your Starship config. It reads a cached line, so it never trips the 500 ms budget.</span>', CLI],
+    ["shell", "Shell prompt", "terminalcreature snippet zsh",
+      '<span class="then">prints a paste-in for your prompt. Swap</span> <code>zsh</code> <span class="then">for</span> <code>fish</code><span class="then">,</span> <code>omp</code> <span class="then">(oh-my-posh) or</span> <code>wezterm</code><span class="then">.</span>', CLI]
+  ];
+  var tabs = document.getElementById("host-tabs"), panel = document.getElementById("host-panel");
+  var heroCmd = document.getElementById("hero-cmd"), hostNote = document.getElementById("host-note"), hostSub = document.getElementById("host-sub");
+  function selectHost(i) {
+    var h = INSTALL[i];
+    tabEls.forEach(function (b, k) { b.setAttribute("aria-selected", String(k === i)); b.tabIndex = k === i ? 0 : -1; });
+    panel.setAttribute("aria-labelledby", "tab-" + h[0]);
+    heroCmd.textContent = h[2]; hostNote.innerHTML = h[3]; hostSub.innerHTML = h[4];
+  }
+  var tabEls = INSTALL.map(function (h, i) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "tab"; b.id = "tab-" + h[0];
+    b.setAttribute("role", "tab"); b.setAttribute("aria-controls", "host-panel");
+    b.textContent = h[1];
+    b.addEventListener("click", function () { selectHost(i); });
+    b.addEventListener("keydown", function (e) {
+      var n = e.key === "ArrowRight" ? (i + 1) % INSTALL.length : e.key === "ArrowLeft" ? (i + INSTALL.length - 1) % INSTALL.length : e.key === "Home" ? 0 : e.key === "End" ? INSTALL.length - 1 : -1;
+      if (n < 0) return;
+      e.preventDefault(); selectHost(n); tabEls[n].focus();
+    });
+    tabs.appendChild(b);
+    return b;
+  });
+  selectHost(0);
   var provider = "claude", pathIn = document.getElementById("path"), pathrow = document.getElementById("pathrow");
   function cmd() {
     var p = pathIn.value.trim() || "~/notes";
