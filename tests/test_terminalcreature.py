@@ -2797,9 +2797,137 @@ def test_hook_hosts():
     check(len(line) < 80 and "\033" not in line and "evolved into" in line, "a long name, a big counter and an evolution still fit in one line")
 
 
+def test_hook_host_edges():
+    """The shapes a hook config can be in that wire must refuse rather than
+    overwrite, the bytes uninstall must give back, the quoting each host's
+    runner needs, and --host all reaching the plugin hosts. The home has a
+    space in it, since that is what every quoting rule is for.
+    """
+    print("\nhook host edges")
+    import json
+    import shlex
+    import subprocess
+
+    from terminalcreature import hosts
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+
+    def make_home(prefix):
+        home = tempfile.mkdtemp(prefix=prefix)
+        lib = os.path.join(home, ".claude", "terminalcreature", "lib")
+        os.makedirs(lib)
+        os.symlink(os.path.join(repo, "terminalcreature"), os.path.join(lib, "terminalcreature"))
+        return home, dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+
+    def run(env, argv, raw=""):
+        return subprocess.run(cmd + argv, env=env, input=raw, capture_output=True, text=True)
+
+    def sh(env, command, raw, direct=False):
+        argv = [command] if direct else ["sh", "-c", command]
+        r = subprocess.run(argv, env=env, input=raw, capture_output=True, text=True)
+        try:
+            return r.returncode == 0 and bool(json.loads(r.stdout).get("systemMessage") or json.loads(r.stdout).get("system_message"))
+        except ValueError:
+            return False
+
+    def read(path):
+        with open(path, "rb") as f:
+            return f.read()
+
+    def write(path, data):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
+
+    home, env = make_home("bb hook edge ")
+    try:
+        state = os.path.join(home, ".claude", "terminalcreature")
+        codex = os.path.join(home, ".codex", "hooks.json")
+        for seed, what in ((b'{"hooks": "keep me"}', '"hooks"'), (b'{"hooks": {"Stop": {"keep": 1}}}', '"hooks.Stop"')):
+            write(codex, seed)
+            r = run(env, ["install", "--host", "codex"])
+            check(r.returncode == 1 and what in r.stdout and read(codex) == seed, "codex: %s in the wrong shape is refused and the file untouched" % what)
+            check(not os.path.exists(os.path.join(state, "hookcard-codex.sh")), "codex: and no shim is left behind")
+        theirs = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "~/bin/terminalcreature-notify.sh"}]}]}}
+        write(codex, json.dumps(theirs).encode())
+        r = run(env, ["install", "--host", "codex"])
+        data = json.loads(read(codex))
+        check(r.returncode == 0 and len(data["hooks"]["Stop"]) == 2, "codex: a hook of the user's that mentions terminalcreature is not taken for ours")
+        command = data["hooks"]["Stop"][1]["hooks"][0]["command"]
+        shim = os.path.join(state, "hookcard-codex.sh")
+        check(command == shlex.quote(shim) and command != shim, "codex: the command is quoted for the shell codex hands it to")
+        check(sh(env, command, '{"session_id": "q1"}'), "codex: and runs through sh -c from a home with a space")
+        u = run(env, ["uninstall", "--host", "codex"])
+        check(u.returncode == 0 and json.loads(read(codex)) == theirs, "codex: uninstall keeps the look-alike hook")
+        check(not os.path.exists(codex + ".pre-terminalcreature.bak"), "codex: uninstall takes the backup with it")
+
+        run(env, ["install", "--host", "auggie"])
+        aug = json.loads(read(os.path.join(home, ".augment", "settings.json")))
+        command = aug["hooks"]["Stop"][0]["hooks"][0]["command"]
+        check(command == os.path.join(state, "hookcard-auggie.sh") and " " in command, "auggie: the command is the bare path, since auggie execs the file")
+        check(sh(env, command, '{"conversation_id": "a1"}', direct=True), "auggie: which runs from a home with a space")
+
+        gemini = os.path.join(home, ".gemini", "settings.json")
+        seed = b'{\n  // mine\n  "theme": "x"\n}\n'
+        write(gemini, seed)
+        run(env, ["install", "--host", "gemini"])
+        check(json.loads(read(gemini))["hooks"]["AfterAgent"][0]["matcher"] == "*", "gemini: our group carries the documented match-all")
+        run(env, ["uninstall", "--host", "gemini"])
+        check(read(gemini) == seed, "gemini: the first uninstall restores the comment")
+        seed = b'{\n  // mine, edited since\n  "theme": "x"\n}\n'
+        write(gemini, seed)
+        run(env, ["install", "--host", "gemini"])
+        run(env, ["uninstall", "--host", "gemini"])
+        check(read(gemini) == seed, "gemini: a comment edited between two wires survives the second uninstall")
+
+        vibe = os.path.join(home, ".vibe", "hooks.toml")
+        for label, seed in (("no trailing newline", b'[[hooks]]\nname = "mine"\ntype = "post_agent"\ncommand = "echo hi"'),
+                            ("a byte order mark", b'\xef\xbb\xbf[[hooks]]\nname = "mine"\ntype = "post_agent"\ncommand = "echo hi"\n')):
+            write(vibe, seed)
+            r = run(env, ["install", "--host", "vibe"])
+            wired = read(vibe)
+            check(r.returncode == 0 and wired.startswith(seed) and hosts.TOML_CLOSE.encode() in wired, "vibe: %s: the file is kept whole in front of our block" % label)
+            u = run(env, ["uninstall", "--host", "vibe"])
+            check(u.returncode == 0 and read(vibe) == seed, "vibe: %s: uninstall gives the bytes back" % label)
+        write(vibe, b"")
+        run(env, ["install", "--host", "vibe"])
+        line = [l for l in read(vibe).decode().splitlines() if l.startswith("command = ")][0]
+        check(sh(env, json.loads(line[len("command = "):]), '{"session_id": "v1"}'), "vibe: the command runs through sh -c from a home with a space")
+        write(vibe, b'[[hooks]]\nname = "x"\n' + hosts.TOML_OPEN.encode() + b'\n[[hooks]]\nname = "terminalcreature"\n')
+        r = run(env, ["install", "--host", "vibe"])
+        check(r.returncode == 1 and "end marker" in r.stdout, "vibe: a begin marker with no end is refused, not trusted")
+        check("card, not wired" in [l for l in run(env, ["doctor"]).stdout.splitlines() if l.strip().startswith("vibe")][0], "vibe: and doctor doesn't call it wired")
+    finally:
+        shutil.rmtree(home)
+
+    home, env = make_home("bb-hook-all-")
+    try:
+        for d in (".codex", ".config/opencode", ".config/amp"):
+            os.makedirs(os.path.join(home, d))
+        r = run(env, ["install", "--host", "all"])
+        oc = os.path.join(home, ".config", "opencode", "plugins", "terminalcreature.js")
+        am = os.path.join(home, ".config", "amp", "plugins", "terminalcreature", "index.js")
+        check(r.returncode == 0 and os.path.exists(oc) and os.path.exists(am) and "opencode" in r.stdout and "amp" in r.stdout,
+              "all: wires the plugin hosts whose config dir is here")
+        check("gemini" not in r.stdout and "vibe" not in r.stdout, "all: and skips the card hosts that aren't")
+        u = run(env, ["uninstall", "--host", "all"])
+        check(u.returncode == 0 and not os.path.exists(oc) and not os.path.exists(am) and "codex" in u.stdout, "all: uninstall takes both plugin files and the hook")
+    finally:
+        shutil.rmtree(home)
+
+    cursor = ('{"session_id": "w", "model": {"display_name": "m"}, "workspace": {"current_dir": "/x"}, '
+              '"context_window": {"used_percentage": 1}, "render_width_chars": %s}')
+    check(hosts.parse_session(cursor % "Infinity")["width"] is None and hosts.parse_session(cursor % "NaN")["width"] is None,
+          "an infinite or nan width is no width, not a crash")
+    check(hosts.parse_session(cursor % "1e9")["width"] == 10 ** 9 and hosts.parse_session(cursor % "0.5")["width"] is None,
+          "a finite width is a whole number, and under one is none")
+
+
 if __name__ == "__main__":
     test_metric()
     test_hook_hosts()
+    test_hook_host_edges()
     test_snippets()
     test_tmux_plugin()
     test_refresh_pokes_tmux()
