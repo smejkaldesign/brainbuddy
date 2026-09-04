@@ -2426,8 +2426,9 @@ def test_plugin_hosts():
     temp HOME so the real plugin dirs are never touched.
     """
     print("\nplugin hosts")
+    import json
     import subprocess
-    from terminalcreature import plugins
+    from terminalcreature import plugins, snippets
 
     home = tempfile.mkdtemp(prefix="bb-plugin-")
     real_home, real_path = os.environ.get("HOME"), os.environ.get("PATH", "")
@@ -2517,11 +2518,16 @@ def test_plugin_hosts():
         checks = tempfile.mkdtemp(prefix="bb-plugin-syntax-")
         for host in plugins.PLUGIN_HOSTS:
             text = plugins.render(host)
-            check('"$HOME/.local/bin/terminalcreature hookcard' in text, "%s: entry point on PATH becomes $HOME/.local/bin" % host)
+            expect = json.dumps("%s hookcard --host %s" % (plugins._home_form(snippets.resolve_binary()["shell"]), host))
+            check("$HOME/.local/bin/terminalcreature" in expect and expect in text,
+                  "%s: entry point on PATH becomes $HOME/.local/bin" % host)
             os.environ["PATH"] = "/usr/bin:/bin"
             fallback = plugins.render(host)
             os.environ["PATH"] = fake_bin + os.pathsep + real_path
-            check('"env PYTHONPATH=$HOME/.claude/terminalcreature/lib python3 -m terminalcreature.cli hookcard --host %s"' % host in fallback,
+            os.environ["PATH"] = "/usr/bin:/bin"
+            expect = json.dumps("%s hookcard --host %s" % (plugins._home_form(snippets.resolve_binary()["shell"]), host))
+            os.environ["PATH"] = fake_bin + os.pathsep + real_path
+            check("PYTHONPATH=" in expect and "$HOME/.claude/terminalcreature/lib" in expect and expect in fallback,
                   "%s: no entry point means the lib fallback, spelled with $HOME" % host)
             check(all("/Users/" not in x and "/home/" not in x for x in (text, fallback)), "%s: template carries no absolute home path" % host)
             check("\u2014" not in text, "%s: no em dash in the template" % host)
