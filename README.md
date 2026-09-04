@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="site/assets/terminalcreature-logo.png" width="247" alt="TERMINAL CREATURE" />
+  <img src="site/assets/terminalcreature-logo.svg" width="247" alt="TERMINAL CREATURE" />
 </p>
 
 <h3 align="center">A terminal pet that levels off your second brain.</h3>
