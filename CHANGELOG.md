@@ -3,7 +3,7 @@
 Notable changes, newest first. Versions follow semver; the version lives in
 `brainbuddy/__init__.py` and each release is the matching `v*` tag.
 
-## Unreleased
+## 1.1.0
 
 - An egg renders as Unhatched everywhere, never as a name. The name is chosen
   at the hatch: two ideas from the new `brainbuddy names`, your own via
