@@ -186,6 +186,23 @@
   .desc { color: var(--muted); font-size: 17px; max-width: 600px; margin: 0 0 48px; text-wrap: pretty; }
   .center { text-align: center; } .center .desc { margin-left: auto; margin-right: auto; }
 
+  /* compat matrix: two tables from one data table, scrolling inside their own box on narrow screens */
+  .matrix-title { font-family: var(--mono); font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin: 40px 0 12px; }
+  .matrix-title:first-of-type { margin-top: 0; }
+  .matrix-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line-2); border-radius: 10px; background: var(--card); }
+  .matrix { width: 100%; min-width: 540px; border-collapse: collapse; font-size: 14px; }
+  .matrix th { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); font-weight: 500; text-align: left; padding: 12px 16px; background: var(--card-2); border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .matrix td { padding: 9px 16px; border-top: 1px solid var(--line); color: var(--body); vertical-align: middle; }
+  .matrix tbody tr:first-child td { border-top: 0; }
+  .matrix .c { text-align: center; width: 1%; white-space: nowrap; }
+  .matrix .name { color: var(--text); font-weight: 500; white-space: nowrap; }
+  .matrix .tick, .legend .tick { font-family: var(--mono); color: var(--xp); font-weight: 700; }
+  .matrix .dash, .legend .dash { font-family: var(--mono); color: var(--dim); }
+  .matrix sup, .legend sup { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-left: 2px; }
+  .matrix .how { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .matrix .how code { font-size: 12px; }
+  .legend { font-family: var(--mono); font-size: 12px; color: var(--dim); margin: 14px 0 0; line-height: 1.8; }
+
   /* species grid */
   .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
   .species {
@@ -379,6 +396,19 @@
 </header>
 
 <main>
+
+<section id="compat">
+  <div class="wrap">
+    <p class="label">Where it lives</p>
+    <h2>Any terminal, any agent, same creature</h2>
+    <p class="desc">Five agents draw it natively, inside their own statusline. Every other agent gets it through tmux or your shell prompt, sitting right beside the conversation. And it eats memory from nearly all of them. Honest tiers, checked against each host's own docs.</p>
+    <h3 class="matrix-title">Agents</h3>
+    <div class="matrix-scroll"><table class="matrix" id="matrix-agents"></table></div>
+    <h3 class="matrix-title">Terminals, prompts and multiplexers</h3>
+    <div class="matrix-scroll"><table class="matrix" id="matrix-surfaces"></table></div>
+    <p class="legend" id="matrix-legend"></p>
+  </div>
+</section>
 
 <section id="species">
   <div class="wrap">
@@ -741,6 +771,58 @@
   }
   document.getElementById("replay").addEventListener("click", play);
   play();
+
+  // compat matrix. cells: YES draws a check, NO a dash, SOON a dash with the 3.1 footnote.
+  var YES = 1, NO = 0, SOON = 2;
+  var AGENT_COLS = ["Agent", "Statusline (native)", "Prompt or tmux", "Feeds XP"];
+  var AGENTS = [
+    ["Claude Code", YES, YES, YES],
+    ["Cursor CLI", YES, YES, YES],
+    ["Copilot CLI", YES, YES, YES],
+    ["Qwen Code", YES, YES, YES],
+    ["Droid", YES, YES, YES],
+    ["Codex CLI", SOON, YES, YES],
+    ["Gemini CLI", SOON, YES, YES],
+    ["opencode", SOON, YES, YES],
+    ["Amp", SOON, YES, YES],
+    ["Goose", SOON, YES, YES],
+    ["aider", NO, YES, NO],
+    ["Crush", NO, YES, YES],
+    ["Kiro", NO, YES, YES],
+    ["Cline", NO, YES, YES],
+    ["Continue", NO, YES, YES],
+    ["Warp", NO, YES, NO]
+  ];
+  var SURFACE_COLS = ["Surface", "Snippet", "How"];
+  var SURFACES = [
+    ["tmux", YES, "TPM plugin, or <code>snippet tmux</code>"],
+    ["Starship", YES, "<code>snippet starship</code>"],
+    ["zsh", YES, "<code>snippet zsh</code>"],
+    ["fish", YES, "<code>snippet fish</code>"],
+    ["oh-my-posh", YES, "<code>snippet omp</code>"],
+    ["WezTerm", YES, "<code>snippet wezterm</code>"],
+    ["Kitty", NO, "by hand: a tab bar script that shells out to <code>render --format plain</code>"],
+    ["Zellij", NO, "by hand: a zjstatus command widget with <code>render --format tmux</code>"],
+    ["iTerm2", NO, "by hand: a status bar component fed by <code>render --format plain</code>"],
+    ["Ghostty", NO, "no status area of its own. Use your prompt or tmux inside it"],
+    ["Alacritty", NO, "no status area of its own. Use your prompt or tmux inside it"],
+    ["Windows Terminal", NO, "no status area of its own. Use your prompt or tmux inside it"]
+  ];
+  function cell(v) { return v === YES ? '<span class="tick" title="works today">✓</span>' : v === SOON ? '<span class="dash" title="hooks card coming in 3.1">–</span><sup>1</sup>' : '<span class="dash" title="not available">–</span>'; }
+  function matrix(id, cols, rows, render) {
+    var t = document.getElementById(id), h = "<thead><tr>";
+    cols.forEach(function (c, i) { h += "<th" + (i && i < cols.length - (cols === SURFACE_COLS ? 1 : 0) ? ' class="c"' : "") + ">" + c + "</th>"; });
+    h += "</tr></thead><tbody>";
+    rows.forEach(function (r) { h += "<tr>" + render(r) + "</tr>"; });
+    t.innerHTML = h + "</tbody>";
+  }
+  matrix("matrix-agents", AGENT_COLS, AGENTS, function (r) {
+    return '<td class="name">' + r[0] + '</td><td class="c">' + cell(r[1]) + '</td><td class="c">' + cell(r[2]) + '</td><td class="c">' + cell(r[3]) + "</td>";
+  });
+  matrix("matrix-surfaces", SURFACE_COLS, SURFACES, function (r) {
+    return '<td class="name">' + r[0] + '</td><td class="c">' + cell(r[1]) + '</td><td class="how">' + r[2] + "</td>";
+  });
+  document.getElementById("matrix-legend").innerHTML = '<span class="tick">✓</span> works today · <span class="dash">–</span> not there · <sup>1</sup> a hooks card at the end of each turn is coming in 3.1; their memory already feeds XP · Prompt or tmux means the creature sits in your prompt or tmux bar next to the agent, on any of them.';
 
   // species cards: click flips to shiny
   var grid = document.getElementById("species-grid");
