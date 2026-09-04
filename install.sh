@@ -22,15 +22,16 @@ usage() {
   cat <<'EOF'
 terminalcreature installer
 
-  ./install.sh                     install and wire up the statusline
+  ./install.sh                     install, wire claude's statusline, then every other agent found here
   ./install.sh --folder <path>     count a folder of markdown notes
   ./install.sh --vault <path>      use a structured vault layout
   ./install.sh --statusline <cmd>  wrap this command instead of settings.json's
   ./install.sh --inline            one-line segment instead of the boxed column
   ./install.sh --no-wire           install the library only, wire it yourself
   ./install.sh --no-commands       skip the slash commands, something else ships them
-  ./install.sh --uninstall         unwire and restore your old statusline
-  ./install.sh --host <name>       wire cursor, copilot, qwen, droid or all instead of claude
+  ./install.sh --claude-only       wire claude and leave the other agents alone
+  ./install.sh --host <name>       wire one host instead: cursor, copilot, qwen, droid, or a card host
+  ./install.sh --uninstall         unwire every host, restore the old statuslines
 EOF
 }
 
@@ -55,7 +56,12 @@ INLINE=0
 COMMANDS=1
 MODE=install
 STATUSLINE=""
-HOST=claude
+# empty means claude here, then every other agent the adapters detect
+HOST=""
+CLAUDE_ONLY=0
+# set when a host adapter reports a failure: the script carries on past it,
+# since the hosts after it and the egg still want doing, and exits 1 at the end
+HOSTFAIL=0
 
 # shift 2 with nothing to shift trips set -e, so a missing value used to exit 1
 # with no output at all
@@ -69,6 +75,7 @@ while [ $# -gt 0 ]; do
     --folder) need_value --folder "${2:-}"; FOLDER="$2"; shift 2 ;;
     --statusline) need_value --statusline "${2:-}"; STATUSLINE="$2"; shift 2 ;;
     --host) need_value --host "${2:-}"; HOST="$2"; shift 2 ;;
+    --claude-only) CLAUDE_ONLY=1; shift ;;
     --inline) INLINE=1; shift ;;
     --no-wire) WIRE=0; shift ;;
     --no-commands) COMMANDS=0; shift ;;
@@ -80,13 +87,28 @@ done
 
 command -v python3 >/dev/null 2>&1 || { echo "python3 not found. terminalcreature needs it."; exit 1; }
 
+# --host all is the default spelled out, --host claude is --claude-only
+case "$HOST" in
+  all) HOST="" ;;
+  claude) HOST=""; CLAUDE_ONLY=1 ;;
+esac
+
 # the other hosts are wired by the python adapters. this script stays the
 # claude path. the source tree is on the path too, for an uninstall run after
 # the library is already gone
 hostbb() { PYTHONPATH="$LIB:$SRC" python3 -m terminalcreature.cli "$@"; }
+# one named host takes every flag; the sweep over detected hosts takes --inline
+# only, since --statusline names claude's command and would wrap it everywhere
 HOSTARGS=(--host "$HOST")
-if [ "$INLINE" = 1 ]; then HOSTARGS+=(--inline); fi
+SWEEPARGS=()
+if [ "$INLINE" = 1 ]; then HOSTARGS+=(--inline); SWEEPARGS+=(--inline); fi
 if [ -n "$STATUSLINE" ]; then HOSTARGS+=(--statusline "$STATUSLINE"); fi
+
+# every host the adapters detect, claude reporting itself already wired.
+# under bash 3.2 an empty array expands as unset, so the guard
+sweep_hosts() {
+  if [ "${#SWEEPARGS[@]}" -gt 0 ]; then hostbb install "${SWEEPARGS[@]}"; else hostbb install; fi
+}
 
 read_statusline() {
   python3 - "$SETTINGS" <<'PY'
@@ -261,10 +283,10 @@ migrate_from_brainbuddy() {
   esac
 }
 
-if [ "$MODE" = uninstall ] && [ "$HOST" != claude ]; then
-  hostbb uninstall --host "$HOST"
+if [ "$MODE" = uninstall ] && [ -n "$HOST" ]; then
+  hostbb uninstall "${HOSTARGS[@]}"
   # one host unwired, the library stays for the others
-  if [ "$HOST" != all ]; then exit 0; fi
+  exit 0
 fi
 
 if [ "$MODE" = uninstall ]; then
@@ -297,8 +319,14 @@ if [ "$MODE" = uninstall ]; then
   if [ "$COMMANDS" = 1 ]; then
     for cmd in $COMMAND_NAMES; do rm -f "$CMDS/$cmd.md"; done
   fi
+  # claude is already back, so the adapters see only the other wired hosts.
+  # their "nothing wired" line is noise under the summary, everything else is not
+  if [ "$CLAUDE_ONLY" = 0 ]; then
+    OTHERS="$(hostbb uninstall)" || HOSTFAIL=1
+    case "$OTHERS" in "no host is wired"*) ;; *) echo "$OTHERS" ;; esac
+  fi
   echo "uninstalled. state kept at ~/.claude/terminalcreature/state.json (delete it yourself for a clean slate)"
-  exit 0
+  exit "$HOSTFAIL"
 fi
 
 echo "installing terminalcreature"
@@ -352,8 +380,8 @@ else
 fi
 
 HOSTWIRED=0
-if [ "$WIRE" = 1 ] && [ "$HOST" != claude ] && [ "$HOST" != all ]; then
-  hostbb install "${HOSTARGS[@]}"
+if [ "$WIRE" = 1 ] && [ -n "$HOST" ]; then
+  hostbb install "${HOSTARGS[@]}" || HOSTFAIL=1
   HOSTWIRED=1
   WIRE=0
 fi
@@ -402,8 +430,13 @@ if [ "$WIRE" = 1 ]; then
   # after the write, not before, so a refusal doesn't get announced as a success
   write_statusline "$SHIM"
   echo "$WIRED"
-  # claude is wired above, so the adapters report it as already done
-  if [ "$HOST" = all ]; then hostbb install "${HOSTARGS[@]}"; HOSTWIRED=1; fi
+  # then every other agent on the machine, so nobody picks hosts. claude is
+  # wired above and the adapters say so
+  if [ "$CLAUDE_ONLY" = 0 ]; then
+    echo "  hosts    -> every agent found here (--claude-only skips this)"
+    sweep_hosts || HOSTFAIL=1
+    HOSTWIRED=1
+  fi
 fi
 
 echo
@@ -435,4 +468,11 @@ if bb list 2>/dev/null | grep -q '^\*.*unhatched'; then
   else
     echo "it'll open at level 0 for now, and grow once there are memories to feed on."
   fi
+fi
+
+# the host that failed said why above; the exit code says so too
+if [ "$HOSTFAIL" = 1 ]; then
+  echo
+  echo "one host above wasn't wired. fix its file and run 'terminalcreature install' again"
+  exit 1
 fi

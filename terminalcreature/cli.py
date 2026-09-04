@@ -38,20 +38,23 @@ USAGE = """terminalcreature - a terminal pet that evolves with your memory
   snippet <surface>   paste-in config for tmux, starship, zsh, fish, omp or wezterm
   sources             what it can count, and what to do if that's nothing
   doctor [--check]    check what terminalcreature can see; --check also asks pypi
+  hosts               the support table: every host it can draw in, how each is
+                      detected, and which are here and wired
   update [--apply]    ask pypi whether there's a newer terminalcreature; --apply installs it
-  install [--host claude|cursor|copilot|qwen|droid|all] [--inline|--box] [--statusline <cmd>]
-                      point a host's statusline at the creature, wrapping what it ran
-                      before. all wires every host that's installed. --inline puts the
-                      creature after the host's text, --box on the left as a column;
-                      each host has its own default. install.sh does the full claude
-                      setup; this only wires the statusline
-  install --host codex|gemini|vibe|auggie|opencode|amp
-                      hosts with no statusline get a one-line card after each turn:
-                      a hook entry (codex, gemini, vibe, auggie) or a plugin file
-                      (opencode, amp). all covers these too, by their config dir
-  uninstall [--host ...]
-                      put the host's statusline back and drop the shim, or take the
-                      hook entry or plugin out
+  install [--host <h>] [--inline|--box] [--statusline <cmd>]
+                      wire every host found on this machine: a statusline host
+                      (claude, cursor, copilot, qwen, droid) gets the creature in
+                      its statusline, wrapping what it ran before; a card host
+                      (codex, gemini, vibe, auggie, opencode, amp) gets a one-line
+                      card after each turn through its hook or plugin channel.
+                      --host <name> does one host. --inline puts the creature after
+                      the host's text, --box on the left as a column; each host
+                      has its own default. install.sh does the full claude setup
+                      and ends by running this
+  uninstall [--host <h>]
+                      put every wired host back: statusline restored and shim
+                      dropped, or the hook entry or plugin file taken out.
+                      --host <name> does one host
   hookcard --host <h> what the hook runs: reads the host's JSON on stdin, credits
                       session xp, prints the card in the host's reply shape
 
@@ -773,9 +776,11 @@ def _all_hosts():
 
 def _host_args(args):
     """(host, inline, statusline) out of install/uninstall args, or (None, problem).
-    inline is None until --inline or --box says, so each host keeps its own default.
+    host is "all" until --host names one, so the default is every host found
+    here. inline is None until --inline or --box says, so each host keeps its own
+    default.
     """
-    host, inline, statusline, i = "claude", None, None, 0
+    host, inline, statusline, i = "all", None, None, 0
     while i < len(args):
         key, eq, val = args[i].partition("=")
         if key in ("--inline", "--box"):
@@ -801,29 +806,41 @@ def _host_args(args):
 
 
 def _host_targets(host, uninstall=False):
-    """all means every host that's here, a config dir being "here"; on
-    uninstall, every host still carrying our shim or plugin file too.
+    """all means every host detected here. On uninstall it means every host
+    that is wired, or still carries our files, whether or not it's detected
+    any more: an agent uninstalled after we wired it still gets put back.
     """
     if host != "all":
         return [host]
     if uninstall:
-        return ([h for h in hosts.HOSTS if hosts.installed(h) or os.path.exists(hosts.shim_path(h))]
-                + [h for h in hosts.HOOK_HOSTS if hosts.hook_installed(h) or os.path.exists(hosts.hook_shim_path(h))]
-                + [h for h in plugins.PLUGIN_HOSTS if plugins.installed(h) or os.path.exists(plugins.plugin_path(h))])
-    return ([h for h in hosts.HOSTS if hosts.installed(h)]
-            + [h for h in hosts.HOOK_HOSTS if hosts.hook_installed(h)]
-            + [h for h in plugins.PLUGIN_HOSTS if plugins.installed(h)])
+        return [h for h in _all_hosts() if hosts.wired(h) or hosts.leftover(h)]
+    return [key for key, _, tier in hosts.detected() if tier != "prompt"]
+
+
+def _config_label(h):
+    """The host's config file, home-relative, for a message."""
+    if h in hosts.HOOK_HOSTS:
+        return hosts.HOOK_REGISTRY[h]["config"]
+    if h in plugins.PLUGIN_HOSTS:
+        return plugins.REGISTRY[h]["dir"] + "/" + plugins.REGISTRY[h]["file"]
+    return hosts.REGISTRY[h]["settings"]
 
 
 def _wire(h, inline, statusline, uninstall):
-    """One host, whichever kind it is. (ok, message)."""
-    if h in hosts.HOOK_HOSTS:
-        return hosts.unwire_hook(h) if uninstall else hosts.wire_hook(h)
-    if h in plugins.PLUGIN_HOSTS:
-        return True, plugins.unwire_plugin(h) if uninstall else plugins.wire_plugin(h)
-    if uninstall:
-        return hosts.unwire(h)
-    return hosts.wire(h, inline=inline, statusline=statusline)
+    """One host, whichever kind it is. (ok, message). A file we can't write is
+    one line here, not a traceback that stops the hosts after it in a sweep.
+    """
+    try:
+        if h in hosts.HOOK_HOSTS:
+            return hosts.unwire_hook(h) if uninstall else hosts.wire_hook(h)
+        if h in plugins.PLUGIN_HOSTS:
+            return True, plugins.unwire_plugin(h) if uninstall else plugins.wire_plugin(h)
+        if uninstall:
+            return hosts.unwire(h)
+        return hosts.wire(h, inline=inline, statusline=statusline)
+    except OSError as e:
+        return False, "%s couldn't be written (%s), so nothing was changed. fix it and re-run." % (
+            _config_label(h), e.__class__.__name__)
 
 
 def cmd_install(args):
@@ -833,17 +850,21 @@ def cmd_install(args):
         return 1
     host, inline, statusline = parsed
     targets = _host_targets(host)
-    if host == "all" and not targets:
-        print("no supported host is installed here, nothing to wire")
-        return 0
-    if host == "all" and targets == ["claude"]:
-        print("only claude is installed here, nothing else to wire")
+    if host == "all" and targets in ([], ["claude"]):
+        # claude is install.sh's, so from there this line means "you're done"
+        print("nothing to wire beyond claude: no other host found here. `terminalcreature hosts` lists what it looks for")
     failed = False
     for h in targets:
         ok, message = _wire(h, inline, statusline, uninstall=False)
         print("  %-8s %s" % (h, message))
         failed = failed or not ok
     return 1 if failed else 0
+
+
+def cmd_hosts(args):
+    for line in hosts.hosts_lines():
+        print(line)
+    return 0
 
 
 def cmd_uninstall(args):
@@ -915,7 +936,7 @@ COMMANDS = {
     "rename": cmd_rename, "retire": cmd_retire, "config": cmd_config,
     "simulate": cmd_simulate, "doctor": cmd_doctor, "sources": cmd_sources,
     "hide": cmd_hide, "show": cmd_show, "update": cmd_update, "snippet": cmd_snippet,
-    "install": cmd_install, "uninstall": cmd_uninstall, "hookcard": cmd_hookcard,
+    "install": cmd_install, "uninstall": cmd_uninstall, "hookcard": cmd_hookcard, "hosts": cmd_hosts,
 }
 
 

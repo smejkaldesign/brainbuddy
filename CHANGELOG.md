@@ -3,6 +3,47 @@
 Notable changes, newest first. Versions follow semver; the version lives in
 `terminalcreature/__init__.py` and each release is the matching `v*` tag.
 
+## 3.2.0 (2026-09-04)
+
+Auto-wire. Nobody picks hosts any more: the installer wires every agent it
+finds on the machine, and whatever agent you launch shows the creature if it
+can.
+
+### Added
+
+- `terminalcreature install` with no `--host` wires every detected host, one
+  line per host, and `uninstall` with no `--host` puts back every host that is
+  wired, whether or not its config dir is still there. `--host <name>` still
+  does one. `install.sh` ends by running the sweep after Claude Code is wired,
+  so the bootstrap does too; `--claude-only` (or `--host claude`) stops after
+  Claude Code, and `--uninstall` unwires the other hosts as well. Re-running
+  the installer refreshes every host's shim.
+- `hosts.detected()`, the one detection list: `(key, label, tier)` for every
+  host and prompt surface on the machine, tier `statusline`, `card` or
+  `prompt`, in table order. `install`, `uninstall`, `doctor` and the new table
+  all read it, and every registry entry carries a `detect` note saying what
+  finds it. The prompt tier (tmux, Starship, zsh, fish, oh-my-posh, WezTerm)
+  is informational: nothing wires it, `snippet` hands out its config.
+- `terminalcreature hosts`, the support table: host, tier, how it is
+  detected, and `wired`, `not wired` or `not found`, with the rule for a new
+  host at the bottom. `doctor` names the prompt surfaces it found.
+- README: "How a host gets supported", the three tiers and the rule for each.
+
+### Changed
+
+- Claude Code and Gemini CLI are detected by their settings file or their
+  binary on PATH, not their config dir alone: our own state dir lives under
+  `~/.claude`, and Antigravity keeps its config under `~/.gemini`, so a
+  machine with only that used to get a hook written into a `settings.json`
+  the sweep created.
+- A host the sweep can't write (a read-only config dir) is one line and the
+  sweep goes on to the next host, like a broken file already was. `install.sh`
+  carries on past it to the egg and exits 1 at the end; `--uninstall` does the
+  same rather than losing the adapters' output under `set -e`.
+- `./install.sh --host all` with `--statusline` used to hand that command to
+  every host; the sweep now takes `--inline` only, since the command names
+  Claude Code's statusline. A single `--host` still takes both.
+
 ## 3.1.0 (2026-09-04)
 
 The turn-end card. Six agents with no statusline get the creature anyway: a
