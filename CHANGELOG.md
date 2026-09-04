@@ -3,6 +3,70 @@
 Notable changes, newest first. Versions follow semver; the version lives in
 `terminalcreature/__init__.py` and each release is the matching `v*` tag.
 
+## 3.0.0 (2026-09-04)
+
+Any terminal, any agent. The creature is no longer a Claude Code accessory:
+it draws in five agents' native statuslines, in tmux and every common prompt,
+and it eats the memory of whichever coding agents live on this machine.
+
+### Added
+
+- Native statusline hosts beyond Claude Code: Cursor CLI, GitHub Copilot CLI,
+  Qwen Code and Factory Droid. `terminalcreature install --host <name>` wires
+  one (`--host all` wires every host that's installed), `uninstall --host`
+  puts it back, and `./install.sh --host <name>` passes straight through.
+  Each host gets its own shim (`statusline-terminalcreature-<host>.sh`), its
+  own wrapped command and its own settings backup. Cursor and Qwen default to
+  inline because their custom statusline replaces the native footer. Copilot's
+  settings file is JSONC: comments survive in the backup and the file is
+  written back as plain JSON.
+- `--format ansi|tmux|plain` and `--width <n>` on `render`, `compose` and
+  `card`, with `TERMINALCREATURE_FORMAT` as the environment default. `tmux`
+  emits `#[fg=…]` styles, `plain` strips colour for surfaces that would show
+  the codes.
+- `terminalcreature snippet <surface>`: paste-in configs for tmux, Starship,
+  zsh, fish, oh-my-posh and WezTerm. Home is written as `$HOME` or
+  `.Env.HOME`, never expanded, so a snippet in a dotfiles repo carries no
+  username.
+- A tpm plugin: `set -g @plugin 'smejkaldesign/terminalcreature'` and
+  `#{creature}` in `status-right`. Inside tmux the background refresh runs
+  `tmux refresh-client -S` when XP changes, so the status line redraws at
+  once rather than on the next interval.
+- The `agents` provider: memory, rules and session logs of fourteen coding
+  agents (Claude Code, Codex, Gemini CLI, Copilot CLI, Cursor, Qwen Code,
+  Droid, opencode, Amp, Goose, Continue, Kiro, Cline, Crush), weighted
+  memories and instructions ×3, rules ×2, session logs ×1. Still glob and stat
+  only, enforced by the same tests. `terminalcreature sources` prints a count
+  per agent and a not-found line, never a path.
+- `doctor` gains a hosts block: each host, whether it's installed, whether
+  it's wired.
+- The shim reads the caller's stdin shape, so the session counter works in
+  every native host.
+
+### Changed
+
+- The default provider is `auto`: `agents` when two or more coding agents
+  are installed, else `claude`. An existing install that set `provider`
+  explicitly keeps it; a stock install with only Claude Code on the machine
+  measures exactly what it did before.
+- `install.sh` reports the provider it actually finds, including `auto` and
+  `agents`, instead of labelling every unset provider as stock Claude Code
+  memory.
+
+### Notes
+
+- No breaking change for an existing Claude Code install. The state dir stays
+  `~/.claude/terminalcreature/`, the Claude shim keeps its name, roster and
+  settings carry forward, and re-running the bootstrap you installed with is
+  the upgrade.
+- Host contracts, honestly: Copilot and Cursor were read off the shipped CLI
+  bundles and exercised live. Qwen's is docs-derived. Droid's is docs-derived
+  and unverified against a real install; the adapter accepts both the
+  documented shape and a flat camelCase one, and bug reports are welcome.
+- Codex CLI, Gemini CLI, opencode, Amp and Goose have no statusline to wire
+  yet. They feed XP and draw in tmux or the prompt; a hooks card is planned
+  for 3.1.
+
 ## 2.2.0
 
 - `/creature-update` and `terminalcreature update --apply`: check pypi for a
