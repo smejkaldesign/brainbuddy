@@ -109,6 +109,12 @@ One creature, any terminal, any agent. It lives in an agent's own statusline whe
 
 **Turn-end card** means the agent has no statusline but does have a documented turn-end hook or plugin channel, so `install --host <name>` gives it a one-line creature card after each turn instead. All six contracts were read from the hosts' docs as of September 2026; see [the turn-end card](#codex-gemini-vibe-auggie-opencode-amp-the-turn-end-card) for what each one writes.
 
+**Prompt or tmux** means the creature sits in your prompt or tmux bar next to the agent, which works with every one of them.
+
+**Feeds XP** means the agent's own memory files count toward the creature's level.
+
+✓ works today · – not there.
+
 | Surface | How |
 | :--- | :--- |
 | tmux | `terminalcreature snippet tmux`, or the tpm plugin |
