@@ -1,7 +1,7 @@
 {
   "name": "terminalcreature",
   "description": "A terminal pet for your statusline that evolves as your memory system grows. Native in Claude Code, Cursor CLI, Copilot CLI, Qwen Code and Droid; a turn-end card in Codex, Gemini CLI, Vibe, auggie, opencode and Amp; tmux, Starship and your shell prompt everywhere else; fed by every coding agent on the machine.",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "author": {
     "name": "Smejkal Design",
     "url": "https://github.com/smejkaldesign"
