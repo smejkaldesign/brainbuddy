@@ -12,7 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%F0%9F%A5%9A%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Krona+One&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #000000;
@@ -108,15 +108,9 @@
   .toplinks { margin: 32px 0 18px; font-family: var(--mono); font-size: 13px; letter-spacing: .04em; color: var(--dim); }
   .toplinks a { margin: 0 8px; }
 
-  h1 { margin: 10px 0 26px; }
-  /* the wordmark: wide geometric caps in signal lime, E's mirrored */
-  .wordmark {
-    display: inline-block; font-family: "Krona One", "Space Grotesk", system-ui, sans-serif; font-weight: 400;
-    color: #46ff2e; font-size: clamp(30px, 7.2vw, 62px); line-height: .98; letter-spacing: .01em;
-    text-transform: uppercase; text-shadow: 0 0 22px rgba(70,255,46,.35), var(--shadow-lg);
-  }
-  .wordmark span { display: block; }
-  .wordmark .e { display: inline-block; transform: scaleX(-1); }
+  h1 { margin: 10px 0 30px; }
+  /* the wordmark, from the Figma export; keeps its own lime rather than the page accent */
+  .logo { display: block; margin: 0 auto; width: min(420px, 82vw); height: auto; filter: drop-shadow(0 0 18px rgba(54,248,0,.35)); }
   .pill {
     display: inline-block; font-family: var(--mono); font-size: 12px; letter-spacing: .02em;
     color: var(--muted); border: 1px solid rgba(var(--gold-rgb), .35); border-radius: 6px;
@@ -322,7 +316,7 @@
       <a href="https://github.com/smejkaldesign/brainbuddy/blob/main/CHANGELOG.md">changelog</a>
     </p>
 
-    <h1 aria-label="Terminal Creature"><span class="wordmark" aria-hidden="true"><span>T<span class="e">E</span>RMINAL</span><span>CR<span class="e">E</span>ATUR<span class="e">E</span></span></span></h1>
+    <h1><img class="logo" src="assets/terminalcreature-logo.png" width="247" height="82" alt="TERMINAL CREATURE"></h1>
 
     <div class="pill">A pet for your <b>Claude Code</b> statusline that levels off your <b>own notes</b></div>
 

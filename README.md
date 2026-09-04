@@ -1,4 +1,6 @@
-<h1 align="center">brainbuddy</h1>
+<p align="center">
+  <img src="site/assets/terminalcreature-logo.png" width="247" alt="TERMINAL CREATURE" />
+</p>
 
 <h3 align="center">A terminal pet that levels off your second brain.</h3>
 
