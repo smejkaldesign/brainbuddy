@@ -2,11 +2,12 @@
   <img src="site/assets/terminalcreature-logo.svg" width="247" alt="TERMINAL CREATURE" />
 </p>
 
-<h3 align="center">A terminal pet that levels off your second brain.</h3>
+<h3 align="center">Feed your terminal creature memories and watch it evolve.</h3>
 
 <p align="center">
-  A creature that lives in your Claude Code statusline, hatches from an egg,<br />
-  and grows on a diet of your own memories. It counts your notes and never reads them.
+  There's an egg in your Claude Code statusline. Every note you write feeds it.<br />
+  Write enough and it hatches, then grows through five forms, each one earned by what you've actually remembered.<br />
+  It counts your files and never reads them.
 </p>
 
 <br />
@@ -27,16 +28,18 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT" /></a>
 </p>
 
-<pre align="center">
+```
 day one                                  a few hundred notes later
-┌───────────┐                            ┌───────────┐
-│    ___    │  ████░░░░░░  my-brain      │   .\|/.   │  ████░░░░░░  my-brain
-│   /   \   │  🥚 Unhatched              │  ( o o )  │  🥚 Drain · Sage Lv65 █████░ +16 XP
-│  ( ooo )  │                            │  /|ooo|\  │
-│   \___/   │                            │   |___|   │
-└───────────┘                            │  /     \  │
-                                         └───────────┘
-</pre>
++-----------+                            +-----------+
+|    ___    |  [====......]  my-brain    |   .\|/.   |  [====......]  my-brain
+|   /   \   |  Unhatched                 |  ( o o )  |  Drain . Sage Lv65 [=====.] +16 XP
+|  ( ooo )  |                            |  /|ooo|\  |
+|   \___/   |                            |   |___|   |
++-----------+                            |  /     \  |
+                                         +-----------+
+```
+
+<p align="center"><sub>Shown in ascii mode. With <code>unicode true</code> (the default) the box is drawn with line glyphs and the bars with block characters.</sub></p>
 
 ---
 
@@ -49,15 +52,15 @@ Every note you write is XP. The creature evolves through five forms as your vaul
 ## How It Works
 
 ```
-your notes                 terminalcreature                       statusline
-──────────────── ──►  ──────────────────────  ──►  ───────────────────────────
-~/.claude/projects/*/     glob + stat only           ┌───────────┐
-  memory/*.md             (never open())             │   ( ' ' ) │  🥚 Zask · Adept Lv44
-~/notes/**/*.md                │                     │  <|+++|>  │  ███░░░ +12 XP
-a structured vault        weighted count = xp        │   /|_|\   │
-                               │                     └───────────┘
-                     level = 100·√(xp / xp_max)
-                               │
+your notes                terminalcreature                    statusline
+----------------  -->  ----------------------  -->  ---------------------------
+~/.claude/projects/*/     glob + stat only           +-----------+
+  memory/*.md             (never open())             |   ( ' ' ) |  Zask . Adept Lv44
+~/notes/**/*.md                |                     |  <|+++|>  |  [===...] +12 XP
+a structured vault        weighted count = xp        |   /|_|\   |
+                               |                     +-----------+
+                     level = 100 * sqrt(xp / xp_max)
+                               |
                      sprite = f(level, seed)
 ```
 
@@ -292,7 +295,7 @@ Want it slower? `terminalcreature config xp_max 5000` triples the distance. Dele
 Right of the level bar, the caption shows what your buddy has eaten **in this session**:
 
 ```
-🥚 Neux · Sage Lv66 ██░░░░ +16 XP
+Neux . Sage Lv66 [==....] +16 XP
 ```
 
 It baselines the first time a session draws itself and is tracked per session id, since several are usually open at once. It stays hidden until there's something to show.
@@ -314,13 +317,13 @@ It baselines the first time a session draws itself and is tracked per session id
 `compose "<text>"` is what the installed shim uses by default: your own text with the creature as a **left column**, sharing row one. The column is boxed in dark grey; `config border false` drops the box and gets two rows of height back. `sprite_height 3` cuts the creature to three rows and keeps the evolution beats:
 
 ```
-┌───────────┐
-│   .\|/.   │  ████░░░░░░  my-brain ⎇ main          .\|/.    ████░░░░░░  my-brain ⎇ main
-│  ( o o )  │  🥚 Drain · Sage Lv65 █████░         ( o o )   🥚 Drain · Sage Lv65 █████░
-│  /|ooo|\  │                                      /|ooo|\
-│   |___|   │                                       |___|
-│  /     \  │                                      /     \
-└───────────┘
++-----------+
+|   .\|/.   |  [====......]  my-brain (main)        .\|/.    [====......]  my-brain (main)
+|  ( o o )  |  Drain . Sage Lv65 [=====.]          ( o o )   Drain . Sage Lv65 [=====.]
+|  /|ooo|\  |                                      /|ooo|\
+|   |___|   |                                       |___|
+|  /     \  |                                      /     \
++-----------+
    border true                                        border false
 ```
 
@@ -334,8 +337,8 @@ Keep several creatures. Only the **focused** one gains XP; the others hold their
 
 ```
 $ terminalcreature list
-  ◕ Drain      Lv65   Sage       Common
-* ○ Zask       Lv0    Hatchling  Legendary shiny
+  O Drain      Lv65   Sage       Common
+* o Zask       Lv0    Hatchling  Legendary shiny
 
 * = focused (the one gaining xp)
 ```
