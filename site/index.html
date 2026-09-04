@@ -161,7 +161,7 @@
   #host-panel { width: 100%; min-height: 70px; }
   #host-panel code { flex: 1; }
   #host-note, #host-sub { min-height: 3.2em; }
-  .alt { font-family: var(--mono); font-size: 13px; color: var(--dim); margin: 36px 0 0; }
+  .alt { font-family: var(--mono); font-size: 13px; color: var(--muted); margin: 36px 0 0; }
   .alt code { background: none; border: 0; padding: 0; color: var(--gold); white-space: nowrap; }
   .alt .then { color: var(--muted); }
 
@@ -179,11 +179,13 @@
   .t-status { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 6px; background: #070d0a; color: var(--muted); }
   .t-status .frame { color: #3a5546; } .t-status .creature { color: var(--gold-2); } .t-status .bar { color: var(--xp); }
   .t-status .dim { color: var(--dim); } .t-status .in { color: var(--text); }
+  /* our own annotations inside a chrome: readable contrast, and they wrap on a phone instead of running off the edge */
+  .t-status .note { display: block; white-space: normal; padding-left: 2ch; }
   /* tmux draws one status line with its own background, so the bar gets the pane look */
   .t-tmux { margin-top: 10px; display: flex; justify-content: space-between; gap: 16px; padding: 4px 10px; border-radius: 3px; background: #123522; color: #d6ffe1; white-space: pre; overflow: hidden; }
   .t-tmux .win { color: #86cfa0; } .t-tmux .cur { color: #061008; background: #5eea86; padding: 0 5px; border-radius: 2px; } .t-tmux .bar { color: #a6ffbd; }
-  .t-hosts { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); white-space: normal; }
-  .t-hosts button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--dim); background: none; border: 1px solid var(--line-2); border-radius: 4px; padding: 3px 9px; }
+  .t-hosts { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: normal; }
+  .t-hosts button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--muted); background: none; border: 1px solid var(--line-2); border-radius: 4px; padding: 3px 9px; }
   .t-hosts button:hover { color: var(--text); border-color: var(--gold); }
   .t-hosts button[aria-pressed="true"] { color: var(--gold); border-color: var(--gold); background: rgba(var(--gold-rgb), .06); }
   @keyframes blink { 50% { opacity: 0; } }
@@ -744,19 +746,19 @@
       spriteRows(['  <span class="dim">auto · 34% context · my-notes ⎇ main</span>', "  " + SEG, "", "", ""]) + "</div>";
   }
   function tmuxStatus() {
-    return '<div class="t-status"><span class="dim">  (pane 1 keeps running whatever you had open)</span>\n' +
+    return '<div class="t-status"><span class="note">(pane 1 keeps running whatever you had open)</span>' +
       spriteRows(['  <span class="dim">$ terminalcreature render --format tmux --width 40</span>', "  " + SEG, "", "", ""]) +
       '<div class="t-tmux"><span><span class="cur">notes</span> <span class="win">0:zsh  1:claude*  2:cursor</span></span><span>' + SEG + ' <span class="win">│ 14:02</span></span></div></div>';
   }
   // hosts with no statusline get the same creature as one line after each turn, in the host's own reply
   function codexStatus() {
-    return '<div class="t-status"><span class="dim">  (no statusline, so the card lands after each turn)</span>\n' +
+    return '<div class="t-status"><span class="note">(no statusline, so the card lands after each turn)</span>' +
       '<span class="t-prompt">›</span> <span class="in">what did I write about tmux last week?</span>\n' +
       '<span class="dim">  three notes: the pane script, status-right, and the TPM plugin.</span>\n' +
       '<span class="dim">  want me to fold them into one?</span>\n' +
       '\n' +
       '<span class="creature">' + esc("«''»* Zask Lv41 ") + '<span class="bar">█░░░░░░░</span> +12 xp</span>\n' +
-      '<span class="dim">  first turn, then when xp or stage moves, else every 10th turn</span></div>';
+      '<span class="note">first turn, then when xp or stage moves, else every 10th turn</span></div>';
   }
   var HOST_DEMOS = [
     ["claude code", "claude code · statusline", claudeStatus],
@@ -1016,11 +1018,11 @@
   function reserve() {
     var g0 = curGroup, t0 = curTab, cmd = heroCmd.textContent, note = hostNote.innerHTML, sub = hostSub.innerHTML, r = 0, p = 0, n = 0, s = 0;
     [tabs, panel, hostNote, hostSub].forEach(function (el) { el.style.minHeight = "0"; });
-    GROUPS.forEach(function (_, k) { selectGroup(k); r = Math.max(r, tabs.offsetHeight); });
+    GROUPS.forEach(function (_, k) { selectGroup(k); r = Math.max(r, h(tabs)); });
     selectGroup(g0); selectHost(t0);
-    INSTALL.forEach(function (h) {
-      heroCmd.textContent = h[2]; hostNote.innerHTML = h[3]; hostSub.innerHTML = h[4];
-      p = Math.max(p, panel.offsetHeight); n = Math.max(n, hostNote.offsetHeight); s = Math.max(s, hostSub.offsetHeight);
+    INSTALL.forEach(function (x) {
+      heroCmd.textContent = x[2]; hostNote.innerHTML = x[3]; hostSub.innerHTML = x[4];
+      p = Math.max(p, h(panel)); n = Math.max(n, h(hostNote)); s = Math.max(s, h(hostSub));
     });
     heroCmd.textContent = cmd; hostNote.innerHTML = note; hostSub.innerHTML = sub;
     tabs.style.minHeight = r + "px"; panel.style.minHeight = p + "px"; hostNote.style.minHeight = n + "px"; hostSub.style.minHeight = s + "px";
