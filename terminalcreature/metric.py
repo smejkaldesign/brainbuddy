@@ -2,7 +2,7 @@
 
 R2: the only filesystem calls in here are glob and stat. No open(), no read().
 If you're adding something that needs file contents, it doesn't belong in this
-module and probably doesn't belong in brainbuddy at all.
+module and probably doesn't belong in terminalcreature at all.
 """
 
 import glob

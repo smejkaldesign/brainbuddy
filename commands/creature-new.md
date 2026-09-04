@@ -1,10 +1,10 @@
 ---
-name: brainbuddy-new
-description: "Start a new brainbuddy egg, either replacing the current buddy or adding alongside it. Use when the user asks for a new buddy, a new egg, to start over, to reroll their creature, or to hatch something different."
+name: creature-new
+description: "Start a new terminalcreature egg, either replacing the current buddy or adding alongside it. Use when the user asks for a new buddy, a new egg, to start over, to reroll their creature, or to hatch something different."
 user_invocable: true
 ---
 
-# /brainbuddy-new
+# /creature-new
 
 Lay a fresh egg. **Ask which mode first, then run the matching command.** Never guess, and
 never pass a mode the user didn't pick.
@@ -12,7 +12,7 @@ never pass a mode the user didn't pick.
 Show them the current buddy and the two options:
 
 ```bash
-PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli list
+PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli list
 ```
 
 | They want | Run |
@@ -21,7 +21,7 @@ PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli list
 | another buddy, keeping the current one | `new --add [name]` |
 
 ```bash
-PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli new --replace
+PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli new --replace
 ```
 
 If there's no buddy yet, there's nothing to replace. Just run `new` and skip the question.
@@ -44,11 +44,11 @@ anyone they have to reach 100 first.
 ## Naming
 
 Don't name it here. An egg renders as Unhatched everywhere, and the name is chosen during
-`/brainbuddy-hatch` (two ideas from `brainbuddy names`, their own, or let it name itself).
+`/creature-hatch` (two ideas from `terminalcreature names`, their own, or let it name itself).
 Laying the egg and naming what's inside are different moments; keep them apart.
 
 ## Rules
 
-- **Never print a filesystem path from a memory directory.** Same rule as `/brainbuddy`.
-- Don't hatch it for them. `new` leaves an egg on purpose; opening it is `/brainbuddy-hatch`.
+- **Never print a filesystem path from a memory directory.** Same rule as `/creature`.
+- Don't hatch it for them. `new` leaves an egg on purpose; opening it is `/creature-hatch`.
 - A new egg feeds while it's closed, so there's no rush to hatch and no XP lost by waiting.

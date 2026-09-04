@@ -1,4 +1,4 @@
-"""Tests. Run: python3 -m tests.test_brainbuddy  (from the repo root)
+"""Tests. Run: python3 -m tests.test_terminalcreature  (from the repo root)
 
 Fixtures are synthetic and generated into a temp dir. No real vault is ever
 touched, so nothing here can leak a memory filename into CI output (R12).
@@ -11,7 +11,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from brainbuddy import creature, metric, state as state_mod  # noqa: E402
+from terminalcreature import creature, metric, state as state_mod  # noqa: E402
 
 FAILURES = []
 
@@ -83,7 +83,7 @@ def test_sprite_alignment():
     two sides directly instead of eyeballing the art.
     """
     print("\nsprite alignment")
-    from brainbuddy import sprites
+    from terminalcreature import sprites
 
     bad = []
     for short in (False, True):
@@ -119,7 +119,7 @@ def test_compose_column():
     print("\ncompose column")
     os.environ["NO_COLOR"] = "1"
     try:
-        from brainbuddy import render
+        from terminalcreature import render
 
         def widths(**settings):
             # only the row carrying the caller's text shows where the column ends.
@@ -202,7 +202,7 @@ def test_no_content_reads():
     import tokenize
 
     banned = {"open", "read", "readlines", "read_text", "read_bytes", "loadtxt"}
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "brainbuddy", "metric.py")
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "terminalcreature", "metric.py")
     found = set()
     with tokenize.open(path) as f:
         for tok in tokenize.generate_tokens(f.readline):
@@ -432,11 +432,11 @@ def test_version_check_is_explicit_only():
     print("\nversion check")
     import subprocess
 
-    from brainbuddy import release
+    from terminalcreature import release
 
-    check(release.status_line("ok", "0.2.0", current="0.1.0").startswith("brainbuddy 0.2.0 is out"),
+    check(release.status_line("ok", "0.2.0", current="0.1.0").startswith("terminalcreature 0.2.0 is out"),
           "a newer release says so, and which one")
-    check("pipx upgrade brainbuddy" in release.status_line("ok", "0.2.0", current="0.1.0"),
+    check("pipx upgrade terminalcreature" in release.status_line("ok", "0.2.0", current="0.1.0"),
           "and names both ways to take it")
     check("latest" in release.status_line("ok", "0.1.0", current="0.1.0"), "matching versions read as current")
     check("ahead" in release.status_line("ok", "0.1.0", current="0.2.0"), "a local build ahead of pypi says that")
@@ -456,7 +456,7 @@ def test_version_check_is_explicit_only():
         "socket.socket = guard\n"
         "socket.create_connection = guard\n"
         "socket.getaddrinfo = guard\n"
-        "from brainbuddy import cli\n"
+        "from terminalcreature import cli\n"
         "for argv in (['new'], ['hatch'], ['refresh'], ['render'], ['compose', 'BAR'], ['card'], ['doctor']):\n"
         "    cli.main(argv)\n"
         "try:\n"
@@ -487,7 +487,7 @@ def test_version_check_is_explicit_only():
         "    raise AssertionError('network')\n"
         "socket.create_connection = guard\n"
         "socket.getaddrinfo = guard\n"
-        "from brainbuddy import cli\n"
+        "from terminalcreature import cli\n"
         "cli.main(['config', 'update_check', 'true'])\n"
         "cli.main(['refresh'])\n"
         "cli.main(['render'])\n"
@@ -529,8 +529,8 @@ def test_version_check_is_explicit_only():
             "socket.create_connection = _guard\n"
             "socket.getaddrinfo = _guard\n" % log
         )
-    marker = os.path.join(home, ".claude", "brainbuddy", "latest-version")
-    cache = os.path.join(home, ".claude", "brainbuddy", "xp.cache")
+    marker = os.path.join(home, ".claude", "terminalcreature", "latest-version")
+    cache = os.path.join(home, ".claude", "terminalcreature", "xp.cache")
     try:
         for opted, expect_net in (("true", True), ("false", False)):
             open(log, "w").close()
@@ -538,7 +538,7 @@ def test_version_check_is_explicit_only():
                 os.remove(marker)
             child = (
                 "import os\n"
-                "from brainbuddy import cli, state as sm\n"
+                "from terminalcreature import cli, state as sm\n"
                 "cli.main(['config', 'update_check', %r])\n"
                 "sm.write_cache(5, {})\n"
                 "os.utime(sm.CACHE_PATH, (1, 1))\n"
@@ -596,7 +596,7 @@ def test_project_statusline_override():
                        env=env, input="", capture_output=True, text=True)
 
         def doctor(cwd):
-            return subprocess.run([sys.executable, "-m", "brainbuddy.cli", "doctor"],
+            return subprocess.run([sys.executable, "-m", "terminalcreature.cli", "doctor"],
                                   env=dict(env, PYTHONPATH=repo), cwd=cwd,
                                   capture_output=True, text=True).stdout
 
@@ -610,7 +610,7 @@ def test_project_statusline_override():
         out = doctor(project)
         check("sets its own statusline" in out, "doctor names the state")
         check('--statusline "~/repo/bar.sh"' in out, "and hands back the fix with their own command in it")
-        check("statusline-brainbuddy.sh" in out, "pointing the project at the shim")
+        check("statusline-terminalcreature.sh" in out, "pointing the project at the shim")
         check("~/work/app/.claude/settings.json" in out, "the file is named home-relative, not as a full path")
         with open(settings) as f:
             check(json.load(f) == theirs, "and their settings file is not written to")
@@ -641,7 +641,7 @@ def test_empty_hatch_is_a_moment():
         env = dict(os.environ, HOME=home, NO_COLOR="1")
         subprocess.run(["bash", os.path.join(repo, "install.sh")],
                        env=env, input="", capture_output=True, text=True)
-        out = subprocess.run([sys.executable, "-m", "brainbuddy.cli", "hatch"],
+        out = subprocess.run([sys.executable, "-m", "terminalcreature.cli", "hatch"],
                              env=dict(env, PYTHONPATH=repo), capture_output=True, text=True).stdout
 
         check("the egg cracks" in out, "the reveal still runs")
@@ -649,7 +649,7 @@ def test_empty_hatch_is_a_moment():
         check(any(r in out for r in ("Common", "Uncommon", "Rare", "Epic", "Legendary")),
               "and it still says what came out")
         check("that's the floor, not a dud roll" in out, "the zero is framed rather than left hanging")
-        from brainbuddy import render
+        from terminalcreature import render
         check(render.SETUP_PROMPT in out, "and it ends on how to get something to feed it")
     finally:
         shutil.rmtree(home)
@@ -657,7 +657,7 @@ def test_empty_hatch_is_a_moment():
 
 def _egg_renders(colour):
     """Every unhatched egg's segment and column, over a spread of seeds."""
-    from brainbuddy import render
+    from terminalcreature import render
 
     if colour:
         os.environ.pop("NO_COLOR", None)
@@ -688,7 +688,7 @@ def test_egg_reveals_nothing():
     PRs because nothing here compared one egg against another.
     """
     print("\negg reveals nothing")
-    from brainbuddy import sprites
+    from terminalcreature import sprites
 
     try:
         for short in (False, True):
@@ -720,7 +720,7 @@ def test_source_status():
     is actively wrong advice for someone who has simply never kept notes.
     """
     print("\nsource status")
-    from brainbuddy import render
+    from terminalcreature import render
 
     settings = dict(state_mod.DEFAULT_SETTINGS)
     settings["provider"] = "folder"
@@ -792,15 +792,15 @@ def test_installer_wraps_any_statusline():
                                env=env, input="", capture_output=True, text=True)
             check(r.returncode == 0, "%s: installer exits clean" % label)
 
-            shim = os.path.join(claude, "brainbuddy", "statusline-brainbuddy.sh")
+            shim = os.path.join(claude, "terminalcreature", "statusline-terminalcreature.sh")
             out = subprocess.run(["bash", shim], env=env, input="{}",
                                  capture_output=True, text=True).stdout
             check("HOST" in out, "%s: the statusline it wrapped still renders" % label)
             check("┌" in out or "+-" in out, "%s: the creature lands in its box" % label)
-            check("/brainbuddy-hatch" in out, "%s: and it says how to open the egg" % label)
+            check("/creature-hatch" in out, "%s: and it says how to open the egg" % label)
 
             with open(script) as f:
-                check("brainbuddy" not in f.read(), "%s: their script is untouched" % label)
+                check("terminalcreature" not in f.read(), "%s: their script is untouched" % label)
 
             u = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--uninstall"],
                                env=env, input="", capture_output=True, text=True)
@@ -822,7 +822,7 @@ def test_installer_wraps_any_statusline():
         env = dict(os.environ, HOME=home)
         subprocess.run(["bash", os.path.join(repo, "install.sh")],
                        env=env, input="", capture_output=True, text=True)
-        shim = os.path.join(claude, "brainbuddy", "statusline-brainbuddy.sh")
+        shim = os.path.join(claude, "terminalcreature", "statusline-terminalcreature.sh")
         out = subprocess.run(["bash", shim], env=env, input="{}",
                              capture_output=True, text=True).stdout
         check("HOST" in out and ("┌" in out or "+-" in out),
@@ -863,7 +863,7 @@ def test_plugin_wiring():
         check(json.loads(before.stdout)["hookSpecificOutput"]["hookEventName"] == "SessionStart",
               "unwired: and says it in the shape a SessionStart hook returns")
         check("--no-commands" in before.stdout, "unwired: naming the flag that avoids double-listing")
-        with open(os.path.join(claude, "brainbuddy", "plugin-root")) as f:
+        with open(os.path.join(claude, "terminalcreature", "plugin-root")) as f:
             check(f.read().strip() == repo, "the plugin root is recorded for the command to find")
 
         r = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--no-commands"],
@@ -871,7 +871,7 @@ def test_plugin_wiring():
         check(r.returncode == 0, "--no-commands: installer exits clean")
         check(os.listdir(os.path.join(claude, "commands")) == [],
               "--no-commands: the plugin's five commands aren't copied over a second time")
-        check("/brainbuddy-hatch" in r.stdout, "--no-commands: still ends on the egg")
+        check("/creature-hatch" in r.stdout, "--no-commands: still ends on the egg")
 
         after = subprocess.run(["bash", hook], env=env, capture_output=True, text=True)
         check(after.stdout.strip() == "", "wired: the hook goes quiet")
@@ -891,7 +891,7 @@ def test_plugin_wiring():
 
 
 def test_installer_respects_hand_wiring():
-    """A brainbuddy block someone has edited belongs to them, not the installer.
+    """A terminalcreature block someone has edited belongs to them, not the installer.
 
     Wrapping a script that already calls the CLI would draw two creatures, so
     the installer has to stop. What it must not do is delete the block to make
@@ -905,7 +905,7 @@ def test_installer_respects_hand_wiring():
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     edited = GENERATED_BLOCK.replace(
         'printf " "',
-        'PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli compose "$MY_BAR"',
+        'PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli compose "$MY_BAR"',
     )
     for label, block, survives in [("untouched block", GENERATED_BLOCK, False), ("edited block", edited, True)]:
         home = tempfile.mkdtemp(prefix="bb-wired-")
@@ -936,10 +936,10 @@ def test_installer_respects_hand_wiring():
             else:
                 check(not same, "%s: our own block is removed" % label)
                 check(not still_theirs, "%s: and the shim takes over" % label)
-                shim = os.path.join(claude, "brainbuddy", "statusline-brainbuddy.sh")
+                shim = os.path.join(claude, "terminalcreature", "statusline-terminalcreature.sh")
                 out = subprocess.run(["bash", shim], env=env, input="{}",
                                      capture_output=True, text=True).stdout
-                check(out.count("/brainbuddy-hatch") == 1, "%s: exactly one creature renders" % label)
+                check(out.count("/creature-hatch") == 1, "%s: exactly one creature renders" % label)
         finally:
             shutil.rmtree(home)
 
@@ -965,16 +965,16 @@ def test_hatch_from_zero():
             for i in range(40):
                 open(os.path.join(notes, "n%d.md" % i), "w").close()
             env = dict(os.environ, HOME=home)
-            lib = os.path.join(home, ".claude", "brainbuddy", "lib")
+            lib = os.path.join(home, ".claude", "terminalcreature", "lib")
 
             def bb(*a):
-                return subprocess.run([sys.executable, "-m", "brainbuddy.cli"] + list(a),
+                return subprocess.run([sys.executable, "-m", "terminalcreature.cli"] + list(a),
                                       env=dict(env, PYTHONPATH=lib), capture_output=True, text=True).stdout
 
             subprocess.run(["bash", os.path.join(repo, "install.sh"), "--folder", notes],
                            env=env, input="", capture_output=True, text=True)
             out = bb("hatch", "--from-zero") if from_zero else bb("hatch")
-            state = json.load(open(os.path.join(home, ".claude", "brainbuddy", "state.json")))
+            state = json.load(open(os.path.join(home, ".claude", "terminalcreature", "state.json")))
             banked = state["creatures"][0]["xp_banked"]
             label = "from-zero" if from_zero else "score-existing"
 
@@ -991,7 +991,7 @@ def test_hatch_from_zero():
             for i in range(40, 50):
                 open(os.path.join(notes, "n%d.md" % i), "w").close()
             bb("refresh")
-            state = json.load(open(os.path.join(home, ".claude", "brainbuddy", "state.json")))
+            state = json.load(open(os.path.join(home, ".claude", "terminalcreature", "state.json")))
             grew = state["creatures"][0]["xp_banked"] - banked
             check(grew == 20, "%s: 10 new notes add 20 xp on top, got %d" % (label, grew))
         finally:
@@ -1008,7 +1008,7 @@ def test_session_xp_counter():
     print("\nsession xp counter")
     os.environ["NO_COLOR"] = "1"
     try:
-        from brainbuddy import render
+        from terminalcreature import render
 
         st = state_mod.default_state()
         c = _hatched(st, name="Zask")
@@ -1053,7 +1053,7 @@ def test_hatch_naming():
     print("\nhatch naming")
     import io
     from contextlib import redirect_stdout
-    from brainbuddy import cli
+    from terminalcreature import cli
 
     buf = io.StringIO()
     with redirect_stdout(buf):
@@ -1077,7 +1077,7 @@ def test_update_chip():
     """
     print("\nupdate chip")
     os.environ["NO_COLOR"] = "1"
-    from brainbuddy import release, render
+    from terminalcreature import release, render
 
     d = tempfile.mkdtemp(prefix="bb-chip-")
     real_path = state_mod.LATEST_PATH
@@ -1180,7 +1180,7 @@ def test_refresh_never_reverts_concurrent_writes():
         script = (
             "import sys\n"
             "sys.path.insert(0, %r)\n"
-            "from brainbuddy import cli, state as sm\n"
+            "from terminalcreature import cli, state as sm\n"
             "st = sm.load(); sm.create(st, name='Alpha'); sm.save(st)\n"
             "real = sm.measure_now\n"
             "def slow(settings):\n"
@@ -1194,7 +1194,7 @@ def test_refresh_never_reverts_concurrent_writes():
         r = subprocess.run([sys.executable, "-c", script], env=env,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         check(r.returncode == 0, "refresh exits clean, stderr: %s" % r.stderr.decode()[:120])
-        with open(os.path.join(home, ".claude", "brainbuddy", "state.json")) as f:
+        with open(os.path.join(home, ".claude", "terminalcreature", "state.json")) as f:
             names = [c.get("name") for c in json.load(f)["creatures"]]
         check("Beta" in names, "an egg laid during the scan survives the refresh, roster: %s" % names)
     finally:
@@ -1213,6 +1213,90 @@ def test_migration_replaces_nulls():
     check(isinstance(c["name"], str) and bool(c["name"]), "a null name migrates to a real one")
     check(c["xp_banked"] == 0, "a null xp_banked migrates to 0")
     check(c["last_stage_seen"] == 0, "a null last_stage_seen migrates to 0")
+
+
+def test_migrates_a_brainbuddy_install():
+    """A brainbuddy-era home comes over in place: same creature, same wrapped
+    command, settings repointed, old command files gone, a stub at the old shim
+    path for project-level settings that still name it. Twice changes nothing.
+    """
+    print("\nmigration from brainbuddy")
+    import json
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    home = tempfile.mkdtemp(prefix="bb-migrate-")
+    try:
+        claude = os.path.join(home, ".claude")
+        os.makedirs(claude)
+        with open(os.path.join(claude, "settings.json"), "w") as f:
+            json.dump({"statusLine": {"type": "command", "command": "echo HOST"}}, f)
+        env = dict(os.environ, HOME=home)
+        subprocess.run(["bash", os.path.join(repo, "install.sh")],
+                       env=env, input="", capture_output=True, text=True)
+        new = os.path.join(claude, "terminalcreature")
+        old = os.path.join(claude, "brainbuddy")
+        # turn the fresh install into what brainbuddy 1.x left behind
+        os.rename(new, old)
+        os.rename(os.path.join(old, "statusline-terminalcreature.sh"), os.path.join(old, "statusline-brainbuddy.sh"))
+        os.rename(os.path.join(old, "lib", "terminalcreature"), os.path.join(old, "lib", "brainbuddy"))
+        with open(os.path.join(claude, "settings.json"), "w") as f:
+            json.dump({"statusLine": {"type": "command", "command": os.path.join(old, "statusline-brainbuddy.sh")}}, f)
+        for name in ("brainbuddy", "brainbuddy-hatch", "brainbuddy-new", "brainbuddy-hide", "brainbuddy-show"):
+            with open(os.path.join(claude, "commands", name + ".md"), "w") as f:
+                f.write("# old\n")
+        for name in ("creature", "creature-hatch", "creature-new", "creature-hide", "creature-show"):
+            os.remove(os.path.join(claude, "commands", name + ".md"))
+        with open(os.path.join(old, "state.json")) as f:
+            before = json.load(f)["creatures"]
+
+        r = subprocess.run(["bash", os.path.join(repo, "install.sh")],
+                           env=env, input="", capture_output=True, text=True)
+        check(r.returncode == 0, "re-running the installer over a brainbuddy install exits clean")
+        check("migrated" in r.stdout, "and says so")
+        with open(os.path.join(new, "state.json")) as f:
+            check(json.load(f)["creatures"] == before, "the roster comes over unchanged")
+        with open(os.path.join(new, "wrapped-command")) as f:
+            check(f.read() == "echo HOST", "the wrapped command comes over")
+        with open(os.path.join(claude, "settings.json")) as f:
+            check(json.load(f)["statusLine"]["command"] == os.path.join(new, "statusline-terminalcreature.sh"),
+                  "settings.json points at the new shim")
+        check(not os.path.exists(os.path.join(old, "lib")), "the old library is gone")
+        check(not os.path.exists(os.path.join(old, "state.json")), "the old state file is gone")
+        check(not os.path.exists(os.path.join(claude, "commands", "brainbuddy-hatch.md")), "the old command files are gone")
+        check(os.path.exists(os.path.join(claude, "commands", "creature-hatch.md")), "the new command files are there")
+        out = subprocess.run(["bash", os.path.join(old, "statusline-brainbuddy.sh")], env=env, input="{}",
+                             capture_output=True, text=True).stdout
+        check("HOST" in out and ("┌" in out or "+-" in out), "the old shim path still draws, through the stub")
+
+        with open(os.path.join(claude, "settings.json")) as f:
+            settled = f.read()
+        r2 = subprocess.run(["bash", os.path.join(repo, "install.sh")],
+                            env=env, input="", capture_output=True, text=True)
+        with open(os.path.join(claude, "settings.json")) as f:
+            check(r2.returncode == 0 and f.read() == settled, "a second run changes nothing")
+        with open(os.path.join(new, "state.json")) as f:
+            check(json.load(f)["creatures"] == before, "and the roster is still the same creature")
+
+        u = subprocess.run(["bash", os.path.join(repo, "install.sh"), "--uninstall"],
+                           env=env, input="", capture_output=True, text=True)
+        with open(os.path.join(claude, "settings.json")) as f:
+            check(u.returncode == 0 and json.load(f)["statusLine"]["command"] == "echo HOST",
+                  "uninstall after a migration restores the original command")
+        check(not os.path.exists(os.path.join(old, "statusline-brainbuddy.sh")), "and removes the stub")
+    finally:
+        shutil.rmtree(home)
+
+
+def test_seed_salt_is_pinned():
+    """The salt kept its brainbuddy-era value through the rename on purpose.
+    Change it and every creature ever hatched becomes a different one.
+    """
+    print("\nseed salt")
+    check(creature.SALT == "brainbuddy/v1", "the seed salt is the original")
+    d = creature.derive("seed-one")
+    check((d["species"], d["rarity"], d["shiny"]) == ("Bramble", "Common", False),
+          "a known seed still derives the creature it always has")
 
 
 if __name__ == "__main__":
@@ -1240,6 +1324,8 @@ if __name__ == "__main__":
     test_installer_respects_hand_wiring()
     test_hatch_from_zero()
     test_session_xp_counter()
+    test_migrates_a_brainbuddy_install()
+    test_seed_salt_is_pinned()
     print("\n%s" % ("-" * 46))
     if FAILURES:
         print("%d FAILED" % len(FAILURES))

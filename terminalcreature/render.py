@@ -34,7 +34,7 @@ BOX_UNICODE = ("┌", "─", "┐", "│", "└", "┘")
 BOX_ASCII = ("+", "-", "+", "|", "+", "+")
 BOX_PAD = 1
 
-# marks the segment as brainbuddy's. it sits in the right-hand column, so the two
+# marks the segment as terminalcreature's. it sits in the right-hand column, so the two
 # cells an emoji takes can't push the boxed art out of alignment
 EGG_ICON = "🥚"
 EGG_ICON_ASCII = "o"
@@ -70,7 +70,7 @@ def spawn_refresh():
             state_mod.write_cache(0, {})
         os.utime(state_mod.CACHE_PATH, None)
         subprocess.Popen(
-            [sys.executable, "-m", "brainbuddy.cli", "refresh"],
+            [sys.executable, "-m", "terminalcreature.cli", "refresh"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
@@ -124,7 +124,7 @@ def no_source_help(settings, status):
                 status.get("stray", 0), provider),
             "",
             "Count it as a plain folder of notes instead:",
-            "  /brainbuddy config provider folder",
+            "  /creature config provider folder",
         ])
 
     if state == "empty" or provider != "claude":
@@ -136,9 +136,9 @@ def no_source_help(settings, status):
             ])
         return "\n".join([
             "That folder isn't there, so your buddy has nothing to feed on. Point it somewhere real:",
-            "  /brainbuddy config vault_root ~/notes",
+            "  /creature config vault_root ~/notes",
             "",
-            "`/brainbuddy config` shows the path it's using now.",
+            "`/creature config` shows the path it's using now.",
         ])
 
     # provider is claude and the directory has never existed, so this is someone
@@ -152,8 +152,8 @@ def no_source_help(settings, status):
         '  "' + SETUP_PROMPT + '"',
         "",
         "Already keep notes somewhere? Point it at them instead:",
-        "  /brainbuddy config provider folder",
-        "  /brainbuddy config vault_root ~/notes",
+        "  /creature config provider folder",
+        "  /creature config vault_root ~/notes",
     ])
 
 
@@ -197,7 +197,7 @@ def segment(st, xp=None, counts=None, gain=0):
     else:
         # level, rarity colour, mark and shiny all come off the seed, so an egg
         # wearing any of them has told you what's inside before you opened it
-        idx, label = metric.EGG_SPRITE, "egg /brainbuddy-hatch"
+        idx, label = metric.EGG_SPRITE, "egg /creature-hatch"
         tint, mark, shiny = DIM, "", ""
     f = sprites.face(full["species"], idx, uni)
     # the name is chosen at the hatch, so before it there isn't one to show
@@ -316,7 +316,7 @@ def compose(st, left, xp=None, counts=None, gain=0):
     else:
         # no name, no level, no progress bar: the name is chosen at the hatch
         # and everything else would spoil the reveal before you open it
-        caption = paint("%s Unhatched · /brainbuddy-hatch" % icon, BOLD)
+        caption = paint("%s Unhatched · /creature-hatch" % icon, BOLD)
 
     # pin the column to the widest form this creature will ever reach, so the text
     # beside it doesn't jump two columns the day it evolves into an Ascendant
@@ -394,7 +394,7 @@ def _zero_note(st, xp):
         return None
     if state_mod.source_status(st["settings"])["state"] == "ok":
         return None
-    return paint("going hungry. /brainbuddy doctor says what it needs", DIM)
+    return paint("going hungry. /creature doctor says what it needs", DIM)
 
 
 def egg_card(st, c):
@@ -409,7 +409,7 @@ def egg_card(st, c):
         "",
         "  %s" % paint("Unhatched", BOLD),
         "  " + paint("%d xp eaten and counting" % c.get("xp_banked", 0), DIM),
-        "  " + paint("/brainbuddy-hatch to find out what it is", DIM),
+        "  " + paint("/creature-hatch to find out what it is", DIM),
     ]
     note = _zero_note(st, c.get("xp_banked", 0))
     if note:
@@ -419,7 +419,7 @@ def egg_card(st, c):
 
 
 def card(st, xp=None, counts=None, hungry_note=True, art=True):
-    """The /brainbuddy view. Multi-line, safe to be verbose, except about paths.
+    """The /creature view. Multi-line, safe to be verbose, except about paths.
 
     hungry_note=False for callers that answer the zero themselves. The card's
     version points at doctor, which is the wrong thing to read directly above
@@ -437,8 +437,8 @@ def card(st, xp=None, counts=None, hungry_note=True, art=True):
         # empty and drop the one command that gets them back
         parked = [x["name"] for x in st.get("creatures", [])]
         if parked:
-            return "Nothing focused. `/brainbuddy focus %s` brings it back, or /brainbuddy-new lays a fresh egg." % parked[0]
-        return "No buddy yet. /brainbuddy-new lays an egg."
+            return "Nothing focused. `/creature focus %s` brings it back, or /creature-new lays a fresh egg." % parked[0]
+        return "No buddy yet. /creature-new lays an egg."
     if not state_mod.is_hatched(c):
         return egg_card(st, c)
 
@@ -541,7 +541,7 @@ def egg_notice(st, c):
     out += [
         "",
         "  %s" % paint("An egg, unhatched", BOLD),
-        "  " + paint("/brainbuddy-hatch to open it", DIM),
+        "  " + paint("/creature-hatch to open it", DIM),
         "",
     ]
     return "\n".join(out)

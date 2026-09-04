@@ -1,8 +1,3 @@
-> **brainbuddy is now [terminalcreature](https://github.com/smejkaldesign/terminalcreature).**
-> This package is kept only so existing installs hear about the rename. Re-run the bootstrap you
-> installed with, or `pipx install terminalcreature`; your creature, roster, and settings move over
-> in place. Nothing below is maintained under this name any more.
-
 <p align="center">
   <img src="site/assets/terminalcreature-logo.png" width="247" alt="TERMINAL CREATURE" />
 </p>
@@ -17,17 +12,17 @@
 <br />
 
 <p align="center">
-  <a href="https://smejkaldesign.github.io/brainbuddy/"><strong>Website</strong></a> &nbsp;&middot;&nbsp;
-  <a href="https://pypi.org/project/brainbuddy/"><strong>PyPI</strong></a> &nbsp;&middot;&nbsp;
+  <a href="https://terminalcreature.com"><strong>Website</strong></a> &nbsp;&middot;&nbsp;
+  <a href="https://pypi.org/project/terminalcreature/"><strong>PyPI</strong></a> &nbsp;&middot;&nbsp;
   <a href="CHANGELOG.md"><strong>Changelog</strong></a> &nbsp;&middot;&nbsp;
-  <a href="https://github.com/smejkaldesign/brainbuddy/issues"><strong>Report a bug</strong></a> &nbsp;&middot;&nbsp;
+  <a href="https://github.com/smejkaldesign/terminalcreature/issues"><strong>Report a bug</strong></a> &nbsp;&middot;&nbsp;
   <a href="CONTRIBUTING.md"><strong>Contribute</strong></a>
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/brainbuddy/"><img src="https://img.shields.io/pypi/v/brainbuddy?color=ffb627&label=pypi" alt="PyPI" /></a>
+  <a href="https://pypi.org/project/terminalcreature/"><img src="https://img.shields.io/pypi/v/terminalcreature?color=ffb627&label=pypi" alt="PyPI" /></a>
   <img src="https://img.shields.io/badge/python-3.9%E2%80%933.13-3776AB?logo=python&logoColor=white" alt="Python 3.9 to 3.13" />
-  <a href="https://github.com/smejkaldesign/brainbuddy/actions/workflows/ci.yml"><img src="https://github.com/smejkaldesign/brainbuddy/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/smejkaldesign/terminalcreature/actions/workflows/ci.yml"><img src="https://github.com/smejkaldesign/terminalcreature/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/dependencies-0-4ade80" alt="Zero dependencies" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT" /></a>
 </p>
@@ -45,16 +40,16 @@ day one                                  a few hundred notes later
 
 ---
 
-## Why brainbuddy exists
+## Why terminalcreature exists
 
-A second brain only pays off if you keep writing to it, and nothing in a terminal rewards that. Streaks punish weekends. Timers reward sitting still. brainbuddy rewards the one thing that matters: a durable note landed on disk.
+A second brain only pays off if you keep writing to it, and nothing in a terminal rewards that. Streaks punish weekends. Timers reward sitting still. terminalcreature rewards the one thing that matters: a durable note landed on disk.
 
 Every note you write is XP. The creature evolves through five forms as your vault grows, and it never loses a level when you tidy up. Not a streak you can drop, not a timer. Feed it or it sits there. That's the whole loop.
 
 ## How It Works
 
 ```
-your notes                 brainbuddy                       statusline
+your notes                 terminalcreature                       statusline
 ──────────────── ──►  ──────────────────────  ──►  ───────────────────────────
 ~/.claude/projects/*/     glob + stat only           ┌───────────┐
   memory/*.md             (never open())             │   ( ' ' ) │  🥚 Zask · Adept Lv44
@@ -69,7 +64,7 @@ a structured vault        weighted count = xp        │   /|_|\   │
 The egg banks XP from the moment it exists, including everything you'd written before you installed anything. So the first hatch isn't a blank slate, it's a reveal:
 
 ```
-$ brainbuddy hatch
+$ terminalcreature hatch
 
   the egg cracks
 
@@ -87,13 +82,13 @@ $ brainbuddy hatch
 ## Quick Start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/smejkaldesign/brainbuddy/main/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash
 ```
 
 Then, in Claude Code:
 
 ```
-/brainbuddy-hatch
+/creature-hatch
 ```
 
 That's it. The installer wraps whatever statusline you already have rather than replacing it, lays your first egg, and tells you how to open it. The hatch is a short guided setup the first time: it looks for your notes, offers what it found with a file count each, and opens the egg at whatever level your writing has already earned.
@@ -101,7 +96,7 @@ That's it. The installer wraps whatever statusline you already have rather than 
 Point it at your notes in the same breath; the bootstrap passes flags straight through to the installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/smejkaldesign/brainbuddy/main/bootstrap.sh | bash -s -- --folder ~/notes
+curl -fsSL https://raw.githubusercontent.com/smejkaldesign/terminalcreature/main/bootstrap.sh | bash -s -- --folder ~/notes
 ```
 
 ### Requirements
@@ -115,11 +110,11 @@ curl -fsSL https://raw.githubusercontent.com/smejkaldesign/brainbuddy/main/boots
 
 ### The first hatch asks three questions
 
-`/brainbuddy-hatch` guides the first egg, because the things it can't guess are the ones that decide everything afterwards:
+`/creature-hatch` guides the first egg, because the things it can't guess are the ones that decide everything afterwards:
 
 1. **Where do your memories live?** It looks for an Obsidian vault, a notes folder, and Claude Code's own memory, then offers what it found with a file count each. That sets `provider` and `vault_root`.
 2. **Score what's already written, or start from 0?** Scoring is the default and opens the egg several forms in. `--from-zero` baselines what's there so only new notes count, for people who'd rather have the climb.
-3. **What's it called?** Two fresh ideas from `brainbuddy names`, your own, or let the egg name itself at the reveal. Until it hatches the statusline just says Unhatched.
+3. **What's it called?** Two fresh ideas from `terminalcreature names`, your own, or let the egg name itself at the reveal. Until it hatches the statusline just says Unhatched.
 
 Later eggs inherit the first two answers. The name is asked for every egg.
 
@@ -128,9 +123,9 @@ Later eggs inherit the first two answers. The name is asked for every egg.
 | Route | What you get |
 | :--- | :--- |
 | **Clone and run `./install.sh`** | The same installer the bootstrap runs, if you want to read the code first. |
-| **`pipx install brainbuddy`** | The CLI on your PATH and nothing else. It does not wire your statusline, which is most of what brainbuddy is. |
+| **`pipx install terminalcreature`** | The CLI on your PATH and nothing else. It does not wire your statusline, which is most of what terminalcreature is. |
 | **Claude Code plugin** | Coming soon. The manifest and marketplace listing ship in this repo. |
-| **Offline or behind a mirror** | Set `BRAINBUDDY_TARBALL` to a URL or a tarball on disk and the bootstrap installs from that. |
+| **Offline or behind a mirror** | Set `TERMINALCREATURE_TARBALL` to a URL or a tarball on disk and the bootstrap installs from that. |
 
 ### Installer flags
 
@@ -148,14 +143,14 @@ Re-running is safe and is how you pick up new commands. It won't wrap itself twi
 
 ### How the wiring works
 
-The installer **wraps** your existing statusline rather than editing it. It points `statusLine.command` at a small generated shim; the shim runs whatever command was there before, on the same stdin Claude Code hands it, then draws the creature to the left of that output. Your own script is never modified. It keeps a `settings.json.pre-brainbuddy.bak`, and `--uninstall` puts the original command back.
+The installer **wraps** your existing statusline rather than editing it. It points `statusLine.command` at a small generated shim; the shim runs whatever command was there before, on the same stdin Claude Code hands it, then draws the creature to the left of that output. Your own script is never modified. It keeps a `settings.json.pre-terminalcreature.bak`, and `--uninstall` puts the original command back.
 
 **Project-level statuslines need one manual step.** The installer only touches `~/.claude/settings.json`. If a repo sets its own `statusLine` in `<repo>/.claude/settings.json`, wrap it explicitly, then point the project at the shim:
 
 ```bash
 ./install.sh --statusline "/path/to/repo/.claude/statusline.sh"
 # then in <repo>/.claude/settings.json:
-#   "statusLine": { "type": "command", "command": "~/.claude/brainbuddy/statusline-brainbuddy.sh" }
+#   "statusLine": { "type": "command", "command": "~/.claude/terminalcreature/statusline-terminalcreature.sh" }
 ```
 
 ---
@@ -214,7 +209,7 @@ Six sprites: the egg, then five forms gaining detail at every step.
 A buddy is an **egg** until you hatch it, whatever level it is. Level 0 is a Hatchling, a baby with a face, not an egg. Species, rarity, shiny, and stats are fixed the moment the egg exists, so an unhatched egg shows none of it:
 
 ```
-$ brainbuddy card
+$ terminalcreature card
 
        ___
       /   \
@@ -223,7 +218,7 @@ $ brainbuddy card
 
   Unhatched
   0 xp eaten and counting
-  /brainbuddy-hatch to find out what it is
+  /creature-hatch to find out what it is
 ```
 
 **Eggs bank XP while closed**, so waiting costs nothing. A buddy added later with `--add` starts at 0 and hatches as a Hatchling, because XP banks per creature.
@@ -234,7 +229,7 @@ $ brainbuddy card
 
 ### Where XP comes from
 
-XP is a weighted count of markdown files in a memory system, so brainbuddy needs one to point at. Three providers, set with `/brainbuddy config provider <name>`:
+XP is a weighted count of markdown files in a memory system, so terminalcreature needs one to point at. Three providers, set with `/creature config provider <name>`:
 
 | Provider | Counts | Point it somewhere |
 | :--- | :--- | :--- |
@@ -242,10 +237,10 @@ XP is a weighted count of markdown files in a memory system, so brainbuddy needs
 | `folder` | every `.md` under a directory, recursively | `config vault_root ~/notes` |
 | `vault` | a structured vault, weighted per directory | `config vault_root ~/brain` |
 
-`brainbuddy doctor` says which one is live, whether the root is there, what it counted, and what your buddy banked of that:
+`terminalcreature doctor` says which one is live, whether the root is there, what it counted, and what your buddy banked of that:
 
 ```
-$ brainbuddy doctor
+$ terminalcreature doctor
 provider: folder (folder of notes)
 root: ~/notes (found)
   notes      9
@@ -290,7 +285,7 @@ A square root curve, so early memories move the needle hard and later ones don't
 | 65 | 634 | ~211 durable memories |
 | 100 | 1,500 | ~500 durable memories |
 
-Want it slower? `brainbuddy config xp_max 5000` triples the distance. Deleting memories never de-levels anyone: the high-water mark only rises, because tidying up shouldn't be punished.
+Want it slower? `terminalcreature config xp_max 5000` triples the distance. Deleting memories never de-levels anyone: the high-water mark only rises, because tidying up shouldn't be punished.
 
 ### The session counter
 
@@ -331,53 +326,53 @@ It baselines the first time a session draws itself and is tracked per session id
 
 Either way the column is pinned to the creature's **widest** form, so your text doesn't shift the day it evolves into an Ascendant. `sprite` needs a width and a statusline script is handed no terminal, so `density ruler` prints a ruler: read the last digit you can see and pass it to `config columns <n>`.
 
-`/brainbuddy-hide` takes the creature out without uninstalling anything. XP keeps banking while it's hidden.
+`/creature-hide` takes the creature out without uninstalling anything. XP keeps banking while it's hidden.
 
 ### The roster
 
 Keep several creatures. Only the **focused** one gains XP; the others hold their level and wait.
 
 ```
-$ brainbuddy list
+$ terminalcreature list
   ◕ Drain      Lv65   Sage       Common
 * ○ Zask       Lv0    Hatchling  Legendary shiny
 
 * = focused (the one gaining xp)
 ```
 
-`/brainbuddy-new` asks before it acts: `--replace` retires the current buddy and focuses a new egg, `--add` keeps it active and focuses a new egg. **Neither deletes anything.** A retired buddy keeps its banked XP and `focus <name>` brings it back. There's no level requirement, since the tradeoff is identical at level 12 and level 99.
+`/creature-new` asks before it acts: `--replace` retires the current buddy and focuses a new egg, `--add` keeps it active and focuses a new egg. **Neither deletes anything.** A retired buddy keeps its banked XP and `focus <name>` brings it back. There's no level requirement, since the tradeoff is identical at level 12 and level 99.
 
 ---
 
 ## Commands and Settings
 
 ```
-brainbuddy new               lay an egg (--replace or --add, --yes to confirm)
-brainbuddy hatch [--name <n>] [--from-zero]  open the egg, naming it as it opens
-brainbuddy names             two fresh name ideas for the egg
-brainbuddy card              the full creature card
-brainbuddy list              the roster
-brainbuddy focus <name>      choose who banks new xp, un-retires
-brainbuddy rename <old> <new>
-brainbuddy retire <name>     retires, keeps the record and its xp
-brainbuddy hide / show       drop it from the statusline, or bring it back
-brainbuddy config [key val]  see settings, or set one
-brainbuddy simulate <xp>     preview any level without touching real state
-brainbuddy sources           what it can count, and what to do if that's nothing
-brainbuddy doctor            what can it see, and why is it zero
-brainbuddy doctor --check    the same, plus a version check against pypi
-brainbuddy update            ask pypi whether there's a newer brainbuddy
-brainbuddy render            the one-line statusline segment
-brainbuddy compose "<text>"  your statusline text, creature as a left column
-brainbuddy refresh           recompute the xp cache
+terminalcreature new               lay an egg (--replace or --add, --yes to confirm)
+terminalcreature hatch [--name <n>] [--from-zero]  open the egg, naming it as it opens
+terminalcreature names             two fresh name ideas for the egg
+terminalcreature card              the full creature card
+terminalcreature list              the roster
+terminalcreature focus <name>      choose who banks new xp, un-retires
+terminalcreature rename <old> <new>
+terminalcreature retire <name>     retires, keeps the record and its xp
+terminalcreature hide / show       drop it from the statusline, or bring it back
+terminalcreature config [key val]  see settings, or set one
+terminalcreature simulate <xp>     preview any level without touching real state
+terminalcreature sources           what it can count, and what to do if that's nothing
+terminalcreature doctor            what can it see, and why is it zero
+terminalcreature doctor --check    the same, plus a version check against pypi
+terminalcreature update            ask pypi whether there's a newer terminalcreature
+terminalcreature render            the one-line statusline segment
+terminalcreature compose "<text>"  your statusline text, creature as a left column
+terminalcreature refresh           recompute the xp cache
 ```
 
-Five are slash commands in Claude Code, so plain language reaches them without the CLI: `/brainbuddy`, `/brainbuddy-new`, `/brainbuddy-hatch`, `/brainbuddy-hide`, `/brainbuddy-show`.
+Five are slash commands in Claude Code, so plain language reaches them without the CLI: `/creature`, `/creature-new`, `/creature-hatch`, `/creature-hide`, `/creature-show`.
 
-After an `install.sh` or bootstrap install there's no `brainbuddy` on your PATH: the library is imported by the statusline, not installed as a binary. The slash commands reach everything you'd normally want. For the rest, alias it, or `pipx install brainbuddy`:
+After an `install.sh` or bootstrap install there's no `terminalcreature` on your PATH: the library is imported by the statusline, not installed as a binary. The slash commands reach everything you'd normally want. For the rest, alias it, or `pipx install terminalcreature`:
 
 ```bash
-alias brainbuddy='PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli'
+alias terminalcreature='PYTHONPATH="$HOME/.claude/terminalcreature/lib" python3 -m terminalcreature.cli'
 ```
 
 | Setting | Values | Default |
@@ -401,9 +396,9 @@ Short enough to check yourself.
 
 - **It counts your files without ever opening them.** The only filesystem calls in `metric.py` are `glob` and `stat`. It never calls `open()` on a note, never reads a byte of content, never parses frontmatter. That isn't a promise about what it does with your data; it's a statement that it never has your data.
 - **It never prints a path it matched**, in any mode including `doctor`, which reports a home-relative root and counts rather than filenames.
-- **All state is local**, at `~/.claude/brainbuddy/`: the roster, your settings, and the XP cache. Nothing else, nowhere else.
+- **All state is local**, at `~/.claude/terminalcreature/`: the roster, your settings, and the XP cache. Nothing else, nowhere else.
 - **The render never opens a socket, and by default neither does anything it starts.** No telemetry, no analytics, no phone-home.
-- **The only network calls are the ones you allowed.** The installer downloading a release tarball from `api.github.com`; `brainbuddy update` and `doctor --check` reading pypi's public package metadata; and, if you opt in with `config update_check true`, that same version request once a day from the background refresh so the yellow `⬆ update` chip can appear. It's off by default and asked as a question. Every one is an unauthenticated GET that sends nothing about you or your memory.
+- **The only network calls are the ones you allowed.** The installer downloading a release tarball from `api.github.com`; `terminalcreature update` and `doctor --check` reading pypi's public package metadata; and, if you opt in with `config update_check true`, that same version request once a day from the background refresh so the yellow `⬆ update` chip can appear. It's off by default and asked as a question. Every one is an unauthenticated GET that sends nothing about you or your memory.
 
 Three tests enforce this. A runtime trap patches every file-reading builtin and asserts none fire during a measurement. A static pass tokenizes `metric.py` and fails if a reader appears in the code at all. A third guards every socket call, including in the background processes a render spawns: opted out, an aged cache plus a render produces zero network from any process; opted in, exactly one attempt per day, never from the render itself. A leak guard runs in CI and as a `pre-push` hook, failing the build if an absolute home path or a vault-shaped filename ever reaches the repo.
 
@@ -413,7 +408,7 @@ Three tests enforce this. A runtime trap patches every file-reading builtin and 
 
 | | |
 | :--- | :--- |
-| **The shim wraps, it doesn't edit** | `statusLine.command` points at a generated shim; your original command is saved next to it and run by it. A script that already calls brainbuddy is detected and left alone. |
+| **The shim wraps, it doesn't edit** | `statusLine.command` points at a generated shim; your original command is saved next to it and run by it. A script that already calls terminalcreature is detected and left alone. |
 | **A cache on the hot path** | `render` reads a cached XP value and spawns the recount in the background, blocking only on a cold start. |
 | **High-water mark** | New XP is the delta above the highest total ever seen, so deleting notes can't take a level away, and a render before your first hatch can't burn the XP waiting for it. |
 | **Derived beats persisted** | Species, rarity, shiny, and accent are recomputed from the seed on every load and overwrite whatever is on disk. Only id, seed, name, hatch time, and banked XP persist. |
@@ -422,8 +417,8 @@ Three tests enforce this. A runtime trap patches every file-reading builtin and 
 ## Repository Structure
 
 ```
-brainbuddy/
-├── brainbuddy/            # the package, stdlib only
+terminalcreature/
+├── terminalcreature/            # the package, stdlib only
 │   ├── cli.py             #   commands
 │   ├── render.py          #   statusline segment, compose, card
 │   ├── state.py           #   roster, settings, xp cache
@@ -443,13 +438,13 @@ brainbuddy/
 ## Development
 
 ```bash
-git clone https://github.com/smejkaldesign/brainbuddy && cd brainbuddy
-python3 tests/test_brainbuddy.py     # synthetic fixtures in a temp dir; no real memory touched
+git clone https://github.com/smejkaldesign/terminalcreature && cd terminalcreature
+python3 tests/test_terminalcreature.py     # synthetic fixtures in a temp dir; no real memory touched
 ./scripts/leak-guard.sh              # the same check CI runs
 git config core.hooksPath .githooks  # optional pre-push copy of the guard
 ```
 
-No virtualenv, nothing to install, no build step. Run the CLI from the clone with `python3 -m brainbuddy.cli card`. CI runs the suite on Python 3.9 through 3.13, builds the wheel, and installs under the stock macOS bash 3.2.
+No virtualenv, nothing to install, no build step. Run the CLI from the clone with `python3 -m terminalcreature.cli card`. CI runs the suite on Python 3.9 through 3.13, builds the wheel, and installs under the stock macOS bash 3.2.
 
 ## Contributing
 
@@ -457,7 +452,7 @@ Small project, short rules: stdlib only, Python 3.9 floor, one change per PR, ne
 
 ## Provenance
 
-Anthropic shipped a terminal pet in Claude Code (`/buddy`, April 2026). Nice idea, no progression: species and stats are recomputed from your user ID every session and never change. brainbuddy is a clean-room rebuild of the *concept* with the missing half added, growth you actually earn. No code, species names, sprite art, stat names, or hashing details were taken from it. Not affiliated with or endorsed by Anthropic.
+Anthropic shipped a terminal pet in Claude Code (`/buddy`, April 2026). Nice idea, no progression: species and stats are recomputed from your user ID every session and never change. terminalcreature is a clean-room rebuild of the *concept* with the missing half added, growth you actually earn. No code, species names, sprite art, stat names, or hashing details were taken from it. Not affiliated with or endorsed by Anthropic.
 
 ## License
 

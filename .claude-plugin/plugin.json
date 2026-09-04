@@ -1,13 +1,13 @@
 {
-  "name": "brainbuddy",
+  "name": "terminalcreature",
   "description": "A terminal pet for your statusline that evolves as your memory system grows.",
-  "version": "1.3.0",
+  "version": "2.0.0",
   "author": {
     "name": "Smejkal Design",
     "url": "https://github.com/smejkaldesign"
   },
-  "homepage": "https://github.com/smejkaldesign/brainbuddy",
-  "repository": "https://github.com/smejkaldesign/brainbuddy",
+  "homepage": "https://github.com/smejkaldesign/terminalcreature",
+  "repository": "https://github.com/smejkaldesign/terminalcreature",
   "license": "MIT",
   "keywords": [
     "statusline",

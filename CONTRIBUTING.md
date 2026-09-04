@@ -5,17 +5,17 @@ Small project, short rules.
 ## Setup
 
 ```bash
-git clone https://github.com/smejkaldesign/brainbuddy
-cd brainbuddy
-python3 tests/test_brainbuddy.py
+git clone https://github.com/smejkaldesign/terminalcreature
+cd terminalcreature
+python3 tests/test_terminalcreature.py
 ```
 
 That's the whole setup. No virtualenv to make, nothing to install, no build step.
-Run the CLI straight out of the clone with `python3 -m brainbuddy.cli card`.
+Run the CLI straight out of the clone with `python3 -m terminalcreature.cli card`.
 
 ## Stdlib only
 
-Hard rule, not a preference. brainbuddy runs inside a statusline that redraws on
+Hard rule, not a preference. terminalcreature runs inside a statusline that redraws on
 every prompt, and it installs on machines whose Python nobody controls. A PR that
 adds a runtime dependency, or a test dependency, will be declined. If something
 seems to need a library, the answer is usually a smaller feature.
@@ -41,7 +41,7 @@ git config core.hooksPath .githooks
 
 ## Pull requests
 
-- `python3 tests/test_brainbuddy.py` green. CI runs it on 3.9 through 3.13.
+- `python3 tests/test_terminalcreature.py` green. CI runs it on 3.9 through 3.13.
 - `./scripts/leak-guard.sh` clean.
 - New behavior gets a test. The privacy tests in particular are load-bearing: if you
   touch `metric.py`, the reader trap and the static scan both have to keep passing.
@@ -51,7 +51,7 @@ git config core.hooksPath .githooks
 
 ## Versions and releases
 
-The version lives in `brainbuddy/__init__.py`, with one echo in
+The version lives in `terminalcreature/__init__.py`, with one echo in
 `.claude-plugin/plugin.json` for the plugin cache. Don't bump either in a feature
 PR; note the change under `## Unreleased` in `CHANGELOG.md` instead.
 

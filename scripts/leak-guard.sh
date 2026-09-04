@@ -1,5 +1,5 @@
 #!/bin/bash
-# brainbuddy points at directories full of private notes, so no absolute home
+# terminalcreature points at directories full of private notes, so no absolute home
 # path or vault-shaped filename should ever reach the repo. Given filenames, it
 # checks those; given none, it checks everything tracked. The hook passes the
 # commits it's about to push, CI passes nothing and gets the whole tree.

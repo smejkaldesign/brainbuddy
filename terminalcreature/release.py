@@ -1,4 +1,4 @@
-"""Version discovery. The only code in brainbuddy that opens a socket.
+"""Version discovery. The only code in terminalcreature that opens a socket.
 
 A socket opens on exactly three paths, all consented: `update`, `doctor
 --check`, and, only for users who set `update_check` on, the background
@@ -12,7 +12,7 @@ import json
 
 from . import __version__
 
-PYPI_URL = "https://pypi.org/pypi/brainbuddy/json"
+PYPI_URL = "https://pypi.org/pypi/terminalcreature/json"
 TIMEOUT = 4.0
 
 
@@ -54,15 +54,15 @@ def fetch_latest(url=PYPI_URL, timeout=TIMEOUT):
 
 def status_line(status, latest, current=__version__):
     if status == "unpublished":
-        return "brainbuddy isn't on pypi yet, so there's nothing to compare against. you're on %s." % current
+        return "terminalcreature isn't on pypi yet, so there's nothing to compare against. you're on %s." % current
     if status == "unreachable":
         return "couldn't reach pypi just now. you're on %s, try again when it's back." % current
     if _parts(latest) > _parts(current):
-        return "brainbuddy %s is out, you're on %s; re-run your installer, pipx upgrade brainbuddy, or take the plugin update. (brainbuddy is becoming terminalcreature; the installer handles the move.)" % (
+        return "terminalcreature %s is out, you're on %s; re-run your installer, pipx upgrade terminalcreature, or take the plugin update." % (
             latest, current)
     if _parts(latest) < _parts(current):
         return "you're on %s and pypi has %s, so you're ahead of the release." % (current, latest)
-    return "brainbuddy %s is the latest under this name, and the last: it's now terminalcreature. re-run your bootstrap, or pipx install terminalcreature." % current
+    return "terminalcreature %s is the latest. nothing to do." % current
 
 
 def check():

@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "brainbuddy"
+name = "terminalcreature"
 dynamic = ["version"]
 description = "a terminal pet for your Claude Code statusline that evolves as your memory grows"
 readme = "README.md"
@@ -24,24 +24,24 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/smejkaldesign/brainbuddy"
-Changelog = "https://github.com/smejkaldesign/brainbuddy/blob/main/CHANGELOG.md"
-Issues = "https://github.com/smejkaldesign/brainbuddy/issues"
+Homepage = "https://github.com/smejkaldesign/terminalcreature"
+Changelog = "https://github.com/smejkaldesign/terminalcreature/blob/main/CHANGELOG.md"
+Issues = "https://github.com/smejkaldesign/terminalcreature/issues"
 
 [project.scripts]
-brainbuddy = "brainbuddy.cli:main"
+terminalcreature = "terminalcreature.cli:main"
 
 [tool.hatch.version]
-path = "brainbuddy/__init__.py"
+path = "terminalcreature/__init__.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["brainbuddy"]
+packages = ["terminalcreature"]
 
 # the sdist carries everything a from-source install needs: the wiring
 # script and the slash commands are not importable code but they are the product
 [tool.hatch.build.targets.sdist]
 include = [
-    "brainbuddy",
+    "terminalcreature",
     "commands",
     "install.sh",
     "scripts",

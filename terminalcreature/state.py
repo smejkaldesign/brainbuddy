@@ -13,7 +13,7 @@ import time
 from . import creature as creature_mod
 from . import metric
 
-STATE_DIR = os.path.expanduser("~/.claude/brainbuddy")
+STATE_DIR = os.path.expanduser("~/.claude/terminalcreature")
 STATE_PATH = os.path.join(STATE_DIR, "state.json")
 CACHE_PATH = os.path.join(STATE_DIR, "xp.cache")
 CACHE_TTL = 60
@@ -115,7 +115,7 @@ def migrate(data):
         state["focused"] = alive[0]["id"] if alive else None
 
     seen = state.get("version")
-    # a newer brainbuddy's stamp survives a downgrade rather than being relabelled
+    # a newer terminalcreature's stamp survives a downgrade rather than being relabelled
     state["version"] = seen if isinstance(seen, int) and seen > STATE_VERSION else STATE_VERSION
     return state
 
