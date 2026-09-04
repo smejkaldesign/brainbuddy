@@ -61,7 +61,7 @@ Map the request onto a subcommand. Run it, then show the result.
 | "what counts as xp", "how do I level it up" | `sources` |
 | "what would level N look like" | `simulate <xp>` |
 
-Settable keys: `provider` (`claude`, `folder` or `vault`), `vault_root`, `xp_max`, `density` (`compact`, `minimal`, `full`, `sprite`, `ruler`), `sprite_height`, `border`, `columns`, `unicode`, `hidden`.
+Settable keys: `provider` (`auto`, `agents`, `claude`, `folder` or `vault`; `auto` is the default and picks `agents` when two or more coding agents are installed, else `claude`), `vault_root`, `xp_max`, `density` (`compact`, `minimal`, `full`, `sprite`, `ruler`), `sprite_height`, `border`, `columns`, `unicode`, `hidden`.
 
 `hide`, `show`, `new` and `hatch` are also their own commands (`/creature-hide`, `/creature-show`, `/creature-new`, `/creature-hatch`), so a bare "hide my terminalcreature" or "hatch it" reaches them without going through this one.
 

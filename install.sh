@@ -339,7 +339,9 @@ else
   case "$CURRENT_PROVIDER" in
     "vault "*) echo "  provider -> vault at ${CURRENT_PROVIDER#vault }  (unchanged)" ;;
     "folder "*) echo "  provider -> folder of notes at ${CURRENT_PROVIDER#folder }  (unchanged)" ;;
-    *) echo "  provider -> stock Claude Code memory (~/.claude/projects/*/memory)" ;;
+    "agents "*) echo "  provider -> every coding agent's memory on this machine  (unchanged)" ;;
+    "claude "*) echo "  provider -> stock Claude Code memory (~/.claude/projects/*/memory)  (unchanged)" ;;
+    *) echo "  provider -> auto (every coding agent's memory when two or more are installed, else stock Claude Code memory)" ;;
   esac
 fi
 

@@ -1,6 +1,6 @@
 {
   "name": "terminalcreature",
-  "description": "A terminal pet for your statusline that evolves as your memory system grows.",
+  "description": "A terminal pet for your statusline that evolves as your memory system grows. Native in Claude Code, Cursor CLI, Copilot CLI, Qwen Code and Droid; tmux, Starship and your shell prompt everywhere else; fed by every coding agent on the machine.",
   "version": "2.2.0",
   "author": {
     "name": "Smejkal Design",
@@ -14,6 +14,13 @@
     "memory",
     "pet",
     "obsidian",
-    "vault"
+    "vault",
+    "tmux",
+    "starship",
+    "cursor",
+    "copilot",
+    "codex",
+    "gemini",
+    "coding-agents"
   ]
 }
