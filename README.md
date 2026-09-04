@@ -1,29 +1,65 @@
-# brainbuddy
+<h1 align="center">brainbuddy</h1>
 
-A terminal creature that lives in your Claude Code statusline, hatches from an egg, and grows on a diet of your own memories.
+<h3 align="center">A terminal pet that levels off your second brain.</h3>
+
+<p align="center">
+  A creature that lives in your Claude Code statusline, hatches from an egg,<br />
+  and grows on a diet of your own memories. It counts your notes and never reads them.
+</p>
+
+<br />
+
+<p align="center">
+  <a href="https://smejkaldesign.github.io/brainbuddy/"><strong>Website</strong></a> &nbsp;&middot;&nbsp;
+  <a href="https://pypi.org/project/brainbuddy/"><strong>PyPI</strong></a> &nbsp;&middot;&nbsp;
+  <a href="CHANGELOG.md"><strong>Changelog</strong></a> &nbsp;&middot;&nbsp;
+  <a href="https://github.com/smejkaldesign/brainbuddy/issues"><strong>Report a bug</strong></a> &nbsp;&middot;&nbsp;
+  <a href="CONTRIBUTING.md"><strong>Contribute</strong></a>
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/brainbuddy/"><img src="https://img.shields.io/pypi/v/brainbuddy?color=ffb627&label=pypi" alt="PyPI" /></a>
+  <img src="https://img.shields.io/badge/python-3.9%E2%80%933.13-3776AB?logo=python&logoColor=white" alt="Python 3.9 to 3.13" />
+  <a href="https://github.com/smejkaldesign/brainbuddy/actions/workflows/ci.yml"><img src="https://github.com/smejkaldesign/brainbuddy/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <img src="https://img.shields.io/badge/dependencies-0-4ade80" alt="Zero dependencies" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT" /></a>
+</p>
+
+<pre align="center">
+day one                                  a few hundred notes later
+┌───────────┐                            ┌───────────┐
+│    ___    │  ████░░░░░░  my-brain      │   .\|/.   │  ████░░░░░░  my-brain
+│   /   \   │  🥚 Unhatched              │  ( o o )  │  🥚 Drain · Sage Lv65 █████░ +16 XP
+│  ( ooo )  │                            │  /|ooo|\  │
+│   \___/   │                            │   |___|   │
+└───────────┘                            │  /     \  │
+                                         └───────────┘
+</pre>
+
+---
+
+## Why brainbuddy exists
+
+A second brain only pays off if you keep writing to it, and nothing in a terminal rewards that. Streaks punish weekends. Timers reward sitting still. brainbuddy rewards the one thing that matters: a durable note landed on disk.
+
+Every note you write is XP. The creature evolves through five forms as your vault grows, and it never loses a level when you tidy up. Not a streak you can drop, not a timer. Feed it or it sits there. That's the whole loop.
+
+## How It Works
 
 ```
-day one
-┌───────────┐
-│    ___    │  ████░░░░░░  my-brain ⎇ main
-│   /   \   │  🥚 Unhatched · /brainbuddy-hatch
-│  ( ooo )  │
-│   \___/   │
-└───────────┘
-
-a few hundred notes later
-┌───────────┐
-│   .\|/.   │  ████░░░░░░  my-brain ⎇ main
-│  ( o o )  │  🥚 Drain · Sage Lv65 █████░
-│  /|ooo|\  │
-│   |___|   │
-│  /     \  │
-└───────────┘
+your notes                 brainbuddy                       statusline
+──────────────── ──►  ──────────────────────  ──►  ───────────────────────────
+~/.claude/projects/*/     glob + stat only           ┌───────────┐
+  memory/*.md             (never open())             │   ( ' ' ) │  🥚 Zask · Adept Lv44
+~/notes/**/*.md                │                     │  <|+++|>  │  ███░░░ +12 XP
+a structured vault        weighted count = xp        │   /|_|\   │
+                               │                     └───────────┘
+                     level = 100·√(xp / xp_max)
+                               │
+                     sprite = f(level, seed)
 ```
 
-Every durable note you write is XP, so it grows as your second brain grows, through five forms from hatchling to fully grown. Not a streak you can drop by taking a weekend off, and not a timer. Feed it or it sits there. That's the whole loop.
-
-The egg banks XP from the moment it exists, including everything you'd already written before you installed anything. So the first hatch isn't a blank slate, it's a reveal:
+The egg banks XP from the moment it exists, including everything you'd written before you installed anything. So the first hatch isn't a blank slate, it's a reveal:
 
 ```
 $ brainbuddy hatch
@@ -35,14 +71,13 @@ $ brainbuddy hatch
       /$$$\
        ^ ^
 
-
   Zask, a Legendary Nim (shiny)
-  Lv0 Hatchling
+  Lv41 Adept
 ```
 
 ---
 
-## Install
+## Quick Start
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/smejkaldesign/brainbuddy/main/bootstrap.sh | bash
@@ -54,59 +89,46 @@ Then, in Claude Code:
 /brainbuddy-hatch
 ```
 
-That's it. The installer wraps whatever statusline you already have rather than replacing it, lays your first egg, and tells you how to open it. The hatch is a short guided setup the first time: it goes looking for your notes, offers what it found with a file count each, and opens the egg at whatever level your writing has already earned.
+That's it. The installer wraps whatever statusline you already have rather than replacing it, lays your first egg, and tells you how to open it. The hatch is a short guided setup the first time: it looks for your notes, offers what it found with a file count each, and opens the egg at whatever level your writing has already earned.
 
-**Requirements:** bash, Python 3.9 or newer, tar, and either curl or wget. Nothing else; brainbuddy is stdlib Python with no dependencies. Pipe the script to `bash`, not to `sh`, or it will tell you to.
-
-**Windows:** run it under **WSL** or **Git Bash**. Both are supported routes. PowerShell and cmd are not, because the statusline shim is a shell script.
-
-The bootstrap passes any flags straight through to the installer, so you can point it at your notes in the same breath:
+Point it at your notes in the same breath; the bootstrap passes flags straight through to the installer:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/smejkaldesign/brainbuddy/main/bootstrap.sh | bash -s -- --folder ~/notes
 ```
 
-### Two ways this goes
+### Requirements
 
-**You already keep notes.** An Obsidian vault, a folder of markdown, Claude Code's own memory: the hatch flow finds it, counts it, and your first creature opens several forms in. This is the moment the whole design is built around, and it's why the egg banks XP instead of starting everyone at zero.
+| | |
+| :--- | :--- |
+| **Runtime** | Python 3.9 or newer, stdlib only. No dependencies, ever. |
+| **Installer** | bash, tar, and either curl or wget. Pipe to `bash`, not `sh`. |
+| **macOS / Linux** | Supported, including the stock macOS bash 3.2. |
+| **Windows** | Under **WSL** or **Git Bash**. PowerShell and cmd are not, because the statusline shim is a shell script. |
 
-**You don't keep notes yet.** Then there's nothing to count and your buddy sits at level 0, which is a fair reading rather than a bug. The hatch flow offers to set a memory system up, and the climb from there is the point. See [Where XP comes from](#where-xp-comes-from).
+### The first hatch asks three questions
 
----
+`/brainbuddy-hatch` guides the first egg, because the things it can't guess are the ones that decide everything afterwards:
 
-## Privacy promise
+1. **Where do your memories live?** It looks for an Obsidian vault, a notes folder, and Claude Code's own memory, then offers what it found with a file count each. That sets `provider` and `vault_root`.
+2. **Score what's already written, or start from 0?** Scoring is the default and opens the egg several forms in. `--from-zero` baselines what's there so only new notes count, for people who'd rather have the climb.
+3. **What's it called?** Two fresh ideas from `brainbuddy names`, your own, or let the egg name itself at the reveal. Until it hatches the statusline just says Unhatched.
 
-Short enough to check yourself.
+Later eggs inherit the first two answers. The name is asked for every egg.
 
-- **It counts your files without ever opening them.** The only filesystem calls in `metric.py` are `glob` and `stat`. It never calls `open()` on a note, never reads a byte of content, never parses frontmatter, and the test suite fails if a code path tries. That isn't a promise about what it does with your data, it's a statement that it never has your data.
-- **It never prints a path it matched**, in any mode including `doctor`, which reports a home-relative root and counts rather than filenames. Filenames alone leak more than people expect.
-- **All state is local**, at `~/.claude/brainbuddy/`. The roster, your settings, and the XP cache. Nothing else, nowhere else.
-- **The render never opens a socket, and by default neither does anything it starts.** No telemetry, no analytics, no phone-home. A render may kick off the background XP recount, and for users who opted into the daily check, that recount is also when the one version request happens, at most once a day. Decline the question and nothing brainbuddy runs, foreground or background, ever touches the network.
-- **The only network calls are the ones you allowed.** Two you run by hand: the installer downloading a release tarball from `api.github.com`, and the version check in `brainbuddy update` and `brainbuddy doctor --check`, which reads pypi's public package metadata to compare version numbers. And one you can opt into: `config update_check true` lets the background refresh make that same version request **once a day**, so a yellow `⬆ update` chip can appear in your statusline when a release is out. It's off by default, asked as a question, and the render itself still only ever reads the cached answer. Every one of these is an unauthenticated GET that sends nothing about you or your memory.
+### Other ways to install
 
-Three tests enforce this. A runtime trap patches every file-reading builtin and asserts none fire during a measurement. A static pass tokenizes `metric.py` and fails if a reader appears in the code at all. A third guards every socket call, including in the background processes a render spawns, and fails if one opens anywhere outside `update`, `doctor --check`, and the opted-in daily check: opted out, an aged cache plus a render produces zero network from any process; opted in, exactly one attempt per day, from the background refresh and never from the render itself. On top of that a leak guard runs in CI and as a `pre-push` hook, failing the build if an absolute home path or a vault-shaped filename ever reaches the repo.
-
----
-
-## Other ways to install
-
-**Clone it** if you want to read the code first or contribute. This is the same installer the bootstrap runs:
-
-```bash
-git clone https://github.com/smejkaldesign/brainbuddy && cd brainbuddy
-./install.sh
-```
-
-**As a Claude Code plugin**, coming soon; the manifest ships in this repo and the marketplace listing follows.
-
-**From PyPI**, once the first release is tagged (`pipx install brainbuddy`): you get the CLI and nothing else. It does not wire your statusline, which is most of what brainbuddy is. Use it if you want the commands on your PATH; run `install.sh` or the bootstrap if you want a creature.
-
-**Behind a mirror, or offline?** `BRAINBUDDY_TARBALL` is the bootstrap's escape hatch. Set it to a URL or to a tarball already on disk, and it installs from that instead of reaching for a release.
+| Route | What you get |
+| :--- | :--- |
+| **Clone and run `./install.sh`** | The same installer the bootstrap runs, if you want to read the code first. |
+| **`pipx install brainbuddy`** | The CLI on your PATH and nothing else. It does not wire your statusline, which is most of what brainbuddy is. |
+| **Claude Code plugin** | Coming soon. The manifest and marketplace listing ship in this repo. |
+| **Offline or behind a mirror** | Set `BRAINBUDDY_TARBALL` to a URL or a tarball on disk and the bootstrap installs from that. |
 
 ### Installer flags
 
 | Flag | What it does |
-|---|---|
+| :--- | :--- |
 | `--folder <path>` | count a folder of markdown notes (the usual case for an existing notes dir) |
 | `--vault <path>` | count a structured vault layout |
 | `--statusline <cmd>` | wrap this command instead of the one in `settings.json` |
@@ -115,15 +137,13 @@ git clone https://github.com/smejkaldesign/brainbuddy && cd brainbuddy
 | `--no-commands` | skip the slash commands, when something else already ships them |
 | `--uninstall` | unwire, restore your old statusline, remove the commands |
 
-Re-running it is safe and is how you pick up new commands. It won't wrap itself twice and it leaves an existing buddy alone. If you installed a version before wrapping existed, re-running strips the block it appended to your script.
+Re-running is safe and is how you pick up new commands. It won't wrap itself twice and it leaves an existing buddy alone.
 
 ### How the wiring works
 
-The installer **wraps** your existing statusline rather than replacing or editing it. It points `statusLine.command` at a small generated shim, and the shim runs whatever command was there before, on the same stdin Claude Code hands it, then draws the creature to the left of that output. Your own script is never modified.
+The installer **wraps** your existing statusline rather than editing it. It points `statusLine.command` at a small generated shim; the shim runs whatever command was there before, on the same stdin Claude Code hands it, then draws the creature to the left of that output. Your own script is never modified. It keeps a `settings.json.pre-brainbuddy.bak`, and `--uninstall` puts the original command back.
 
-That's why it works with a statusline it can't parse: `bash ~/statusline.sh`, a `~`-relative path, a one-liner, or a script that ends in `exit 0`. It keeps a `settings.json.pre-brainbuddy.bak`, and `--uninstall` puts your original command back.
-
-**Project-level statuslines need one manual step.** The installer only reads and writes `~/.claude/settings.json`. If a repo sets its own `statusLine` in `<repo>/.claude/settings.json`, that wins inside the repo and the installer never sees it. Wrap it explicitly, then point the project at the shim:
+**Project-level statuslines need one manual step.** The installer only touches `~/.claude/settings.json`. If a repo sets its own `statusLine` in `<repo>/.claude/settings.json`, wrap it explicitly, then point the project at the shim:
 
 ```bash
 ./install.sh --statusline "/path/to/repo/.claude/statusline.sh"
@@ -131,88 +151,11 @@ That's why it works with a statusline it can't parse: `bash ~/statusline.sh`, a 
 #   "statusLine": { "type": "command", "command": "~/.claude/brainbuddy/statusline-brainbuddy.sh" }
 ```
 
-`wrapped-command` is a single file, so one command gets wrapped for every repo. Pick the statusline you want everywhere.
-
 ---
 
-## The first hatch asks three questions
+## The Creature
 
-`/brainbuddy-hatch` is a short guided setup the first time, because the things it can't
-guess are the ones that decide everything afterwards:
-
-1. **Where do your memories live?** It looks for an Obsidian vault, a notes folder and Claude
-   Code's own memory, then offers what it found with a file count each rather than asking you
-   cold. That sets `provider` and `vault_root`.
-2. **Score what's already written, or start from 0?** Scoring is the default and opens the egg
-   several forms in, which is the moment the whole design is built around. `--from-zero`
-   baselines what's there so only new notes count, for people who'd rather have the climb.
-3. **What's it called?** Two fresh ideas from `brainbuddy names`, your own, or let the egg
-   name itself and find out at the reveal. Until it hatches, the statusline just says
-   Unhatched, because there's nothing to know yet.
-
-The first two are skipped on later eggs, which inherit the setup the first one established,
-and skipped entirely if a source is already configured and counting. The name is asked for
-every egg.
-
-## The session counter
-
-To the right of the level bar, the caption shows what your buddy has eaten **in this session**:
-
-```
-🥚 Neux · Sage Lv66 ██░░░░ +16 XP
-```
-
-It baselines the first time a session draws itself, so a new session opens at nothing rather
-than claiming credit for the whole vault, and it's tracked per session id because several are
-usually open at once. It stays hidden until there's something to show, so statusline width
-isn't spent on `+0 XP` all day.
-
----
-
-## The egg is a state, not a level
-
-A buddy is an **egg** until you hatch it, whatever level it is. Level 0 is a Hatchling, a baby with a face, not an egg.
-
-Species, rarity, shiny and stats are all derived from the creature's seed and fixed the moment the egg exists, so an egg that displays them has nothing left to reveal. An unhatched one shows none of it:
-
-```
-$ brainbuddy card
-
-       ___
-      /   \
-     ( ooo )
-      \___/
-
-
-  Unhatched
-  0 xp eaten and counting
-  /brainbuddy-hatch to find out what it is
-```
-
-**Eggs bank XP while closed**, so waiting costs nothing. On a fresh install the first egg inherits the memory you already have and usually hatches several forms in rather than as a blank. Install, see an egg, open it, meet something that already reflects how much you've written. A buddy added *later* with `--add` starts at 0 and does hatch as a Hatchling, because XP banks per creature.
-
----
-
-## The evolution ladder
-
-Six sprites: the egg, then five forms, gaining detail at every step.
-
-```
-    ___        _^_        _^_        \|/       .\|/.     *.\|/.*
-   /   \     ( ' ' )    ( ' ' )    ( ' ' )    ( ' ' )   \( ' ' )/
-  ( ooo )     /+++\     <|+++|>    <|+++|>    /|+++|\    /|+++|\
-   \___/       ^ ^       /   \      /|_|\      |___|     =|___|=
-                         ^   ^      ^   ^     /     \    ^     ^
-
-    egg     Hatchling  Fledgling    Adept       Sage    Ascendant
- unhatched     0-19      20-39      40-59      60-79     80-100
-```
-
-Sprite 0 is the egg, so level stages start at sprite 1. That numbering is what let existing creatures survive the egg change without a migration.
-
----
-
-## Species and rarity
+### Species and rarity
 
 Eight species. The eyes and the body motif come from the species, so a Bramble is recognisable at a glance.
 
@@ -232,31 +175,67 @@ Eight species. The eyes and the body motif come from the species, so a Bramble i
      Fen          Bramble          Nim           Quill
 ```
 
-Rarity is rolled from the seed, with a mark that carries the tier without relying on colour, so it still reads on a mono terminal or to a colour-blind user. On top of that, a **1% shiny** roll remakes the body motif: symbols become `$` (`<|+++|>` becomes `<|$$$|>`) and letters go uppercase (`<|ooo|>` becomes `<|OOO|>`).
-
 | Rarity | Odds | Mark |
-|---|---|---|
+| :--- | :--- | :--- |
 | Common | 60% | |
 | Uncommon | 25% | `+` |
 | Rare | 10% | `*` |
 | Epic | 4% | `**` |
 | Legendary | 1% | `***` |
 
-All of it is a pure function of the seed, so hand-editing `state.json` can't promote a Common into a shiny Legendary; `hydrate` recomputes the bones on every load and derived values win.
+The mark carries the tier without relying on colour, so it reads on a mono terminal or to a colour-blind user. On top of that, a **1% shiny** roll remakes the body motif: symbols become `$` (`<|+++|>` becomes `<|$$$|>`) and letters go uppercase (`<|ooo|>` becomes `<|OOO|>`).
+
+All of it is a pure function of the seed. Hand-editing `state.json` can't promote a Common into a shiny Legendary; derived values are recomputed on every load and win.
+
+### The evolution ladder
+
+Six sprites: the egg, then five forms gaining detail at every step.
+
+```
+    ___        _^_        _^_        \|/       .\|/.     *.\|/.*
+   /   \     ( ' ' )    ( ' ' )    ( ' ' )    ( ' ' )   \( ' ' )/
+  ( ooo )     /+++\     <|+++|>    <|+++|>    /|+++|\    /|+++|\
+   \___/       ^ ^       /   \      /|_|\      |___|     =|___|=
+                         ^   ^      ^   ^     /     \    ^     ^
+
+    egg     Hatchling  Fledgling    Adept       Sage    Ascendant
+ unhatched     0-19      20-39      40-59      60-79     80-100
+```
+
+### The egg is a state, not a level
+
+A buddy is an **egg** until you hatch it, whatever level it is. Level 0 is a Hatchling, a baby with a face, not an egg. Species, rarity, shiny, and stats are fixed the moment the egg exists, so an unhatched egg shows none of it:
+
+```
+$ brainbuddy card
+
+       ___
+      /   \
+     ( ooo )
+      \___/
+
+  Unhatched
+  0 xp eaten and counting
+  /brainbuddy-hatch to find out what it is
+```
+
+**Eggs bank XP while closed**, so waiting costs nothing. A buddy added later with `--add` starts at 0 and hatches as a Hatchling, because XP banks per creature.
 
 ---
 
-## Where XP comes from
+## XP and Levelling
+
+### Where XP comes from
 
 XP is a weighted count of markdown files in a memory system, so brainbuddy needs one to point at. Three providers, set with `/brainbuddy config provider <name>`:
 
 | Provider | Counts | Point it somewhere |
-|---|---|---|
+| :--- | :--- | :--- |
 | `claude` | stock Claude Code memory, `~/.claude/projects/*/memory/*.md` | default, nothing to set |
 | `folder` | every `.md` under a directory, recursively | `config vault_root ~/notes` |
 | `vault` | a structured vault, weighted per directory | `config vault_root ~/brain` |
 
-`brainbuddy doctor` says which one is live, whether the root is actually there, what it counted, and what your buddy actually banked of that. Those last two diverge if you hatched with `--from-zero`:
+`brainbuddy doctor` says which one is live, whether the root is there, what it counted, and what your buddy banked of that:
 
 ```
 $ brainbuddy doctor
@@ -267,28 +246,22 @@ source xp 18 -> level 10
 Zask banked 18 -> level 10 (Hatchling)
 ```
 
-A zero reading has three different causes, and `doctor` names the one you've got rather than telling everyone to check their config:
+A zero reading has three causes, and `doctor` names the one you've got:
 
 - **the root isn't there**: wrong path, or Claude Code hasn't written memory yet
 - **the root is real but empty**: nothing to do but write things down
 - **the root has markdown the provider's layout doesn't match**: pointing `vault` at a plain notes folder does this, and the fix is `provider folder`
 
-**No memory system at all?** Then there's nothing to count and your buddy sits at level 0, which is a fair reading rather than a bug. The installer and `doctor` both hand you a prompt for it:
+**No memory system at all?** Then your buddy sits at level 0, which is a fair reading rather than a bug. The installer and `doctor` both hand you a prompt for it:
 
 > "Set up a persistent memory system for this project: one markdown file per durable fact in your memory directory, an index listing them, and write to it as we work."
 
-XP follows on the next render once files start landing there.
+### How levelling works
 
----
-
-## How levelling works
-
-XP is a weighted count of memory artifacts. Durable facts are worth more than session logs because they cost more to produce, and generated index files are excluded so they can't inflate the count for free.
-
-`claude` counts one source at ×3, `folder` counts every note at ×2, and `vault` weights per directory:
+Durable facts are worth more than session logs because they cost more to produce, and generated index files are excluded so they can't inflate the count for free. `claude` counts one source at ×3, `folder` counts every note at ×2, and `vault` weights per directory:
 
 | Source | Glob | Weight | Excluded |
-|---|---|---|---|
+| :--- | :--- | :--- | :--- |
 | memories | `auto-memory/*.md` | ×3 | `MEMORY.md`, `index.md` |
 | knowledge | `05-knowledge/*.md` | ×2 | `index.md` |
 | projects | `04-projects/*.md` | ×2 | `index.md` |
@@ -299,12 +272,10 @@ XP is a weighted count of memory artifacts. Durable facts are worth more than se
 level = min(100, floor(100 * sqrt(xp / xp_max)))
 ```
 
-A square root curve, so early memories move the needle hard and later ones don't. **Level 100 is fully grown** and the curve stops there; the answer to "what now" is a new egg, not a number that climbs forever with nothing attached to it.
-
-`xp_max` is the XP at level 100 and the one dial that controls pace. The default of **1500** puts a well-established vault around 65.
+A square root curve, so early memories move the needle hard and later ones don't. **Level 100 is fully grown** and the curve stops there. `xp_max` is the XP at level 100 and the one dial that controls pace; the default of **1500** puts a well-established vault around 65.
 
 | Level | XP needed | Roughly |
-|---|---|---|
+| :--- | :--- | :--- |
 | 5 | 4 | a couple of notes |
 | 10 | 16 | ~5 durable memories |
 | 20 | 61 | ~20 durable memories |
@@ -312,64 +283,52 @@ A square root curve, so early memories move the needle hard and later ones don't
 | 65 | 634 | ~211 durable memories |
 | 100 | 1,500 | ~500 durable memories |
 
-Want it slower? `brainbuddy config xp_max 5000` triples the distance. It's your pet. And deleting memories never de-levels anyone: the high-water mark only rises, because tidying up shouldn't be punished.
+Want it slower? `brainbuddy config xp_max 5000` triples the distance. Deleting memories never de-levels anyone: the high-water mark only rises, because tidying up shouldn't be punished.
+
+### The session counter
+
+Right of the level bar, the caption shows what your buddy has eaten **in this session**:
+
+```
+🥚 Neux · Sage Lv66 ██░░░░ +16 XP
+```
+
+It baselines the first time a session draws itself and is tracked per session id, since several are usually open at once. It stays hidden until there's something to show.
 
 ---
 
-## Display variants
+## The Statusline
 
-`density` picks how much room the **inline** segment takes, so it applies to `render` and to an `--inline` install, not to the boxed column:
+`density` picks how much room the **inline** segment takes (`render`, or an `--inline` install):
 
 | Mode | Looks like | Notes |
-|---|---|---|
+| :--- | :--- | :--- |
 | `minimal` | `◔` | one glyph, filling as you evolve (`◌ ○ ◔ ◑ ◕ ●`, or `. o c C O @` in ascii) |
 | `compact` | `<><> Lv65` | default, ~10 columns inline |
 | `full` | `<><> Drain Lv65` | adds the name |
 | `sprite` | the 5-row creature | its own rows, right-aligned to `columns` |
 | `ruler` | a column ruler | a measuring aid, not a creature |
 
-`sprite_height 3` cuts the creature to three rows. It keeps the evolution beats but drops the head-top and the feet:
-
-```
-     _^_         (' ')
-   ( ' ' )      <|+++|>
-   <|+++|>       /   \
-    /   \
-    ^   ^
-   height 5     height 3
-```
-
-`compose "<text>"` is what the installed shim uses by default, and the mode in the examples up top: your own text with the creature as a **left column**, sharing row one. Left rather than right on purpose, because a fixed-width column needs no measurement. Install with `--inline` if you'd rather have the one-line segment tacked onto the end of your statusline.
-
-The column is boxed in dark grey by default. `config border false` drops the box and gets **two rows of height back**:
+`compose "<text>"` is what the installed shim uses by default: your own text with the creature as a **left column**, sharing row one. The column is boxed in dark grey; `config border false` drops the box and gets two rows of height back. `sprite_height 3` cuts the creature to three rows and keeps the evolution beats:
 
 ```
 ┌───────────┐
-│   .\|/.   │  ████░░░░░░  my-brain ⎇ main
-│  ( o o )  │  🥚 Drain · Sage Lv65 █████░
-│  /|ooo|\  │
-│   |___|   │
-│  /     \  │
+│   .\|/.   │  ████░░░░░░  my-brain ⎇ main          .\|/.    ████░░░░░░  my-brain ⎇ main
+│  ( o o )  │  🥚 Drain · Sage Lv65 █████░         ( o o )   🥚 Drain · Sage Lv65 █████░
+│  /|ooo|\  │                                      /|ooo|\
+│   |___|   │                                       |___|
+│  /     \  │                                      /     \
 └───────────┘
-
-  .\|/.    ████░░░░░░  my-brain ⎇ main
- ( o o )   🥚 Drain · Sage Lv65 █████░
- /|ooo|\
-  |___|
- /     \
+   border true                                        border false
 ```
 
-Either way the column is pinned to the creature's **widest** form, so your text doesn't shift sideways the day it evolves into an Ascendant.
+Either way the column is pinned to the creature's **widest** form, so your text doesn't shift the day it evolves into an Ascendant. `sprite` needs a width and a statusline script is handed no terminal, so `density ruler` prints a ruler: read the last digit you can see and pass it to `config columns <n>`.
 
-`sprite` does need a width, and a statusline script is handed nothing that is a terminal. So `density ruler` prints a column ruler instead of a creature: read the last digit you can see and pass it to `config columns <n>`.
+`/brainbuddy-hide` takes the creature out without uninstalling anything. XP keeps banking while it's hidden.
 
-`/brainbuddy-hide` takes the creature out without uninstalling anything. XP keeps banking while it's hidden, so it comes back further along than it left.
+### The roster
 
----
-
-## The roster
-
-You can keep several creatures. Only the **focused** one gains XP; the others hold their level and wait.
+Keep several creatures. Only the **focused** one gains XP; the others hold their level and wait.
 
 ```
 $ brainbuddy list
@@ -379,15 +338,11 @@ $ brainbuddy list
 * = focused (the one gaining xp)
 ```
 
-That's why `/brainbuddy-new` asks before it acts: `--replace` retires the current buddy and focuses a new egg, `--add` keeps it active and focuses a new egg.
-
-**Neither one deletes anything.** `--replace` retires, which drops it out of the active roster while keeping its banked XP; `focus <name>` brings it back. `--add` states the tradeoff and asks for `--yes`, since a new egg takes focus and the current buddy stops gaining. There's **no level requirement**, since the tradeoff is identical at level 12 and level 99, so it's a decision to make rather than a gate to clear.
-
-New creatures start at 0, always, because XP banks per creature rather than deriving from your total memory size.
+`/brainbuddy-new` asks before it acts: `--replace` retires the current buddy and focuses a new egg, `--add` keeps it active and focuses a new egg. **Neither deletes anything.** A retired buddy keeps its banked XP and `focus <name>` brings it back. There's no level requirement, since the tradeoff is identical at level 12 and level 99.
 
 ---
 
-## Commands
+## Commands and Settings
 
 ```
 brainbuddy new               lay an egg (--replace or --add, --yes to confirm)
@@ -405,7 +360,6 @@ brainbuddy sources           what it can count, and what to do if that's nothing
 brainbuddy doctor            what can it see, and why is it zero
 brainbuddy doctor --check    the same, plus a version check against pypi
 brainbuddy update            ask pypi whether there's a newer brainbuddy
-brainbuddy config update_check true   opt in to the once-a-day check behind the ⬆ chip
 brainbuddy render            the one-line statusline segment
 brainbuddy compose "<text>"  your statusline text, creature as a left column
 brainbuddy refresh           recompute the xp cache
@@ -413,16 +367,14 @@ brainbuddy refresh           recompute the xp cache
 
 Five are slash commands in Claude Code, so plain language reaches them without the CLI: `/brainbuddy`, `/brainbuddy-new`, `/brainbuddy-hatch`, `/brainbuddy-hide`, `/brainbuddy-show`.
 
-After an `install.sh` or bootstrap install there's no `brainbuddy` on your PATH: the library is imported by the statusline, not installed as a binary. The five slash commands above reach everything you'd normally want. For the rest, alias it:
+After an `install.sh` or bootstrap install there's no `brainbuddy` on your PATH: the library is imported by the statusline, not installed as a binary. The slash commands reach everything you'd normally want. For the rest, alias it, or `pipx install brainbuddy`:
 
 ```bash
 alias brainbuddy='PYTHONPATH="$HOME/.claude/brainbuddy/lib" python3 -m brainbuddy.cli'
 ```
 
-The `brainbuddy ...` examples in this README assume that alias, or a `pipx install`, which does put the binary on your PATH.
-
 | Setting | Values | Default |
-|---|---|---|
+| :--- | :--- | :--- |
 | `provider` | `claude`, `folder` or `vault` | `claude` |
 | `vault_root` | path, for `folder` and `vault` | |
 | `xp_max` | XP at level 100, the pace dial | `1500` |
@@ -432,72 +384,74 @@ The `brainbuddy ...` examples in this README assume that alias, or a `pipx insta
 | `columns` | right-align width for `sprite` | `0` |
 | `unicode` | `true` or `false` | `true` |
 | `hidden` | `true` or `false` | `false` |
+| `update_check` | `true` or `false`, the once-a-day check behind the `⬆ update` chip | `false` |
 
 ---
 
-## The lifecycle
+## Privacy Promise
+
+Short enough to check yourself.
+
+- **It counts your files without ever opening them.** The only filesystem calls in `metric.py` are `glob` and `stat`. It never calls `open()` on a note, never reads a byte of content, never parses frontmatter. That isn't a promise about what it does with your data; it's a statement that it never has your data.
+- **It never prints a path it matched**, in any mode including `doctor`, which reports a home-relative root and counts rather than filenames.
+- **All state is local**, at `~/.claude/brainbuddy/`: the roster, your settings, and the XP cache. Nothing else, nowhere else.
+- **The render never opens a socket, and by default neither does anything it starts.** No telemetry, no analytics, no phone-home.
+- **The only network calls are the ones you allowed.** The installer downloading a release tarball from `api.github.com`; `brainbuddy update` and `doctor --check` reading pypi's public package metadata; and, if you opt in with `config update_check true`, that same version request once a day from the background refresh so the yellow `⬆ update` chip can appear. It's off by default and asked as a question. Every one is an unauthenticated GET that sends nothing about you or your memory.
+
+Three tests enforce this. A runtime trap patches every file-reading builtin and asserts none fire during a measurement. A static pass tokenizes `metric.py` and fails if a reader appears in the code at all. A third guards every socket call, including in the background processes a render spawns: opted out, an aged cache plus a render produces zero network from any process; opted in, exactly one attempt per day, never from the render itself. A leak guard runs in CI and as a `pre-push` hook, failing the build if an absolute home path or a vault-shaped filename ever reaches the repo.
+
+---
+
+## Under the Hood
+
+| | |
+| :--- | :--- |
+| **The shim wraps, it doesn't edit** | `statusLine.command` points at a generated shim; your original command is saved next to it and run by it. A script that already calls brainbuddy is detected and left alone. |
+| **A cache on the hot path** | `render` reads a cached XP value and spawns the recount in the background, blocking only on a cold start. |
+| **High-water mark** | New XP is the delta above the highest total ever seen, so deleting notes can't take a level away, and a render before your first hatch can't burn the XP waiting for it. |
+| **Derived beats persisted** | Species, rarity, shiny, and accent are recomputed from the seed on every load and overwrite whatever is on disk. Only id, seed, name, hatch time, and banked XP persist. |
+| **Counting is all it does** | The measurement path is `glob` and `stat` only, enforced by a runtime trap and a static check. |
+
+## Repository Structure
 
 ```
-   install.sh
-       │
-       ▼
-    ┌──────┐   /brainbuddy-hatch    ┌───────────┐  write notes   ┌────────────┐
-    │ egg  │ ────────────────────►  │ Hatchling │ ────────────►  │  evolves   │
-    └──────┘      the reveal        └───────────┘   xp climbs    │  to Lv100  │
-       ▲                                                         └────────────┘
-       │ /brainbuddy-new                                               │
-       └───────────────────────────────────────────────────────────────┘
-              --replace (retire this one)  ·  --add (keep both)
+brainbuddy/
+├── brainbuddy/            # the package, stdlib only
+│   ├── cli.py             #   commands
+│   ├── render.py          #   statusline segment, compose, card
+│   ├── state.py           #   roster, settings, xp cache
+│   ├── metric.py          #   providers: glob + stat, nothing else
+│   ├── creature.py        #   seed → species, rarity, shiny
+│   └── sprites.py         #   stage templates × species motifs
+├── commands/              # the five Claude Code slash commands
+├── site/                  # the website, deployed by pages.yml
+├── install.sh             # wraps your statusline, lays the egg
+├── bootstrap.sh           # curl | bash entry: fetches a release, runs install.sh
+├── scripts/leak-guard.sh  # fails on machine paths and vault-shaped filenames
+├── tests/                 # stdlib test suite, incl. the privacy traps
+├── .claude-plugin/        # plugin manifest
+└── marketplace/           # marketplace listing
 ```
 
-Only two steps need you: hatching the egg, and eventually starting another. Levelling and evolutions happen on their own as your vault grows.
+## Development
 
----
+```bash
+git clone https://github.com/smejkaldesign/brainbuddy && cd brainbuddy
+python3 tests/test_brainbuddy.py     # synthetic fixtures in a temp dir; no real memory touched
+./scripts/leak-guard.sh              # the same check CI runs
+git config core.hooksPath .githooks  # optional pre-push copy of the guard
+```
 
-## Under the hood
+No virtualenv, nothing to install, no build step. Run the CLI from the clone with `python3 -m brainbuddy.cli card`. CI runs the suite on Python 3.9 through 3.13, builds the wheel, and installs under the stock macOS bash 3.2.
 
-**Three providers.** `claude` counts stock Claude Code memory under `~/.claude/projects/*/memory`, `folder` walks any directory for `.md`, and `vault` counts a weighted layout. See [Where XP comes from](#where-xp-comes-from). If `doctor` reports 0 it's the provider, the root, or an empty memory system, never a reinstall.
+## Contributing
 
-**The shim wraps, it doesn't edit.** `statusLine.command` points at a generated shim; your original command is saved next to it and run by it, on the same stdin. Nothing is appended to your files, so there's no case where the wiring lands somewhere unreachable and reports success. A script that already calls brainbuddy itself is detected and left alone rather than wrapped twice.
-
-**A cache, because the statusline is a hot path.** `render` reads a cached XP value and spawns the recount in the background, blocking only on a cold start. Counting the memory system is never done on that path.
-
-**The high-water mark is the anti-punishment mechanism.** New XP is credited as the delta above the highest total ever seen, so deleting notes can't take a level away, and a render before your first hatch can't burn the XP waiting for it.
-
-**Counting is all it ever does.** The measurement path is `glob` and `stat` only, enforced by a runtime trap and a static check. See [Privacy promise](#privacy-promise).
-
-**State lives at `~/.claude/brainbuddy/`** holds the roster, settings, and the XP cache.
-
----
+Small project, short rules: stdlib only, Python 3.9 floor, one change per PR, new behavior gets a test, and the privacy tests must keep passing. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Provenance
 
-Anthropic shipped a terminal pet in Claude Code (`/buddy`, April 2026). Nice idea, no progression: species and stats are recomputed from your user ID every session and never change. brainbuddy is a clean-room rebuild of the *concept* with the missing half added, growth you actually earn.
-
-No code, species names, sprite art, stat names, or hashing details were taken from it. Not affiliated with or endorsed by Anthropic.
-
----
-
-## Tests
-
-```bash
-python3 tests/test_brainbuddy.py
-```
-
-Synthetic fixtures in a temp directory; no real memory directory is touched.
-
-CI runs the suite on Python 3.9 through 3.13, plus a leak guard that fails the
-build if an absolute home path or a vault-shaped filename reaches the repo.
-There's a `pre-push` copy of that guard for local use, enabled with:
-
-```bash
-git config core.hooksPath .githooks
-```
-
-Stdlib only. No dependencies to install, for the tests or for the tool.
-
----
+Anthropic shipped a terminal pet in Claude Code (`/buddy`, April 2026). Nice idea, no progression: species and stats are recomputed from your user ID every session and never change. brainbuddy is a clean-room rebuild of the *concept* with the missing half added, growth you actually earn. No code, species names, sprite art, stat names, or hashing details were taken from it. Not affiliated with or endorsed by Anthropic.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). &copy; 2026 Smejkal Design.
