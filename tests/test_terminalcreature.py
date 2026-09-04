@@ -1989,8 +1989,188 @@ def test_host_adapters():
         shutil.rmtree(home)
 
 
+def test_snippets():
+    """Every surface gets a paste-in config that calls the installed binary with
+    the format its host can show, and no snippet ever carries an expanded home.
+    """
+    print("\nsnippets")
+    import subprocess
+
+    from terminalcreature import cli, snippets
+
+    home = os.path.expanduser("~")
+    fake_home = tempfile.mkdtemp(prefix="bb-snip-")
+    found = os.path.join(home, ".local", "bin", "terminalcreature")
+    on_path = snippets.resolve_binary(which=lambda name: found)
+    missing = snippets.resolve_binary(state_dir=os.path.join(home, ".claude", "terminalcreature"),
+                                      which=lambda name: None)
+    check(on_path["shell"] == "~/.local/bin/terminalcreature", "an entry point under home is written ~-relative")
+    check(missing["shell"] == "env PYTHONPATH=$HOME/.claude/terminalcreature/lib python3 -m terminalcreature.cli",
+          "no entry point falls back to the installed lib the way the shim runs it")
+    check(missing["argv"][1] == "PYTHONPATH=~/.claude/terminalcreature/lib", "and the argv form keeps ~ for hosts that expand it themselves")
+    check(snippets.resolve_binary(which=lambda name: "/opt/homebrew/bin/terminalcreature")["shell"] == "/opt/homebrew/bin/terminalcreature",
+          "a path outside home is left alone")
+
+    formats = {"tmux": "--format tmux", "starship": "--format ansi", "zsh": "--format ansi",
+               "fish": "--format ansi", "omp": "plain", "wezterm": "'--format', 'plain'"}
+    os.environ.pop("TMUX", None)
+    try:
+        for binary, label in ((on_path, "on PATH"), (missing, "lib fallback")):
+            for surface in snippets.SURFACES:
+                text = snippets.render_snippet(surface, binary=binary)
+                check(text is not None and text.startswith(("#", "//", "--")), "%s (%s) opens with a comment saying where it goes" % (surface, label))
+                check("terminalcreature" in text, "%s (%s) names the binary" % (surface, label))
+                check(formats[surface] in text, "%s (%s) asks for the format its host can show" % (surface, label))
+                check(home not in text and fake_home not in text, "%s (%s) carries no expanded home path" % (surface, label))
+                check("\u2014" not in text, "%s (%s) has no em dash" % (surface, label))
+        tmux = snippets.render_snippet("tmux", binary=on_path)
+        check("status-right-length 80" in tmux and "default is 40" in tmux, "tmux raises status-right-length and says why")
+        check("--width 40" in tmux and "@plugin 'smejkaldesign/terminalcreature'" in tmux and "#{creature}" in tmux,
+              "tmux caps the width and shows the tpm form with its placeholder")
+        check("status-interval" in tmux, "tmux mentions status-interval")
+        star = snippets.render_snippet("starship", binary=on_path)
+        check("[custom.creature]" in star and "when = true" in star and 'style = ""' in star and "command_timeout" in star,
+              "starship is a custom module with an empty style and a timeout note")
+        zsh = snippets.render_snippet("zsh", binary=on_path)
+        check("setopt PROMPT_SUBST" in zsh and "RPROMPT='$(" in zsh and "precmd" in zsh and "zsh-async" in zsh,
+              "zsh sets PROMPT_SUBST, an RPROMPT, and mentions precmd and zsh-async")
+        check("function fish_right_prompt" in snippets.render_snippet("fish", binary=on_path), "fish is a fish_right_prompt function")
+        omp = snippets.render_snippet("omp", binary=on_path)
+        check('{{ cmd \\"terminalcreature\\" \\"render\\" \\"--format\\" \\"plain\\" }}' in omp and '"type": "text"' in omp,
+              "omp is a text segment using the multi-argument cmd form")
+        check(".Env.HOME" not in omp, "omp on PATH needs no home expansion, so no caveat about it")
+        check(".Env.HOME" in snippets.render_snippet("omp", binary=missing), "omp's lib fallback expands home through the template")
+        wez = snippets.render_snippet("wezterm", binary=on_path)
+        check("wezterm.on('update-status'" in wez and "run_child_process" in wez and "set_right_status" in wez
+              and "status_update_interval = 1000" in wez, "wezterm hooks update-status and sets the interval")
+        check("wezterm.home_dir .. '/.local/bin/terminalcreature'" in wez, "wezterm expands home in lua, since nothing else will")
+        check(snippets.render_snippet("kitty") is None, "an unknown surface is None, not a guess")
+
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env = dict(os.environ, HOME=fake_home, PYTHONPATH=repo)
+        env.pop("TMUX", None)
+        cmd = [sys.executable, "-m", "terminalcreature.cli", "snippet"]
+        r = subprocess.run(cmd + ["kitty"], env=env, capture_output=True, text=True)
+        check(r.returncode == 1 and all(s in r.stdout for s in snippets.SURFACES), "snippet kitty exits 1 and lists the surfaces")
+        r = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        check(r.returncode == 1 and "wezterm" in r.stdout, "bare snippet does the same")
+        r = subprocess.run(cmd + ["tmux"], env=env, capture_output=True, text=True)
+        check(r.returncode == 0 and "--format tmux" in r.stdout and home not in r.stdout, "snippet tmux prints the config, exit 0, no home path")
+        check("snippet" in cli.USAGE, "usage lists it")
+    finally:
+        shutil.rmtree(fake_home)
+
+
+def test_tmux_plugin():
+    """The tpm plugin swaps #{creature} for a call to its own helper, against a
+    throwaway tmux server so nothing of the user's is touched.
+    """
+    print("\ntmux plugin")
+    import subprocess
+
+    if not shutil.which("tmux"):
+        print("  skip tmux is not installed here")
+        return
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    plugin = os.path.join(repo, "tmux", "terminalcreature.tmux")
+    helper = os.path.join(repo, "tmux", "creature.sh")
+    check(os.access(plugin, os.X_OK) and os.access(helper, os.X_OK), "plugin and helper are executable")
+    check(os.access(os.path.join(repo, "terminalcreature.tmux"), os.X_OK), "the root shim tpm actually sources is executable too")
+    check(len(open(os.path.join(repo, "tmux", "README.md")).read().strip().splitlines()) <= 10, "the readme is ten lines or fewer")
+
+    sock = "tctest-%d" % os.getpid()
+    t = lambda *a: subprocess.run(["tmux", "-L", sock] + list(a), capture_output=True, text=True)
+    r = t("-f", "/dev/null", "new-session", "-d")
+    if r.returncode != 0:
+        print("  skip could not start a tmux server: %s" % r.stderr.strip()[-100:])
+        return
+    try:
+        t("set-option", "-g", "status-right", "cpu #{creature} %H:%M")
+        t("set-option", "-g", "status-left", "[#S]")
+        path = t("display-message", "-p", "#{socket_path}").stdout.strip()
+        env = dict(os.environ, TMUX="%s,0,0" % path)
+        for entry in (plugin, os.path.join(repo, "terminalcreature.tmux")):
+            t("set-option", "-g", "status-right", "cpu #{creature} %H:%M")
+            r = subprocess.run([entry], env=env, capture_output=True, text=True)
+            check(r.returncode == 0, "%s runs clean (%s)" % (os.path.relpath(entry, repo), r.stderr.strip()[-100:]))
+            right = t("show-option", "-gv", "status-right").stdout.strip()
+            check("render --format tmux" in right and "#{creature}" not in right, "the placeholder became a render call")
+            check(right.startswith("cpu #(") and right.endswith(") %H:%M"), "and the rest of status-right survived around it")
+            named = right[right.find("#(") + 2:right.find(" render")]
+            check(os.path.realpath(named) == os.path.realpath(helper),
+                  "the call names the helper by absolute path, so tpm's clone location doesn't matter")
+        check(t("show-option", "-gv", "status-left").stdout.strip() == "[#S]", "an option without the placeholder is left alone")
+        # a home with the installer's lib layout and no entry point on PATH, so
+        # the helper has to take its fallback route to reach this checkout
+        home = tempfile.mkdtemp(prefix="bb-helper-")
+        lib = os.path.join(home, ".claude", "terminalcreature", "lib")
+        os.makedirs(lib)
+        os.symlink(os.path.join(repo, "terminalcreature"), os.path.join(lib, "terminalcreature"))
+        env = dict(os.environ, HOME=home, PATH=os.pathsep.join([os.path.dirname(sys.executable), "/usr/bin", "/bin"]))
+        r = subprocess.run([helper, "simulate", "10"], env=env, capture_output=True, text=True)
+        check(r.returncode == 0 and "Lv" in r.stdout, "the helper reaches terminalcreature through the lib (%s)" % r.stderr.strip()[-80:])
+        shutil.rmtree(home)
+    finally:
+        t("kill-server")
+
+
+def test_refresh_pokes_tmux():
+    """After the cache changes, refresh asks tmux to redraw, and only then.
+    tmux is a stub on PATH that logs what it was asked, so nothing real is poked.
+    """
+    print("\nrefresh pokes tmux")
+    import subprocess
+    import time as _t
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    home = tempfile.mkdtemp(prefix="bb-poke-")
+    stub_dir = os.path.join(home, "bin")
+    os.makedirs(stub_dir)
+    log = os.path.join(home, "tmux.log")
+    stub = os.path.join(stub_dir, "tmux")
+    with open(stub, "w") as f:
+        f.write("#!/bin/sh\necho \"$@\" >> %s\n" % log)
+    os.chmod(stub, 0o755)
+
+    def refresh(tmux, cached):
+        if os.path.exists(log):
+            os.remove(log)
+        child = "from terminalcreature import cli, state as sm\n"
+        if cached is not None:
+            child += "sm.write_cache(%d, {})\n" % cached
+        child += "cli.main(['refresh'])\n"
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo, PATH=stub_dir + os.pathsep + os.environ.get("PATH", ""))
+        env.pop("TMUX", None)
+        if tmux:
+            env["TMUX"] = "/tmp/fake,0,0"
+        r = subprocess.run([sys.executable, "-c", child], env=env, capture_output=True, text=True)
+        deadline = _t.time() + 5
+        while _t.time() < deadline and not os.path.exists(log):
+            _t.sleep(0.1)
+        _t.sleep(0.2)
+        lines = open(log).read().splitlines() if os.path.exists(log) else []
+        return r.returncode, lines
+
+    try:
+        # an empty fabricated home measures 0 xp, so a cache of 999 is a change
+        rc, lines = refresh(True, 999)
+        check(rc == 0 and lines == ["refresh-client -S"], "xp changed under tmux: one refresh-client -S, got %r" % lines)
+        rc, lines = refresh(True, None)
+        check(rc == 0 and lines == [], "same xp again: no poke, got %r" % lines)
+        rc, lines = refresh(False, 999)
+        check(rc == 0 and lines == [], "xp changed outside tmux: no poke, got %r" % lines)
+        os.chmod(stub, 0o644)
+        rc, lines = refresh(True, 999)
+        check(rc == 0 and lines == [], "a tmux that can't run is silent, refresh still exits 0")
+    finally:
+        shutil.rmtree(home)
+
+
 if __name__ == "__main__":
     test_metric()
+    test_snippets()
+    test_tmux_plugin()
+    test_refresh_pokes_tmux()
     test_agents_provider()
     test_render_formats()
     test_width_cap()
