@@ -33,6 +33,7 @@ USAGE = """terminalcreature - a terminal pet that evolves with your memory
   hide / show         drop the creature from the statusline, or bring it back
   simulate <xp>       preview any level without touching your real state
   refresh             recompute the xp cache (run in the background by render)
+  snippet <surface>   paste-in config for tmux, starship, zsh, fish, omp or wezterm
   sources             what it can count, and what to do if that's nothing
   doctor [--check]    check what terminalcreature can see; --check also asks pypi
   update [--apply]    ask pypi whether there's a newer terminalcreature; --apply installs it
@@ -704,6 +705,18 @@ def cmd_sources(args):
     return 0
 
 
+def cmd_snippet(args):
+    """A paste-in config for one surface outside the agent's statusline."""
+    from . import snippets
+
+    text = snippets.render_snippet(args[0]) if args else None
+    if text is None:
+        print("terminalcreature snippet <surface>. surfaces: %s" % ", ".join(snippets.SURFACES))
+        return 1
+    print(text)
+    return 0
+
+
 def _set_hidden(hidden):
     st = _load()
     st["settings"]["hidden"] = hidden
@@ -730,7 +743,7 @@ COMMANDS = {
     "new": cmd_new, "hatch": cmd_hatch, "names": cmd_names, "focus": cmd_focus, "list": cmd_list,
     "rename": cmd_rename, "retire": cmd_retire, "config": cmd_config,
     "simulate": cmd_simulate, "doctor": cmd_doctor, "sources": cmd_sources,
-    "hide": cmd_hide, "show": cmd_show, "update": cmd_update,
+    "hide": cmd_hide, "show": cmd_show, "update": cmd_update, "snippet": cmd_snippet,
 }
 
 

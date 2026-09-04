@@ -1814,8 +1814,81 @@ def test_agents_provider():
         shutil.rmtree(home)
 
 
+def test_snippets():
+    """Every surface gets a paste-in config that calls the installed binary with
+    the format its host can show, and no snippet ever carries an expanded home.
+    """
+    print("\nsnippets")
+    import subprocess
+
+    from terminalcreature import cli, snippets
+
+    home = os.path.expanduser("~")
+    fake_home = tempfile.mkdtemp(prefix="bb-snip-")
+    found = os.path.join(home, ".local", "bin", "terminalcreature")
+    on_path = snippets.resolve_binary(which=lambda name: found)
+    missing = snippets.resolve_binary(state_dir=os.path.join(home, ".claude", "terminalcreature"),
+                                      which=lambda name: None)
+    check(on_path["shell"] == "~/.local/bin/terminalcreature", "an entry point under home is written ~-relative")
+    check(missing["shell"] == "env PYTHONPATH=$HOME/.claude/terminalcreature/lib python3 -m terminalcreature.cli",
+          "no entry point falls back to the installed lib the way the shim runs it")
+    check(missing["argv"][1] == "PYTHONPATH=~/.claude/terminalcreature/lib", "and the argv form keeps ~ for hosts that expand it themselves")
+    check(snippets.resolve_binary(which=lambda name: "/opt/homebrew/bin/terminalcreature")["shell"] == "/opt/homebrew/bin/terminalcreature",
+          "a path outside home is left alone")
+
+    formats = {"tmux": "--format tmux", "starship": "--format ansi", "zsh": "--format ansi",
+               "fish": "--format ansi", "omp": "plain", "wezterm": "'--format', 'plain'"}
+    os.environ.pop("TMUX", None)
+    try:
+        for binary, label in ((on_path, "on PATH"), (missing, "lib fallback")):
+            for surface in snippets.SURFACES:
+                text = snippets.render_snippet(surface, binary=binary)
+                check(text is not None and text.startswith(("#", "//", "--")), "%s (%s) opens with a comment saying where it goes" % (surface, label))
+                check("terminalcreature" in text, "%s (%s) names the binary" % (surface, label))
+                check(formats[surface] in text, "%s (%s) asks for the format its host can show" % (surface, label))
+                check(home not in text and fake_home not in text, "%s (%s) carries no expanded home path" % (surface, label))
+                check("\u2014" not in text, "%s (%s) has no em dash" % (surface, label))
+        tmux = snippets.render_snippet("tmux", binary=on_path)
+        check("status-right-length 80" in tmux and "default is 40" in tmux, "tmux raises status-right-length and says why")
+        check("--width 40" in tmux and "@plugin 'smejkaldesign/terminalcreature'" in tmux and "#{creature}" in tmux,
+              "tmux caps the width and shows the tpm form with its placeholder")
+        check("status-interval" in tmux, "tmux mentions status-interval")
+        star = snippets.render_snippet("starship", binary=on_path)
+        check("[custom.creature]" in star and "when = true" in star and 'style = ""' in star and "command_timeout" in star,
+              "starship is a custom module with an empty style and a timeout note")
+        zsh = snippets.render_snippet("zsh", binary=on_path)
+        check("setopt PROMPT_SUBST" in zsh and "RPROMPT='$(" in zsh and "precmd" in zsh and "zsh-async" in zsh,
+              "zsh sets PROMPT_SUBST, an RPROMPT, and mentions precmd and zsh-async")
+        check("function fish_right_prompt" in snippets.render_snippet("fish", binary=on_path), "fish is a fish_right_prompt function")
+        omp = snippets.render_snippet("omp", binary=on_path)
+        check('{{ cmd \\"terminalcreature\\" \\"render\\" \\"--format\\" \\"plain\\" }}' in omp and '"type": "text"' in omp,
+              "omp is a text segment using the multi-argument cmd form")
+        check(".Env.HOME" not in omp, "omp on PATH needs no home expansion, so no caveat about it")
+        check(".Env.HOME" in snippets.render_snippet("omp", binary=missing), "omp's lib fallback expands home through the template")
+        wez = snippets.render_snippet("wezterm", binary=on_path)
+        check("wezterm.on('update-status'" in wez and "run_child_process" in wez and "set_right_status" in wez
+              and "status_update_interval = 1000" in wez, "wezterm hooks update-status and sets the interval")
+        check("wezterm.home_dir .. '/.local/bin/terminalcreature'" in wez, "wezterm expands home in lua, since nothing else will")
+        check(snippets.render_snippet("kitty") is None, "an unknown surface is None, not a guess")
+
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env = dict(os.environ, HOME=fake_home, PYTHONPATH=repo)
+        env.pop("TMUX", None)
+        cmd = [sys.executable, "-m", "terminalcreature.cli", "snippet"]
+        r = subprocess.run(cmd + ["kitty"], env=env, capture_output=True, text=True)
+        check(r.returncode == 1 and all(s in r.stdout for s in snippets.SURFACES), "snippet kitty exits 1 and lists the surfaces")
+        r = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        check(r.returncode == 1 and "wezterm" in r.stdout, "bare snippet does the same")
+        r = subprocess.run(cmd + ["tmux"], env=env, capture_output=True, text=True)
+        check(r.returncode == 0 and "--format tmux" in r.stdout and home not in r.stdout, "snippet tmux prints the config, exit 0, no home path")
+        check("snippet" in cli.USAGE, "usage lists it")
+    finally:
+        shutil.rmtree(fake_home)
+
+
 if __name__ == "__main__":
     test_metric()
+    test_snippets()
     test_agents_provider()
     test_render_formats()
     test_width_cap()
