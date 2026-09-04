@@ -1905,7 +1905,7 @@ def test_host_adapters():
             with open(shim) as f:
                 text = f.read()
             check("TERMINALCREATURE_WRAPPING" in text and spec["wrapped"] in text, "%s: the shim guards re-entry and reads its own wrapped file" % host)
-            check(("cli render" if spec["inline"] else "cli compose") in text, "%s: the shim picks the host's default mode" % host)
+            check(("creature render" if spec["inline"] else "creature compose") in text, "%s: the shim picks the host's default mode" % host)
             out = subprocess.run(["bash", shim], env=env, input="{}", capture_output=True, text=True).stdout
             check(previous.split()[-1] in out, "%s: the shim still runs what it wrapped" % host)
 
@@ -2230,6 +2230,61 @@ def test_box_flag():
             shutil.rmtree(home)
 
 
+def test_shim_path_fallback():
+    """A pipx-only user has no library under the state dir. The shim then runs
+    the terminalcreature on PATH; with the library present it runs that,
+    whatever is on PATH. Neither present renders nothing rather than an error.
+    """
+    print("\nshim path fallback")
+    import json
+    import subprocess
+
+    from terminalcreature import hosts
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [sys.executable, "-m", "terminalcreature.cli"]
+    home = tempfile.mkdtemp(prefix="bb-fallback-")
+    bindir = tempfile.mkdtemp(prefix="bb-fakebin-")
+    marker = os.path.join(home, "ran-from-path")
+    try:
+        exe = os.path.join(bindir, "terminalcreature")
+        with open(exe, "w") as f:
+            f.write('#!/bin/sh\ntouch "%s"\nPYTHONPATH="%s" exec "%s" -m terminalcreature.cli "$@"\n' % (marker, repo, sys.executable))
+        os.chmod(exe, 0o755)
+        env = dict(os.environ, HOME=home, PYTHONPATH=repo, NO_COLOR="1")
+        env.pop("TERMINALCREATURE_FORMAT", None)
+        on_path = dict(env, PATH=bindir + os.pathsep + env["PATH"])
+        subprocess.run(cmd + ["new"], env=env, capture_output=True)
+        subprocess.run(cmd + ["hatch", "--from-zero", "--name", "Zask"], env=env, capture_output=True)
+        state = os.path.join(home, ".claude", "terminalcreature")
+        lib = os.path.join(state, "lib")
+        for host in ("cursor", "claude"):
+            r = subprocess.run(cmd + ["install", "--host", host, "--statusline", "echo HOSTBAR"], env=env, capture_output=True, text=True)
+            check(r.returncode == 0, "%s: wires without a library under the state dir" % host)
+        check(not os.path.isdir(lib), "no library was installed along the way")
+        payload = json.dumps(HOST_PAYLOADS["cursor"])
+        # the inline segment says the level, the compose column says the name
+        drawn = {"cursor": "Lv0", "claude": "Zask"}
+        for host in ("cursor", "claude"):
+            shim = os.path.join(state, hosts.REGISTRY[host]["shim"])
+            out = subprocess.run(["bash", shim], env=on_path, input=payload, capture_output=True, text=True).stdout
+            check(drawn[host] in out and "HOSTBAR" in out and os.path.exists(marker), "%s shim: no library, so the terminalcreature on PATH draws the creature" % host)
+            if os.path.exists(marker):
+                os.remove(marker)
+            out = subprocess.run(["bash", shim], env=env, input=payload, capture_output=True, text=True)
+            check(out.returncode == 0 and "HOSTBAR" in out.stdout and drawn[host] not in out.stdout and not out.stderr,
+                  "%s shim: no library and nothing on PATH keeps the wrapped bar, quietly" % host)
+        shutil.copytree(os.path.join(repo, "terminalcreature"), os.path.join(lib, "terminalcreature"),
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        for host in ("cursor", "claude"):
+            shim = os.path.join(state, hosts.REGISTRY[host]["shim"])
+            out = subprocess.run(["bash", shim], env=on_path, input=payload, capture_output=True, text=True).stdout
+            check(drawn[host] in out and not os.path.exists(marker), "%s shim: with the library here it runs that, not PATH" % host)
+    finally:
+        shutil.rmtree(home)
+        shutil.rmtree(bindir)
+
+
 def test_host_settings_edge_cases():
     """The bytes hosts and editors actually produce: a byte order mark, a comma
     inside a string value, a private file mode. None of them may refuse the
@@ -2293,6 +2348,7 @@ if __name__ == "__main__":
     test_host_adapters()
     test_host_settings_edge_cases()
     test_box_flag()
+    test_shim_path_fallback()
     test_update_chip()
     test_hatch_naming()
     test_refresh_never_reverts_concurrent_writes()
