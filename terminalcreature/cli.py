@@ -40,8 +40,12 @@ USAGE = """terminalcreature - a terminal pet that evolves with your memory
 update and doctor --check are the only commands that go online, and only when
 you run them. Everything else, the statusline included, is offline.
 
-provider is claude (stock Claude Code memory), vault (a structured vault) or
-folder (any directory of markdown, set vault_root to point at it).
+provider is auto (the default: agents when two or more coding agents are
+installed, else claude), agents (every agent's memory, sessions and rules:
+Claude Code, Codex, Gemini, Copilot, Cursor, Qwen, Droid, opencode, Amp, Goose,
+Continue, Kiro, Cline, Crush), claude (stock Claude Code memory), vault (a
+structured vault) or folder (any directory of markdown, set vault_root to
+point at it).
 """
 
 
@@ -493,6 +497,8 @@ PROVIDER_LABEL = {
     "claude": "stock Claude Code memory",
     "vault": "vault layout",
     "folder": "folder of notes",
+    "agents": "every coding agent's memory",
+    "auto": "agents when two or more are installed, else claude",
 }
 
 SHIM = "~/.claude/terminalcreature/statusline-terminalcreature.sh"
@@ -675,6 +681,25 @@ def cmd_sources(args):
         # nonzero so the installer can branch on the exit code. it used to match
         # on the first word of the success line, which reworded copy would break
         return 1
+    if "agents" in status:
+        # one line per agent found, counts by key in table order. names and
+        # numbers only, never the file it matched
+        for agent in metric.AGENT_ROOTS:
+            row = status["agents"].get(agent["key"])
+            if row is None:
+                continue
+            keys = []
+            for _, sources in agent["roots"]:
+                for source in sources:
+                    if source["key"] not in keys:
+                        keys.append(source["key"])
+            parts = ["%s %d" % (k, row.get(k, 0)) for k in keys if row.get(k, 0)]
+            print("%s: %s" % (agent["key"], ", ".join(parts) if parts else "nothing yet"))
+        if status["missing"]:
+            print("not found: %s" % ", ".join(status["missing"]))
+        print("counting %d xp of memory across %d agents. /creature shows your buddy." % (
+            status["xp"], len(status["found"])))
+        return 0
     print("counting %d xp of memory. /creature shows your buddy." % status["xp"])
     return 0
 

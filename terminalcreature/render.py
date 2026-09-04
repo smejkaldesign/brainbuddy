@@ -225,7 +225,24 @@ def no_source_help(settings, status):
     state = status["state"]
     if state == "ok":
         return ""
-    provider = settings.get("provider", "claude")
+    # auto is a rule, not a layout, so the advice is for whatever it picked
+    provider = state_mod.resolve_provider(settings)
+    looked = ", ".join(a["label"] for a in metric.AGENT_ROOTS)
+
+    if provider == "agents":
+        # names only. the roots are home-relative and stay out of the output
+        if state == "empty":
+            return "\n".join([
+                "Found %s, but nothing written yet. Ask it to keep memory and your" % ", ".join(status.get("found", [])),
+                "buddy eats on the next render.",
+            ])
+        return "\n".join([
+            "No agent memory here to feed on. Looked for %s." % looked,
+            "",
+            "Ask your coding agent to start keeping one:",
+            "",
+            '  "' + SETUP_PROMPT + '"',
+        ])
 
     if state == "layout_mismatch":
         return "\n".join([
@@ -252,9 +269,20 @@ def no_source_help(settings, status):
 
     # provider is claude and the directory has never existed, so this is someone
     # who hasn't kept memory at all. the only branch that earns the long version.
-    return "\n".join([
+    lines = [
         "Buddies feed off memories, and there's nothing here to feed on yet. Your",
         "buddy grows as your second brain does, so it needs one to eat from.",
+    ]
+    if settings.get("provider", "auto") == "auto":
+        # one lone agent that isn't claude reads as zero here. name it, and the
+        # one setting that counts it, rather than claiming nothing was found
+        found = metric.found_agents()
+        if found:
+            lines += ["Found %s. auto only switches to agents with two or more installed:" % ", ".join(found),
+                      "  /creature config provider agents"]
+        else:
+            lines.append("Looked for %s. None of them have a memory folder." % looked)
+    return "\n".join(lines + [
         "",
         "Ask Claude Code to start keeping one:",
         "",
