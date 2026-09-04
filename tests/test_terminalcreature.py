@@ -2120,7 +2120,7 @@ def test_autowire():
     home = tempfile.mkdtemp(prefix="bb-auto-")
     saved = {k: os.environ.get(k) for k in ("HOME", "PATH")}
     try:
-        for d in (".qwen", ".codex", ".config/opencode"):
+        for d in (".qwen", ".codex", ".config/opencode", ".gemini/antigravity"):
             os.makedirs(os.path.join(home, d))
         open(os.path.join(home, ".config", "starship.toml"), "w").close()
         os.environ["HOME"] = home
@@ -2131,6 +2131,9 @@ def test_autowire():
               "detected() is (key, label, tier) in catalogue order, got %r" % (found,))
         check(all(tier in hosts.TIERS and note for _, _, tier, note in hosts.catalogue()), "every catalogue row has a tier and a detect note")
         check(hosts.wired("qwen") is False and hosts.wired("starship") is False, "nothing is wired in a fresh home, prompt surfaces never are")
+        check(hosts.present("gemini") is False, "a ~/.gemini that only antigravity made isn't gemini cli, so nothing gets written there")
+        open(os.path.join(home, ".gemini", "settings.json"), "w").close()
+        check(hosts.present("gemini") is True, "gemini cli's own settings file is")
     finally:
         for k, v in saved.items():
             if v is None:

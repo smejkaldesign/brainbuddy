@@ -31,6 +31,15 @@ can.
 
 ### Changed
 
+- Claude Code and Gemini CLI are detected by their settings file or their
+  binary on PATH, not their config dir alone: our own state dir lives under
+  `~/.claude`, and Antigravity keeps its config under `~/.gemini`, so a
+  machine with only that used to get a hook written into a `settings.json`
+  the sweep created.
+- A host the sweep can't write (a read-only config dir) is one line and the
+  sweep goes on to the next host, like a broken file already was. `install.sh`
+  carries on past it to the egg and exits 1 at the end; `--uninstall` does the
+  same rather than losing the adapters' output under `set -e`.
 - `./install.sh --host all` with `--statusline` used to hand that command to
   every host; the sweep now takes `--inline` only, since the command names
   Claude Code's statusline. A single `--host` still takes both.

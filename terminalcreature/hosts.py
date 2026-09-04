@@ -688,7 +688,8 @@ HOOK_HOSTS = ("codex", "gemini", "vibe", "auggie")
 # shell: the host hands the command to a shell, so a path with a space needs
 # quoting; off, it execs the file itself and quotes would be part of the name.
 # matcher: what the group carries when the host documents one, else None.
-# detect: the dir's presence is the host's presence, in words for the table.
+# probe: as for a statusline host, for a dir another product shares. detect:
+# the rule in words for the table.
 HOOK_REGISTRY = {
     # docs, 2026-09: ~/.codex/hooks.json, Stop replies JSON, systemMessage is
     # shown as a warning line, exit 0 with no output is success. hooks run only
@@ -697,17 +698,19 @@ HOOK_REGISTRY = {
         "label": "Codex CLI", "dir": "~/.codex", "config": "~/.codex/hooks.json", "format": "json",
         "jsonc": False, "name": False, "event": "Stop", "field": "systemMessage", "silent": "",
         "shim": "hookcard-codex.sh", "note": "approve it once with /hooks inside codex",
-        "shell": True, "matcher": None, "detect": "~/.codex",
+        "shell": True, "matcher": None, "probe": (), "detect": "~/.codex",
     },
     # docs, 2026-09: hooks live under "hooks" in settings.json, AfterAgent fires once
     # per turn, systemMessage prints to the terminal. stdout is parsed as JSON and
     # an empty reply isn't documented, so a quiet turn prints {}. every documented
-    # group carries a matcher and "*" is the documented match-all
+    # group carries a matcher and "*" is the documented match-all. antigravity
+    # keeps its config under ~/.gemini too, so the dir alone proves nothing
     "gemini": {
         "label": "Gemini CLI", "dir": "~/.gemini", "config": "~/.gemini/settings.json", "format": "json",
         "jsonc": True, "name": True, "event": "AfterAgent", "field": "systemMessage", "silent": "{}",
         "shim": "hookcard-gemini.sh", "note": "",
-        "shell": True, "matcher": "*", "detect": "~/.gemini",
+        "shell": True, "matcher": "*", "probe": ("~/.gemini/settings.json", "gemini"),
+        "detect": "~/.gemini/settings.json, or gemini on PATH",
     },
     # docs, 2026-09: [[hooks]] tables in ~/.vibe/hooks.toml, type post_agent fires
     # after every turn, system_message is UI-only, exit 0 with empty stdout passes
@@ -715,7 +718,7 @@ HOOK_REGISTRY = {
         "label": "Mistral Vibe", "dir": "~/.vibe", "config": "~/.vibe/hooks.toml", "format": "toml",
         "jsonc": False, "name": True, "event": "post_agent", "field": "system_message", "silent": "",
         "shim": "hookcard-vibe.sh", "note": "",
-        "shell": True, "matcher": None, "detect": "~/.vibe",
+        "shell": True, "matcher": None, "probe": (), "detect": "~/.vibe",
     },
     # docs, 2026-09: same tree as codex under "hooks" in ~/.augment/settings.json,
     # Stop takes no matcher, systemMessage goes to the user, the script must be an
@@ -725,7 +728,7 @@ HOOK_REGISTRY = {
         "label": "Augment auggie", "dir": "~/.augment", "config": "~/.augment/settings.json", "format": "json",
         "jsonc": False, "name": False, "event": "Stop", "field": "systemMessage", "silent": "",
         "shim": "hookcard-auggie.sh", "note": "",
-        "shell": False, "matcher": None, "detect": "~/.augment",
+        "shell": False, "matcher": None, "probe": (), "detect": "~/.augment",
     },
 }
 
@@ -756,7 +759,11 @@ def hook_shim_path(host):
 
 
 def hook_installed(host):
-    return os.path.isdir(os.path.expanduser(HOOK_REGISTRY[host]["dir"]))
+    """The host's config dir is here, and where the dir is shared, a probe hit too."""
+    spec = HOOK_REGISTRY[host]
+    if not os.path.isdir(os.path.expanduser(spec["dir"])):
+        return False
+    return not spec["probe"] or _probe_hit(spec["probe"])
 
 
 def hook_session_id(raw, host):

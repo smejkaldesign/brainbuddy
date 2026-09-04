@@ -136,7 +136,7 @@ Nobody picks hosts. The installer wires every agent it finds on the machine, and
 | **Card** | the host shows a string that a turn-end hook (or plugin) returns | a one-line creature card after each turn |
 | **Prompt** | no host chrome at all; your shell prompt or tmux carries it | `terminalcreature snippet <surface>`, a paste-in config |
 
-Detection is the contract: a host is "here" when its config dir exists (Cursor also needs `cli-config.json` or `agent` on PATH, since the IDE shares `~/.cursor`). `terminalcreature hosts` prints the whole table, host by host, with how each is detected and whether it's here and wired. `install` wires every statusline and card host it detects; `install --host <name>` does one. A new host qualifies as soon as it offers either channel: [open an issue](https://github.com/smejkaldesign/terminalcreature/issues/new?template=feature.md) with a link to its statusline or hook docs, and the adapter is a registry entry.
+Detection is the contract: a host is "here" when its config dir exists. Three dirs are shared with something else, so those hosts need one more sign: Cursor needs `cli-config.json` or `agent` on PATH (the IDE shares `~/.cursor`), Claude Code needs `settings.json` or `claude` on PATH (our own state dir lives under `~/.claude`), and Gemini CLI needs `settings.json` or `gemini` on PATH (Antigravity keeps its config under `~/.gemini`). `terminalcreature hosts` prints the whole table, host by host, with how each is detected and whether it's here and wired. `install` wires every statusline and card host it detects; `install --host <name>` does one. A new host qualifies as soon as it offers either channel: [open an issue](https://github.com/smejkaldesign/terminalcreature/issues/new?template=feature.md) with a link to its statusline or hook docs, and the adapter is a registry entry.
 
 ---
 
@@ -416,7 +416,7 @@ The hosts block runs statusline hosts first, then the card hosts, then the plugi
 ```
 $ terminalcreature hosts
   host                         tier       detected by                                  status
-  claude   Claude Code         statusline ~/.claude                                    wired
+  claude   Claude Code         statusline ~/.claude/settings.json, or claude on PATH  wired
   cursor   Cursor CLI          statusline ~/.cursor/cli-config.json, or agent on PATH  not wired
   copilot  GitHub Copilot CLI  statusline ~/.copilot                                   not found
   codex    Codex CLI           card       ~/.codex                                     wired
