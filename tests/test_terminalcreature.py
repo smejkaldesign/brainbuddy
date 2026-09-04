@@ -1637,6 +1637,7 @@ def test_host_stdin():
         shutil.rmtree(home)
 
 
+
 def make_agent_home(files):
     """A fake home holding whichever agent trees the test lists, one path per
     file. Filenames carry a marker no real note would, so the leak checks
@@ -1825,6 +1826,11 @@ def test_agents_provider():
         r = subprocess.run(cmd + ["sources"], env=dict(env, HOME=home), capture_output=True, text=True)
         check(r.returncode == 1 and "Looked for" in r.stdout and home not in r.stdout,
               "sources on an empty machine exits 1, lists what it looked for, prints no path")
+    finally:
+        shutil.rmtree(home)
+
+
+
 HOST_SEEDS = {
     "claude": ('{"theme": "dark", "statusLine": {"type": "command", "command": "echo CL"}}\n', "echo CL"),
     "cursor": ('{"display": {"mode": "zen"}, "statusLine": {"type": "command", "command": "echo CUR"}}\n', "echo CUR"),
